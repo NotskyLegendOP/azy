@@ -501,8 +501,9 @@ void AppController::sync(const char* reason_name) {
     }
 
     if (changed) {
-        log_debug("skin updated (%s): frame=%d surface=%d", reason_name, engine_state_.frame_applied ? 1 : 0,
-                  engine_state_.surface_visible ? 1 : 0);
+        log_debug("skin updated (%s): frame=%d surface=%d | detector: %llu scan(s), %llu process event(s)",
+                  reason_name, engine_state_.frame_applied ? 1 : 0, engine_state_.surface_visible ? 1 : 0,
+                  detector_.stats().scans, detector_.stats().events_from_wmi);
     }
 
     // --- 5. Housekeeping --------------------------------------------------
@@ -692,7 +693,6 @@ void AppController::update_settings_window_status() {
                                 ? "Safe mode is active: " + store_.settings().safe_mode_reason +
                                       ". Only basic enhancements are used."
                                 : std::string();
-    status.surface_presents = engine_.surface_presents();
     settings_window_.refresh(store_.settings(), status, store_.settings().enabled,
                              suspended_manual_ || performance_.suspended());
 }
@@ -734,6 +734,10 @@ void AppController::shutdown() {
         DestroyWindow(window_);
         window_ = nullptr;
     }
+    // One line of session statistics: how much work the skin actually did. A high
+    // number here without user activity would mean the event filtering is broken.
+    log_debug("session totals: %llu skin applies, %llu surface presentations, %llu detector scans",
+              engine_state_.applies, engine_.surface_presents(), detector_.stats().scans);
     log_info("Azy Skin stopped");
     Logger::instance().flush_pending();
 }

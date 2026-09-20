@@ -110,6 +110,8 @@ Azy's visual element is a single ring around the window edge, built from four
 | subtle translucent wash behind the first few pixels | the "glass" hint: a fade to nothing within 2–6px, never a solid strip |
 | 1px top inner highlight | light falling on glass, not a glow |
 
+![The ring, drawn from the renderer's own maths](images/ring-preview.png)
+
 The ring is split into four thin strips (top, bottom, left, right) and each strip
 is painted into its own premultiplied 32-bit ARGB bitmap with GDI+ and presented
 with `UpdateLayeredWindow`. Every strip is drawn in *frame* coordinates, so a 1px

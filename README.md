@@ -126,6 +126,19 @@ restrained; the sliders exist for people who want to push them.
 The other two themes are **Azy Dark** (the same treatment, fully opaque — no
 translucency anywhere) and **Original** (Azy applies nothing at all).
 
+![The ring in the three treatments](docs/images/ring-preview.png)
+
+*Left: Azy Dark Glass (default). Middle: Azy Dark (opaque). Right: Performance
+mode. Above, a schematic of the edge treatment; below, the actual corner at 4×
+zoom — a 1px hairline on the frame edge, a 1px raised bezel inside it, then a soft
+falloff inward. Reproduced from the renderer's own maths by
+`tools/preview_render.py`, so it can be reviewed without a Windows machine.*
+
+Why a *lighter* line inside the frame edge rather than a darker one: a purely dark
+edge treatment is invisible over Premiere's own near-black panels. The bezel is
+what makes the boundary read as a boundary, at 5–17% white — separation, not an
+outline.
+
 ---
 
 ## Performance

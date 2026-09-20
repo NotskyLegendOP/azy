@@ -29,7 +29,6 @@ public:
         std::string premiere;     // "Premiere Pro 2025 25.6.0.58 - active" / "not running"
         std::string treatment;    // "full", "reduced (...)", "safe mode"
         std::string safe_mode_note;
-        unsigned long long surface_presents = 0;
         bool safe_mode = false;
     };
 
