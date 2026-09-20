@@ -98,5 +98,16 @@ double wall_seconds();
 // the user is dragging/scrubbing exactly on the frame edge).
 bool cursor_in_rect(const RECT& rect);
 
+// Rough machine class, read once with two cheap system calls (no WMI, no
+// registry walk). Used to pick sensible first-run defaults, never to change a
+// choice the user already made.
+struct MachineClass {
+    unsigned long long physical_memory_bytes = 0;
+    unsigned logical_processors = 0;
+    bool low_end = false;  // ~small RAM and/or few cores
+};
+
+MachineClass detect_machine_class();
+
 }  // namespace win
 }  // namespace azy

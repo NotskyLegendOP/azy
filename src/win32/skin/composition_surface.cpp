@@ -26,6 +26,13 @@ LRESULT CALLBACK CompositionSurface::window_proc(HWND hwnd, UINT message, WPARAM
         // window procedure is called), but if it ever is, send the point below:
         // Premiere keeps every click.
         case WM_NCHITTEST:
+            // Note it once, at debug level: a non-zero count means the surface was
+            // reached by a hit test, i.e. the click-through guarantee degraded and
+            // the styles need looking at. HTTRANSPARENT still keeps the click below.
+            if (input_guard::hit_test_count() == 0) {
+                log_debug("composition surface was hit-tested (WS_EX_TRANSPARENT did not short-circuit); "
+                          "answering HTTRANSPARENT so Premiere keeps the click");
+            }
             input_guard::note_hit_test();
             return HTTRANSPARENT;
         case WM_MOUSEACTIVATE:

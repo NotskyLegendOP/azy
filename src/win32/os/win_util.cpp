@@ -199,5 +199,25 @@ bool cursor_in_rect(const RECT& rect) {
     return cursor.x >= rect.left && cursor.x < rect.right && cursor.y >= rect.top && cursor.y < rect.bottom;
 }
 
+MachineClass detect_machine_class() {
+    MachineClass info;
+    MEMORYSTATUSEX memory{};
+    memory.dwLength = sizeof(memory);
+    if (GlobalMemoryStatusEx(&memory)) {
+        info.physical_memory_bytes = memory.ullTotalPhys;
+    }
+    SYSTEM_INFO system_info{};
+    GetSystemInfo(&system_info);
+    info.logical_processors = system_info.dwNumberOfProcessors;
+
+    // "Lower-end" is deliberately generous: an 8 GB / 4-thread machine runs
+    // Premiere, but the difference between the two treatments is a slightly
+    // softer edge, and being conservative there is never wrong.
+    const bool small_ram = info.physical_memory_bytes > 0 && info.physical_memory_bytes < (8ull << 30);
+    const bool few_cores = info.logical_processors > 0 && info.logical_processors <= 4;
+    info.low_end = small_ram || few_cores;
+    return info;
+}
+
 }  // namespace win
 }  // namespace azy

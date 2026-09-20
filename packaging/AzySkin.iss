@@ -33,7 +33,6 @@ OutputDir=..\dist
 OutputBaseFilename=AzySkin-{#AppVersion}-setup
 Compression=lzma2/max
 SolidCompression=yes
-WizardStyle=modern
 ; Dark, to match the application itself.
 WizardStyle=modern dark
 ; Refuse to run while Azy is running: the installer asks it to close instead of
@@ -94,9 +93,3 @@ Filename: "{app}\{#AppExeName}"; Parameters: "--tray"; \
 [UninstallDelete]
 ; Azy's own data only: configuration, log (and its rotated copy).
 Type: filesandordirs; Name: "{localappdata}\Azy Skin"
-
-[Code]
-function InitializeUninstall(): Boolean;
-begin
-  Result := True;
-end;

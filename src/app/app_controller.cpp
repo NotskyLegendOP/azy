@@ -8,6 +8,7 @@
 #include "azy/core/strings.hpp"
 #include "azy/win32/os/autostart.hpp"
 #include "azy/win32/os/win_api.hpp"
+#include "azy/win32/skin/input_guard.hpp"
 #include "azy/win32/os/win_util.hpp"
 #include "azy/win32/os/win_version.hpp"
 
@@ -50,6 +51,25 @@ bool AppController::initialize(HINSTANCE instance, const CommandLine& command_li
     failures_.set_window_start(settings.failure_window_start);
     failures_.set_tripped(settings.failure_tripped);
     safe_mode_ = settings.safe_mode;
+
+    // First run only: a lower-end machine starts in performance mode. An explicit
+    // choice (settings.ini written by the user or the installer) is never
+    // overridden, because then the file already exists.
+    if (!load_result.file_existed && !command_line.reset_settings) {
+        const win::MachineClass machine = win::detect_machine_class();
+        if (machine.low_end) {
+            settings.performance_mode = true;
+            settings.suspend_when_inactive = true;
+            store_.save();
+            log_info("first run on a modest machine (%llu MB RAM, %lu logical processors): starting in %s",
+                     static_cast<unsigned long long>(machine.physical_memory_bytes >> 20),
+                     static_cast<unsigned long>(machine.logical_processors), "performance mode");
+        } else {
+            log_info("first run on a capable machine (%llu MB RAM, %lu logical processors)",
+                     static_cast<unsigned long long>(machine.physical_memory_bytes >> 20),
+                     static_cast<unsigned long>(machine.logical_processors));
+        }
+    }
 
     apply_installer_defaults();
 
@@ -736,8 +756,10 @@ void AppController::shutdown() {
     }
     // One line of session statistics: how much work the skin actually did. A high
     // number here without user activity would mean the event filtering is broken.
-    log_debug("session totals: %llu skin applies, %llu surface presentations, %llu detector scans",
-              engine_state_.applies, engine_.surface_presents(), detector_.stats().scans);
+    log_debug("session totals: %llu skin applies, %llu surface presentations, %llu detector scans, "
+              "%llu surface hit test(s)",
+              engine_state_.applies, engine_.surface_presents(), detector_.stats().scans,
+              win::input_guard::hit_test_count());
     log_info("Azy Skin stopped");
     Logger::instance().flush_pending();
 }

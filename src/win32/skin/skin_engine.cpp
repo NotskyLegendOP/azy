@@ -73,7 +73,12 @@ bool SkinEngine::initialize(std::string* error) {
     return true;
 }
 
-void SkinEngine::shutdown() { revert(); }
+void SkinEngine::shutdown() {
+    revert();
+    // Azy is going away: give the strips, their DIB sections and their device
+    // contexts back to Windows instead of leaving hidden layered windows behind.
+    surface_.destroy();
+}
 
 void SkinEngine::revert() {
     composer_.revert();

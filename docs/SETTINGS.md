@@ -71,7 +71,7 @@ schema=1
 
 | Key | Default | Notes |
 |---|---|---|
-| `performance_mode` | `0` | Removes translucency and the shadow, disables rounded surface corners and experimental features, and lowers the reaction cadence. Recommended on lower-end machines |
+| `performance_mode` | `0`* | The ring becomes two constant strokes (bezel + hairline): the translucent wash, the shadow falloff and the rounded corners are dropped, and monitoring drops to its lowest cadence. Recommended on lower-end machines (*the first run enables it automatically on a modest machine - see below) |
 | `suspend_while_minimized` | `1` | Hide the surface and stop all work while Premiere is minimized |
 | `suspend_while_inactive` | `0` | Opt-in: only skin Premiere while it is the foreground application. Useful for battery life; the default keeps the window looking consistent when it is behind others |
 
@@ -118,3 +118,16 @@ the next save.
 
 Nothing else. Azy writes to no Adobe path, and the uninstaller removes all of the
 above.
+
+## Defaults, including the first-run heuristic
+
+The defaults are deliberately conservative: the skin is on, `apply_automatically`
+is on, and `suspend_when_minimized` is on (a minimized window has nothing on
+screen to decorate).
+
+`performance_mode` defaults to **on for a modest machine**: on the first run only
+(no `settings.ini` yet), Azy reads total physical memory and the logical processor
+count with two cheap system calls and starts in performance mode when the machine
+has less than 8 GB of RAM or four or fewer logical processors. Azy never changes
+the setting after that - if the file exists, the user's (or the installer's)
+choice wins, including a deliberate "off".
