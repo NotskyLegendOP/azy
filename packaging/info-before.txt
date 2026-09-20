@@ -1,0 +1,28 @@
+Azy Skin - what this installer does (and does not do)
+
+WHAT IT INSTALLS
+  A single small application in its own folder, plus your choice of:
+    - starting Azy Skin with Windows (a single per-user registry entry), and
+    - applying the Azy dark theme to Premiere Pro automatically.
+
+WHAT IT DOES NOT TOUCH
+  - Adobe Premiere Pro, any other Adobe application, or any file inside their
+    installation folders.
+  - Premiere Pro preferences, projects, caches, plugins or media.
+  - Any Adobe resource, executable or library.
+
+  Azy Skin does not use UXP, CEP, ExtendScript or any Premiere API. It does not
+  inject code into Premiere, does not modify Premiere's memory or files, and does
+  not change how Premiere works. It reads public Windows information about the
+  Premiere window and applies documented Windows window-composition settings to
+  it - the same mechanism Windows itself uses for dark title bars.
+
+WHAT IT NEEDS
+  Windows 10 version 1809 (build 17763) or newer, and Premiere Pro 2024, 2025 or
+  2026 for the full treatment. Older or newer builds simply get a more
+  conservative version of the theme, never an unstable one.
+
+UNINSTALLING
+  The uninstaller removes Azy's files, its settings, its log and its startup
+  entry. Premiere Pro is left exactly as it was - it will simply go back to its
+  original look.

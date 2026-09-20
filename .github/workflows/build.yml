@@ -1,0 +1,100 @@
+name: build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # Fast gate: the portable core (version/compat/settings/theme logic) is unit
+  # tested on Linux in a few seconds.
+  core-tests:
+    name: core unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DAZY_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  # Cross-compile the whole Windows application (Win32 layer + resources) so a
+  # Windows-only compile error cannot slip through review.
+  windows-cross-compile:
+    name: windows cross-compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install toolchain
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ziglang cmake
+      - name: Build (x64)
+        run: ./scripts/build-windows.sh build-zig
+      - name: Verify the artifact is a Windows GUI executable
+        run: |
+          python - <<'PY'
+          import struct, pathlib, sys
+          exe = pathlib.Path('build-zig/AzySkin.exe')
+          data = exe.read_bytes()
+          pe = struct.unpack_from('<I', data, 0x3c)[0]
+          assert data[pe:pe+4] == b'PE\0\0', 'not a PE file'
+          machine = struct.unpack_from('<H', data, pe + 4)[0]
+          subsystem = struct.unpack_from('<H', data, pe + 24 + 68)[0]
+          assert machine == 0x8664, f'expected x64, got {machine:#x}'
+          assert subsystem == 2, f'expected GUI subsystem, got {subsystem}'
+          print(f'ok: PE32+ x64, GUI subsystem, {len(data)//1024} KB')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AzySkin-x64-cross
+          path: build-zig/AzySkin.exe
+
+  # The supported build: MSVC with the resource compiler (manifest, icon, version
+  # information) plus the installer.
+  windows-msvc:
+    name: windows build (MSVC)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DAZY_BUILD_TESTS=ON
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AzySkin-x64-msvc
+          path: build/Release/AzySkin.exe
+
+  installer:
+    name: installer
+    runs-on: windows-latest
+    needs: windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+      - name: Configure and build
+        run: |
+          cmake -S . -B build
+          cmake --build build --config Release --parallel
+      - name: Check the .iss input exists
+        shell: pwsh
+        run: |
+          if (-not (Test-Path build/Release/AzySkin.exe)) {
+            throw "build/Release/AzySkin.exe is missing; the .iss expects the MSVC Release output."
+          }
+      - name: Compile installer
+        run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging\AzySkin.iss'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AzySkin-installer
+          path: dist/*.exe
