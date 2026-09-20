@@ -284,6 +284,36 @@ const char* integrity_level_name(int level) {
     }
 }
 
+int pixel_delta(COLORREF a, COLORREF b) {
+    const auto difference = [](int left, int right) {
+        const int value = left - right;
+        return value < 0 ? -value : value;
+    };
+    const int dr = difference(static_cast<int>(GetRValue(a)), static_cast<int>(GetRValue(b)));
+    const int dg = difference(static_cast<int>(GetGValue(a)), static_cast<int>(GetGValue(b)));
+    const int db = difference(static_cast<int>(GetBValue(a)), static_cast<int>(GetBValue(b)));
+    const int largest = dr > dg ? dr : dg;
+    return largest > db ? largest : db;
+}
+
+bool screen_pixels(const POINT* points, std::size_t count, COLORREF* colors) {
+    if (points == nullptr || colors == nullptr || count == 0) return false;
+    HDC screen = GetDC(nullptr);
+    if (screen == nullptr) return false;
+    bool all_read = true;
+    for (std::size_t i = 0; i < count; ++i) {
+        const COLORREF value = GetPixel(screen, points[i].x, points[i].y);
+        if (value == CLR_INVALID) {
+            all_read = false;
+            colors[i] = 0;
+            continue;
+        }
+        colors[i] = value;
+    }
+    ReleaseDC(nullptr, screen);
+    return all_read;
+}
+
 MachineClass detect_machine_class() {
     MachineClass info;
     MEMORYSTATUSEX memory{};

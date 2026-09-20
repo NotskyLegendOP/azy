@@ -3,6 +3,7 @@
 #include "azy/core/ring_layout.hpp"
 #include <cstddef>
 #include <string>
+#include <vector>
 
 #include "azy/core/log.hpp"
 #include "azy/core/strings.hpp"
@@ -12,6 +13,8 @@
 namespace azy {
 namespace win {
 namespace {
+
+constexpr int kProbeColumns = 8;  // sample points across the frame edge
 
 }  // namespace
 
@@ -42,6 +45,14 @@ LRESULT CALLBACK CompositionSurface::window_proc(HWND hwnd, UINT message, WPARAM
             break;
     }
     return DefWindowProcW(hwnd, message, wparam, lparam);
+}
+
+void CompositionSurface::show_strips() {
+    for (Strip& strip : strips_) {
+        if (strip.hwnd != nullptr) ShowWindow(strip.hwnd, SW_SHOWNA);
+    }
+    visible_ = true;
+    report_.presented = true;
 }
 
 bool CompositionSurface::register_class(std::string* error) {
@@ -297,6 +308,62 @@ size_t CompositionSurface::bitmap_bytes() const {
         total += static_cast<size_t>(strip.renderer.width()) * static_cast<size_t>(strip.renderer.height()) * 4u;
     }
     return total;
+}
+
+bool CompositionSurface::probe_visible(std::string* detail) {
+    auto fail = [detail](const char* text) {
+        if (detail != nullptr) *detail = text;
+        return false;
+    };
+    if (!visible_ || strips_[kTop].hwnd == nullptr || strips_[kTop].rect.empty()) {
+        return fail("the ring is not on screen right now (nothing was presented)");
+    }
+
+    const Rect strip = strips_[kTop].rect;
+    const int max_depth = strip.height() - 1;
+    if (max_depth < 1) return fail("the ring strip is too thin to sample");
+
+    std::vector<POINT> points;
+    for (int i = 0; i < kProbeColumns; ++i) {
+        const int x = strip.left + (strip.width() * (2 * i + 1)) / (2 * kProbeColumns);
+        for (int depth = 1; depth <= 4 && depth <= max_depth; ++depth) {
+            POINT point{};
+            point.x = x;
+            point.y = strip.top + depth;
+            points.push_back(point);
+        }
+    }
+
+    std::vector<COLORREF> shown(points.size(), 0);
+    std::vector<COLORREF> bare(points.size(), 0);
+    if (!screen_pixels(points.data(), points.size(), shown.data())) {
+        return fail("the screen could not be read (locked session?)");
+    }
+
+    // One frame with the ring hidden. DwmFlush makes the change reach the screen
+    // before the second sample, so the two reads are of two different frames.
+    hide();
+    DwmFlush();
+    const bool read_ok = screen_pixels(points.data(), points.size(), bare.data());
+    show_strips();
+    DwmFlush();
+    if (!read_ok) return fail("the screen could not be read (locked session?)");
+
+    int changed = 0;
+    int max_delta = 0;
+    for (std::size_t i = 0; i < points.size(); ++i) {
+        const int delta = pixel_delta(shown[i], bare[i]);
+        if (delta > max_delta) max_delta = delta;
+        if (delta >= kPixelChangeThreshold) ++changed;
+    }
+    const int needed = static_cast<int>(points.size()) / 2;
+    const bool on_screen = changed >= needed && max_delta >= kPixelChangeThreshold;
+    if (detail != nullptr) {
+        *detail = str_format("%s: %d of %zu sampled screen pixels changed by up to %d/255 when the ring "
+                             "was hidden",
+                             on_screen ? "on screen" : "NOT on screen", changed, points.size(), max_delta);
+    }
+    return on_screen;
 }
 
 void CompositionSurface::hide() {

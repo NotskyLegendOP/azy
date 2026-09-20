@@ -52,6 +52,7 @@ enum ControlId : int {
     kReenableButton,
     kResetButton,
     kOpenLogButton,
+    kCheckButton,
     kCloseButton,
 };
 
@@ -143,7 +144,7 @@ void SettingsWindow::set_dark_theme() {
                             kDarkness,       kOverlayCheck,      kOverlay,         kPerformanceMode,
                             kSuspendMinimized, kSuspendInactive,
                             kExperimental,   kReenableButton,    kResetButton,    kOpenLogButton,
-                            kCloseButton};
+                            kCheckButton,    kCloseButton};
     for (int id : controls) {
         if (HWND control = GetDlgItem(hwnd_, id)) {
             SetWindowTheme(control, L"DarkMode_Explorer", nullptr);
@@ -319,6 +320,9 @@ void SettingsWindow::layout(int dpi) {
 
     const int bottom_y = y + 34;
     push_button(kOpenLogButton, kMargin, bottom_y, 110, L"Open log file");
+    // The one command that answers "is any of this actually on my screen?": it
+    // measures the desktop itself rather than trusting the API return values.
+    push_button(kCheckButton, kMargin + 118, bottom_y, 128, L"Check visibility");
     push_button(kCloseButton, kWindowWidth - kMargin - 90, bottom_y, 90, L"Close");
 
     set_dark_theme();
@@ -623,6 +627,16 @@ LRESULT SettingsWindow::handle(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
                 case kOpenLogButton:
                     if (callbacks_.on_open_log) callbacks_.on_open_log();
                     return 0;
+                case kCheckButton: {
+                    const std::string report =
+                        callbacks_.on_check_visibility ? callbacks_.on_check_visibility() : std::string();
+                    // A message box rather than a label: the text can be selected
+                    // with Ctrl+C and pasted into a report, which is the point of
+                    // the command.
+                    MessageBoxW(hwnd_, to_wide(report).c_str(), L"Azy Skin - visibility check",
+                                MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND);
+                    return 0;
+                }
                 case kCloseButton:
                     hide();
                     return 0;

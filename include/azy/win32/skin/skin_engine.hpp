@@ -71,6 +71,17 @@ public:
 
     bool frame_applied() const { return composer_.is_applied(); }
     bool surface_visible() const { return surface_.visible(); }
+
+    // Forces the next apply() to rebuild everything (used after the user asks for a
+    // fresh look at the screen: nothing has changed, so nothing would be presented).
+    void invalidate() { has_key_ = false; }
+
+    // Checks with the desktop itself that the skin is really reaching the screen:
+    // the overlay first (it covers everything, so it is the easiest to detect),
+    // then the ring. `detail` always describes what was measured, so the answer can
+    // be pasted into a bug report. Returns true when at least one layer is on
+    // screen; the detail says which.
+    bool probe_on_screen(std::string* detail);
     bool overlay_visible() const { return veil_.visible(); }
     unsigned char overlay_alpha() const { return veil_.alpha(); }
     const RingReport& ring_report() const { return surface_.report(); }

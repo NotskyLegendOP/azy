@@ -80,6 +80,10 @@ private:
     void update_tray();
     void update_settings_window_status();
     void open_log_file() const;
+    // Measures the composed desktop and reports what it found, so that "the skin
+    // does nothing" can be answered with a measurement instead of a guess. Returns
+    // the report text for the settings window to display.
+    std::string check_visibility();
     std::string status_line() const;
     // One word for what is actually on screen right now: "active", "partial",
     // "idle" or the reason the skin is suspended. The tray tooltip, the settings

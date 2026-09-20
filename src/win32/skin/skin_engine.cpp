@@ -318,5 +318,28 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
     return changed;
 }
 
+bool SkinEngine::probe_on_screen(std::string* detail) {
+    std::string overlay_detail;
+    const bool overlay_shown = veil_.visible();
+    const bool overlay_ok = veil_.probe_visible(&overlay_detail);
+
+    std::string ring_detail;
+    const bool ring_shown = surface_.visible();
+    const bool ring_ok = surface_.probe_visible(&ring_detail);
+
+    std::string text = (overlay_ok || ring_ok) ? "the skin is on screen"
+                                               : "the skin is NOT on screen";
+    text += "\n";
+    text += "  overlay: " + (overlay_shown ? overlay_detail : std::string("not showing")) + "\n";
+    text += "  ring: " + (ring_shown ? ring_detail : std::string("not showing"));
+    if (detail != nullptr) *detail = text;
+
+    // A layer that is meant to be visible but is not: that is the interesting
+    // failure, and it deserves the warning level in the log.
+    if (overlay_shown && !overlay_ok) log_warn("visibility check: %s", overlay_detail.c_str());
+    if (ring_shown && !ring_ok) log_warn("visibility check: %s", ring_detail.c_str());
+    return overlay_ok || ring_ok;
+}
+
 }  // namespace win
 }  // namespace azy

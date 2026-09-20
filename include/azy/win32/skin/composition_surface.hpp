@@ -62,6 +62,15 @@ public:
     void hide();
     void destroy();
 
+    // Asks the desktop itself whether the ring is on screen: samples a few pixels
+    // inside the top strip with the ring hidden and with it shown, and compares
+    // them. Every call Azy makes can return success while the user sees nothing,
+    // so this is the only check that can answer "is it really there".
+    // The ring is only hidden for a few milliseconds (DWM flush between samples),
+    // never while the user could notice, and `detail` always describes what was
+    // measured, pass or fail.
+    bool probe_visible(std::string* detail);
+
     bool visible() const { return visible_; }
     const RingReport& report() const { return report_; }
     // Primary (top) strip: used for diagnostics and identity checks.
@@ -84,6 +93,9 @@ private:
     bool ensure_created(std::string* error);
     bool register_class(std::string* error);
     bool present_strip(int index, HWND below, const Rect& frame, const RingVisual& visual, std::string* error);
+    // Shows the strips that already exist (SW_SHOWNA: never activates them), used
+    // by probe_visible to put the ring back after hiding it for one frame.
+    void show_strips();
 
     Strip strips_[kStripCount];
     std::wstring class_name_;

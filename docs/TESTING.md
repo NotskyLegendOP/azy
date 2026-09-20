@@ -98,6 +98,7 @@ ring on (0,0)-(1920,1040), screen (0,0)-(1920,1080), work area top 0 bottom 1040
 
 | # | Steps | Pass criteria |
 |---|---|---|
+| 1.9 | Settings → **Check visibility** (with Premiere running and the skin active) | A message box reports what the desktop itself measured: *"the skin is on screen - overlay: 16 of 20 sampled screen pixels changed by up to 42/255 when the tint was hidden; ring: …"*. Anything saying "NOT on screen" is a bug worth reporting verbatim (the same line is in the log) |
 | 2.0a | Settings → Appearance → uncheck *Cover the whole window* | The tint over the whole window disappears immediately; the edge ring stays. Log: `overlay: … veil …` is no longer followed by anything until it is re-enabled |
 | 2.0b | Re-enable it and drag *Overlay strength* 0 → 100% | The tint deepens smoothly and immediately (no animation, no repaint storm: one `SetLayeredWindowAttributes` call and one fill per change). At 100% the layer reaches 60% alpha; at 0% only the ring remains |
 | 2.0c | With the overlay on, click into the Premiere timeline, drag a clip, scroll, use shortcuts | Nothing is intercepted: the overlay is click-through (`WS_EX_TRANSPARENT`), never activated (`WS_EX_NOACTIVATE`) and never appears in Alt+Tab |

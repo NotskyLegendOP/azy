@@ -1,6 +1,7 @@
 #include "azy/win32/skin/overlay_veil.hpp"
 
 #include <string>
+#include <vector>
 
 #include "azy/core/log.hpp"
 #include "azy/core/strings.hpp"
@@ -171,6 +172,63 @@ bool OverlayVeil::present(HWND below, HWND ring_strip, const Rect& frame, const 
                  static_cast<int>(color_.a * 100 / 255));
     }
     return true;
+}
+
+bool OverlayVeil::probe_visible(std::string* detail) {
+    auto fail = [detail](const char* text) {
+        if (detail != nullptr) *detail = text;
+        return false;
+    };
+    if (!visible_ || hwnd_ == nullptr || rect_.empty()) {
+        return fail("the overlay is not on screen right now (nothing was presented)");
+    }
+
+    // A grid across the middle of the covered area: away from the edge treatment,
+    // and spread out so that a few points sitting under another window (the
+    // settings window the button was clicked in, for instance) cannot decide the
+    // answer on their own.
+    const int columns = 5;
+    const int rows = 4;
+    std::vector<POINT> points;
+    for (int row = 0; row < rows; ++row) {
+        for (int column = 0; column < columns; ++column) {
+            POINT point{};
+            point.x = rect_.left + rect_.width() * (2 * column + 1) / (2 * columns);
+            point.y = rect_.top + rect_.height() * (2 * row + 1) / (2 * rows);
+            points.push_back(point);
+        }
+    }
+
+    std::vector<COLORREF> shown(points.size(), 0);
+    std::vector<COLORREF> bare(points.size(), 0);
+    if (!screen_pixels(points.data(), points.size(), shown.data())) {
+        return fail("the screen could not be read (locked session?)");
+    }
+
+    hide();
+    DwmFlush();  // let the hidden frame reach the screen before sampling again
+    const bool read_ok = screen_pixels(points.data(), points.size(), bare.data());
+    if (hwnd_ != nullptr) ShowWindow(hwnd_, SW_SHOWNA);
+    visible_ = true;
+    DwmFlush();
+    if (!read_ok) return fail("the screen could not be read (locked session?)");
+
+    int changed = 0;
+    int max_delta = 0;
+    for (std::size_t i = 0; i < points.size(); ++i) {
+        const int delta = pixel_delta(shown[i], bare[i]);
+        if (delta > max_delta) max_delta = delta;
+        if (delta >= kPixelChangeThreshold) ++changed;
+    }
+    // Half the grid is enough: the rest may be covered by another window, and the
+    // tint is uniform, so the points that did change prove it is there.
+    const bool on_screen = changed * 2 >= static_cast<int>(points.size()) && max_delta >= kPixelChangeThreshold;
+    if (detail != nullptr) {
+        *detail = str_format("%s: %d of %zu sampled screen pixels changed by up to %d/255 when the tint "
+                             "was hidden",
+                             on_screen ? "on screen" : "NOT on screen", changed, points.size(), max_delta);
+    }
+    return on_screen;
 }
 
 void OverlayVeil::hide() {

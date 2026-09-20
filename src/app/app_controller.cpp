@@ -162,6 +162,7 @@ bool AppController::initialize(HINSTANCE instance, const CommandLine& command_li
         update_settings_window_status();
     };
     window_callbacks.on_open_log = [this]() { open_log_file(); };
+    window_callbacks.on_check_visibility = [this]() { return check_visibility(); };
     std::string window_error;
     if (!settings_window_.create(instance_, window_callbacks, &window_error)) {
         log_warn("settings window unavailable: %s", window_error.c_str());
@@ -402,6 +403,38 @@ void AppController::on_premiere_event(const win::PremiereDetector::Event& event)
     update_settings_window_status();
 }
 
+std::string AppController::check_visibility() {
+    // Present again even though nothing changed: without this there would be
+    // nothing to look at (and nothing to measure).
+    engine_.invalidate();
+    sync("visibility check");
+
+    std::string report;
+    const bool on_screen = engine_.probe_on_screen(&report);
+
+    // One log line, so the report shows up in the file too (newlines would make
+    // the log unreadable).
+    std::string flat = report;
+    for (char& c : flat) {
+        if (c == '\n') c = ' ';
+    }
+    if (on_screen) {
+        log_info("visibility check: %s", flat.c_str());
+    } else {
+        log_warn("visibility check: %s", flat.c_str());
+    }
+
+    std::string text = "Azy Skin " + std::string(kAppVersion) + "\n";
+    text += "Premiere Pro: " + premiere_summary() + "\n\n";
+    text += report + "\n\n";
+    text += on_screen ? "The skin is reaching the screen. If you cannot see it, the effect itself is too "
+                        "subtle for your display: raise Overall darkness and Border intensity in "
+                        "Appearance."
+                      : "Nothing Azy draws is on screen. The details below go into the log file as well - "
+                        "please report them together with what the window above Premiere should look like.";
+    return text;
+}
+
 void AppController::on_settings_changed_on_disk() {
     // Ignore the notification caused by our own save.
     if (!store_.changed_on_disk()) return;
@@ -422,6 +455,9 @@ FeatureSet AppController::effective_features(const ProductInfo& product) const {
     if (settings.feature_disabled(feature_key::kFrameBackdrop)) features.frame_backdrop = false;
     if (settings.feature_disabled(feature_key::kEdgeSurface)) features.edge_surface = false;
     if (settings.feature_disabled(feature_key::kRoundedSurface)) features.edge_surface_rounded = false;
+    // The overlay also has a switch in Appearance (and a strength); this override
+    // exists so it can be turned off from settings.ini without touching the theme.
+    if (settings.feature_disabled(feature_key::kOverlay)) features.window_overlay = false;
     return features;
 }
 
@@ -732,16 +768,25 @@ std::vector<std::string> AppController::diagnostics_lines() const {
         lines.push_back(str_format("Azy Skin %s - no Premiere window attached yet", kAppVersion));
     }
 
+    // The overlay is reported on its own: it can be on screen when the edge
+    // treatment is not (a window too small for a ring, for example), and "the skin
+    // does nothing" is exactly the report this line has to settle.
+    const Settings& settings = store_.settings();
+    if (engine_.overlay_visible()) {
+        lines.push_back(str_format("Overlay: %d%% tint over the whole window",
+                                   static_cast<int>(engine_.overlay_alpha()) * 100 / 255));
+    } else if (settings.appearance.overlay && settings.appearance.overlay_intensity > 0.001) {
+        const FeatureSet features = effective_features(product_);
+        lines.push_back(features.window_overlay ? "Overlay: not on screen yet"
+                                                : "Overlay: off on this build (safe mode or no layered windows)");
+    }
+
     const win::RingReport& ring = engine_.ring_report();
     if (ring.presented) {
         lines.push_back(str_format("Ring %dpx at (%d,%d)-(%d,%d) | brightest pixel %u/255 | in front of Premiere: %s",
                                    ring.thickness_px, ring.frame.left, ring.frame.top, ring.frame.right,
                                    ring.frame.bottom, static_cast<unsigned>(ring.max_alpha),
                                    ring.above ? "yes" : "no"));
-        if (engine_.overlay_visible()) {
-            lines.push_back(str_format("Overlay: %d%% tint over the whole window",
-                                       static_cast<int>(engine_.overlay_alpha()) * 100 / 255));
-        }
         if (ring.misplaced_strips > 0) {
             lines.push_back(str_format(
                 "Note: %d of the 4 ring strips are not where Windows was asked to put them.",

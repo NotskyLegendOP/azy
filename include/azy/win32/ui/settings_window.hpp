@@ -22,6 +22,10 @@ public:
         std::function<void(const Settings&)> on_change;  // live apply
         std::function<void()> on_reset;                  // "Reset configuration"
         std::function<void()> on_open_log;               // "Open log file"
+        // "Check visibility": returns the report to show the user. The window owns
+        // the presentation (a message box, so the text can be copied), the
+        // application owns the measurement.
+        std::function<std::string()> on_check_visibility;
         std::function<void()> on_hidden;
     };
 

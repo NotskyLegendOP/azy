@@ -44,6 +44,13 @@ public:
     void hide();
     void destroy();
 
+    // Asks the desktop whether the tint is really reaching the screen: samples a
+    // grid of points inside the covered area with the veil hidden and with it
+    // shown. See CompositionSurface::probe_visible - same idea, because the same
+    // trap applies: a window can be created, shown and blended and still not be
+    // part of what the user sees.
+    bool probe_visible(std::string* detail);
+
     bool visible() const { return visible_; }
     // The veil window: used as the z-order anchor of the ring's strips.
     HWND hwnd() const { return hwnd_; }

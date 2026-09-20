@@ -1,6 +1,7 @@
 // Azy Skin — Win32 layer: small utilities (paths, files, strings, handles).
 #pragma once
 
+#include <cstddef>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -60,6 +61,23 @@ HWND z_order_anchor(HWND below);
 // higher-integrity process owns `other`, Windows refuses the placement and every
 // API still reports success.
 bool window_is_above(HWND window, HWND other);
+
+// Reads pixels straight out of the composited desktop (physical screen pixels).
+// Used only by the on-demand visibility check - never in a loop, and never to
+// capture anything but a handful of points - so that Azy can tell "the user can
+// see the ring" from "every API returned success", which are not the same thing:
+// a layered window composed behind an opaque, maximized window looks exactly like
+// one that is not there. Returns false when the screen cannot be read at all
+// (locked session, no access to that monitor).
+bool screen_pixels(const POINT* points, std::size_t count, COLORREF* colors);
+
+// Largest change in any colour channel between two pixels: 0 for identical
+// colours, 255 for black against white.
+int pixel_delta(COLORREF a, COLORREF b);
+
+// Smallest change a person would notice on screen; below this, a difference is
+// compositing noise rather than anything drawn.
+constexpr int kPixelChangeThreshold = 4;
 
 // Windows integrity level of a process: 0 = untrusted, 1 = low, 2 = medium
 // (a normally launched application), 3 = high (elevated / "as administrator"),

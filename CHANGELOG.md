@@ -16,14 +16,24 @@ The skin now covers the whole window, not only its edge.
   layered top-level window the size of the tracked window, filled with a single
   translucent charcoal colour and blended by Windows with a constant alpha
   (`SetLayeredWindowAttributes`): no bitmap, no per-pixel work, no animation, and
-  nothing new to monitor. It is on by default at 35% strength, sits directly above
+  nothing new to monitor. It is on by default at 45% strength, sits directly above
   Premiere and directly *below* the ring (so the 1px hairline and the bezel stay
   crisp), and is hidden with the ring whenever the skin is suspended.
 * Settings → Appearance gained two entries: **Cover the whole window (overlay)**
-  (on/off) and **Overlay strength** (0–100%, default 35%). At 0% only the edge
+  (on/off) and **Overlay strength** (0–100%, default 45%). At 0% only the edge
   treatment remains; at 100% the tint reaches 60%, which is the "make everything
   dark" end of the range. Both are in `settings.ini` as `overlay` and
   `overlay_intensity`, and the strength slider is disabled while the overlay is off.
+* With the overlay on, the edge falloff deepens with it (10 px with the overlay off,
+  ~40 px at the default strength, ~72 px at 100%), because a 10px band *plus* a tint
+  reads as "a border and a wash" while a wide soft falloff reads as one skin. The
+  single strength slider drives both, so turning the overlay off restores exactly
+  the previous edge treatment.
+* Settings → **Check visibility**: measures the composed desktop - hides the ring
+  and the overlay for one frame, samples the same pixels again, and reports what
+  changed. This is the difference between "every API Azy calls returned success"
+  and "the user can see it", and it is the first thing to run when the skin looks
+  like it is doing nothing. The same line goes to the log.
 * The overlay is verified exactly like the ring: if Windows will not let it be
   placed above Premiere's window (a higher-integrity Premiere), the attempt fails
   loudly - a warning in the log, a reason in the settings window - instead of
@@ -34,6 +44,20 @@ The skin now covers the whole window, not only its edge.
 * `tools/check-version.py` checks all five copies of the version number (CMake,
   the fallback header, the installer, the resource file, the release workflow) and
   runs as part of `scripts/verify.sh`.
+
+### Fixed
+
+* The overlay painted one pixel of itself. Its client area was only painted when
+  something invalidated it, and the window class has no `CS_HREDRAW`/`CS_VREDRAW`
+  and no background brush, so growing the window from its 1x1 creation size to the
+  window it covers left the newly exposed area unpainted - a tint correctly
+  configured, correctly positioned, correctly blended, and invisible. The repaint
+  now happens explicitly, synchronously, once per colour or geometry change.
+* A window that is not actually on screen (Premiere hides a few of its own
+  top-level windows) is no longer decorated: it would have been painted off screen
+  while every status line reported "active".
+* A ring whose bitmap came out empty, or whose strips Windows would not place above
+  the Premiere window, now reports a failure instead of a silent success.
 
 ### Notes
 
