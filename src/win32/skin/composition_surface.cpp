@@ -1,4 +1,6 @@
 #include "azy/win32/skin/composition_surface.hpp"
+
+#include "azy/core/ring_layout.hpp"
 #include <cstddef>
 #include <string>
 
@@ -9,19 +11,6 @@
 
 namespace azy {
 namespace win {
-namespace {
-
-// One strip per side. Each strip's thickness must cover the treated band plus the
-// corner arc, otherwise a large radius would be visibly cut off at the corners.
-int strip_thickness(const RingVisual& visual) {
-    const int band = visual.band_px < 1 ? 1 : visual.band_px;
-    const int needed = band + 2;  // + the hairline and the bezel rows
-    const int corner = visual.radius_px + 1;
-    return needed > corner ? needed : corner;
-}
-
-}  // namespace
-
 LRESULT CALLBACK CompositionSurface::window_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
     switch (message) {
         // Should never be reached (WS_EX_TRANSPARENT answers hit tests before the
@@ -82,30 +71,30 @@ bool CompositionSurface::ensure_created(std::string* error) {
     if (strips_[kTop].hwnd != nullptr) return true;
     if (!register_class(error)) return false;
 
+    HINSTANCE instance = GetModuleHandleW(nullptr);
     for (int i = 0; i < kStripCount; ++i) {
+        Strip& strip = strips_[i];
         HWND hwnd = CreateWindowExW(static_cast<DWORD>(input_guard::kRequiredExStyles), class_name_.c_str(),
-                                    L"Azy Skin", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr,
-                                    GetModuleHandleW(nullptr), nullptr);
+                                    L"Azy Skin Surface", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, instance,
+                                    nullptr);
         if (hwnd == nullptr) {
-            if (error) *error = "CreateWindowEx(surface strip) failed: " + to_utf8(last_error_text());
-            destroy();
+            if (error) *error = "CreateWindowExW(surface strip) failed: " + to_utf8(last_error_text());
             return false;
         }
 
+        // Verify the input contract on the live window instead of trusting the
+        // style bits: a surface that could take a click or the focus is the one
+        // failure Azy must never have.
         std::string verify_error;
         if (!input_guard::verify(hwnd, &verify_error)) {
-            // Never show a surface that could take a click. Fail the whole ring
-            // rather than showing a half-safe one.
-            if (error) *error = "input-safety contract violated: " + verify_error;
+            if (error) *error = "input guard rejected a surface strip: " + verify_error;
             DestroyWindow(hwnd);
-            destroy();
             return false;
         }
 
-        // Defensive: strips are never owned by, or owned with, anything.
-        SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, 0);
-        strips_[i].hwnd = hwnd;
+        strip.hwnd = hwnd;
     }
+
     return true;
 }
 
@@ -117,25 +106,31 @@ bool CompositionSurface::present_strip(int index, HWND insert_after, const Rect&
         return false;
     }
 
-    const int thickness = strip_thickness(visual);
+    const RingGeometry geometry = ring_geometry(frame, visual.band_px, visual.radius_px);
+    if (!geometry.valid) {
+        if (error) *error = "window too small for the four-strip ring";
+        return false;
+    }
+    const RingStrips strips = ring_strip_rects(frame, geometry.thickness_px);
+    if (!strips.valid) {
+        if (error) *error = "window too small for the four-strip ring";
+        return false;
+    }
+
     Rect target;
     switch (index) {
         case kTop:
-            target = Rect::from_size(frame.left, frame.top, frame.width(), thickness);
+            target = strips.top;
             break;
         case kBottom:
-            target = Rect::from_size(frame.left, frame.bottom - thickness, frame.width(), thickness);
+            target = strips.bottom;
             break;
         case kLeft:
-            // The vertical strips stop below the horizontal ones: the corner arcs
-            // are part of the horizontal strips, so nothing is painted twice.
-            target = Rect::from_size(frame.left, frame.top + thickness, thickness,
-                                     frame.height() - 2 * thickness);
+            target = strips.left;
             break;
         case kRight:
         default:
-            target = Rect::from_size(frame.right - thickness, frame.top + thickness, thickness,
-                                     frame.height() - 2 * thickness);
+            target = strips.right;
             break;
     }
     if (target.empty()) {
@@ -148,6 +143,9 @@ bool CompositionSurface::present_strip(int index, HWND insert_after, const Rect&
     RingVisual local = visual;
     local.origin_x = target.left - frame.left;
     local.origin_y = target.top - frame.top;
+    // The clamped radius, so the corner arc is never clipped by the strip that
+    // paints it (they are computed together, in ring_geometry).
+    local.radius_px = geometry.radius_px;
 
     if (!strip.renderer.prepare(target.width(), target.height(), error)) return false;
     if (!strip.renderer.render(local, error)) return false;

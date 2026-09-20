@@ -3,6 +3,7 @@
 #include <string>
 
 #include "azy/core/log.hpp"
+#include "azy/core/ring_layout.hpp"
 #include "azy/core/strings.hpp"
 #include "azy/win32/os/win_util.hpp"
 #include "azy/win32/skin/input_guard.hpp"
@@ -33,9 +34,9 @@ int ring_radius_px(const SkinRequest& request, bool frame_rounded) {
 // creates internally), so the surface is skipped - silently, because it is not a
 // failure, just a window that is too small to decorate.
 bool window_large_enough_for_ring(const Rect& frame, int band_px, int radius_px) {
-    const int thickness = std::max(band_px + 2, radius_px + 1);
-    const int required = thickness * 2 + 2;
-    return frame.width() >= required && frame.height() >= required;
+    // Shares the surface's geometry helper, so the engine and the surface can never
+    // disagree about which windows get a ring.
+    return ring_geometry(frame, band_px, radius_px).valid;
 }
 
 // Band thickness of the composition surface, in physical pixels: how far the

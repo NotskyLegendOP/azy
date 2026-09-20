@@ -760,7 +760,7 @@ void AppController::shutdown() {
     }
     // One line of session statistics: how much work the skin actually did. A high
     // number here without user activity would mean the event filtering is broken.
-    log_debug("session totals: %llu skin applies, %llu surface presentations, %llu detector scans, "
+    log_debug("session totals: %llu skin applies, %llu surface presentation(s), %llu detector scan(s), "
               "%llu surface hit test(s)",
               engine_state_.applies, engine_.surface_presents(), detector_.stats().scans,
               win::input_guard::hit_test_count());

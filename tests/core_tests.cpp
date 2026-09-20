@@ -15,6 +15,7 @@
 #include "azy/core/failure_tracker.hpp"
 #include "azy/core/geometry.hpp"
 #include "azy/core/product.hpp"
+#include "azy/core/ring_layout.hpp"
 #include "azy/core/settings.hpp"
 #include "azy/core/strings.hpp"
 #include "azy/core/theme.hpp"
@@ -583,6 +584,84 @@ void test_layout_safety() {
     }
 }
 
+
+// --- the four-strip ring -------------------------------------------------- //
+void test_ring_layout() {
+    std::printf("[ring layout]\n");
+
+    // A window far larger than the treated band: the strips must tile the border
+    // exactly, with no overlap (a doubled corner) and no gap (a visible notch).
+    const Rect frame = Rect::from_size(1000, 700, 1920, 1080);  // 1000 wide? no: size form
+    const Rect window = Rect::from_size(100, 200, 1200, 800);
+    (void)frame;
+
+    const int thickness = ring_strip_thickness(10, 8);  // band + 2 strokes, radius fits inside
+    CHECK_INT(thickness, 12);
+
+    const RingStrips strips = ring_strip_rects(window, thickness);
+    CHECK(strips.valid);
+    CHECK_INT(strips.top.left, window.left);
+    CHECK_INT(strips.top.right, window.right);
+    CHECK_INT(strips.top.top, window.top);
+    CHECK_INT(strips.top.height(), thickness);
+    CHECK_INT(strips.bottom.bottom, window.bottom);
+    CHECK_INT(strips.bottom.top, window.bottom - thickness);
+    CHECK_INT(strips.bottom.left, window.left);
+    CHECK_INT(strips.bottom.right, window.right);
+
+    // The vertical strips sit strictly between the horizontal ones - that is what
+    // keeps the corner arcs owned by exactly one strip.
+    CHECK_INT(strips.left.top, window.top + thickness);
+    CHECK_INT(strips.left.bottom, window.bottom - thickness);
+    CHECK_INT(strips.left.left, window.left);
+    CHECK_INT(strips.left.width(), thickness);
+    CHECK_INT(strips.right.right, window.right);
+    CHECK_INT(strips.right.left, window.right - thickness);
+    CHECK_INT(strips.right.top, strips.left.top);
+    CHECK_INT(strips.right.bottom, strips.left.bottom);
+
+    // No strip may overlap another.
+    const Rect all[4] = {strips.top, strips.bottom, strips.left, strips.right};
+    for (int i = 0; i < 4; ++i) {
+        for (int j = i + 1; j < 4; ++j) {
+            const bool disjoint = all[i].right <= all[j].left || all[j].right <= all[i].left ||
+                                  all[i].bottom <= all[j].top || all[j].bottom <= all[i].top;
+            CHECK(disjoint);
+        }
+    }
+
+    // A large corner radius needs a thicker strip, otherwise the arc is clipped.
+    CHECK_INT(ring_strip_thickness(10, 16), 17);
+    CHECK_INT(ring_strip_thickness(3, 0), 5);
+
+    // A big window keeps the requested band: this is the normal case, and the ring
+    // must never grow just because the window did.
+    const RingGeometry big = ring_geometry(Rect::from_size(0, 0, 3840, 2160), 20, 16);
+    CHECK(big.valid);
+    CHECK_INT(big.thickness_px, 22);  // band + the two 1px strokes
+    CHECK_INT(big.radius_px, 16);
+
+    // A small window gets a proportionally small ring instead of four strips that
+    // meet in the middle (a twelfth of the shorter side, at least 3px).
+    const RingGeometry small = ring_geometry(Rect::from_size(0, 0, 40, 30), 100, 0);
+    CHECK(small.valid);
+    CHECK_INT(small.thickness_px, 3);  // 30 / 12 -> below the 3px floor
+    // The proportional cap only ever *reduces* the thickness: a 300px floating
+    // panel keeps the requested band (13 + 2), which is well under 300 / 12.
+    const RingGeometry floater = ring_geometry(Rect::from_size(0, 0, 300, 300), 13, 8);
+    CHECK_INT(floater.thickness_px, 15);
+
+    // The radius is capped so the arc always fits in the strip painting it.
+    const RingGeometry clipped = ring_geometry(Rect::from_size(0, 0, 120, 120), 10, 16);
+    CHECK(clipped.valid);
+    CHECK_INT(clipped.thickness_px, 10);   // 120 / 12
+    CHECK_INT(clipped.radius_px, 9);       // thickness - 1
+
+    // Too small for a ring at all: the window would have no content left.
+    CHECK(!ring_geometry(Rect::from_size(0, 0, 10, 10), 40, 0).valid);
+    CHECK(!ring_geometry(Rect::from_size(0, 0, 0, 0), 10, 0).valid);
+}
+
 }  // namespace
 
 int main() {
@@ -596,6 +675,7 @@ int main() {
     test_failure_tracker();
     test_strings();
     test_layout_safety();
+    test_ring_layout();
 
     std::printf("\n===================\n%d checks, %d failure(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
