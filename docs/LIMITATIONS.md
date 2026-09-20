@@ -112,6 +112,21 @@ rendering are all exactly what Adobe shipped.
 
 The most invasive thing Azy does in response to difficulty is *less*.
 
+## Premiere running as administrator
+
+Windows does not let a process place its windows above the windows of a process
+with a higher integrity level (User Interface Privilege Isolation). If Premiere Pro
+is started with "Run as administrator" and Azy Skin is not, Azy's ring is composed
+*behind* the Premiere window: every call succeeds and nothing is ever visible.
+Azy compares its own integrity level with Premiere's when it attaches, logs a
+warning, says so in the settings window, and shows a one-time tray notification.
+The two ways out are the same two Windows offers: run Azy Skin as administrator as
+well, or run Premiere Pro normally (which is what Adobe supports).
+
+There is no way around this restriction that Azy would accept: bypassing it means
+injecting code or privileges into another process, which is exactly the kind of
+technique this project rules out.
+
 ## If Azy is force-killed (Task Manager, a crash)
 
 Premiere is unaffected: it keeps running, keeps focus, and never noticed Azy. Two

@@ -9,6 +9,7 @@
 #include <algorithm>
 
 #include "azy/core/log.hpp"
+#include "azy/core/version_string.hpp"
 #include "azy/core/strings.hpp"
 #include "azy/win32/os/autostart.hpp"
 #include "azy/win32/os/win_api.hpp"
@@ -518,6 +519,10 @@ void AppController::sync(const char* reason_name) {
         reason = win::SuspendReason::OriginalTheme;
     } else if (!tracker_.has_window()) {
         reason = win::SuspendReason::NoWindow;
+    } else if (!tracker_.target().visible) {
+        // Premiere keeps a handful of hidden top-level windows; decorating one of
+        // them would mean drawing a ring around nothing.
+        reason = win::SuspendReason::Hidden;
     } else {
         reason = decision.reason;
     }
@@ -714,15 +719,17 @@ std::vector<std::string> AppController::diagnostics_lines() const {
 
     if (target.hwnd != nullptr) {
         std::string shape = "windowed";
-        if (target.maximized) shape = "maximized";
+        if (target.minimized) shape = "minimized";
+        else if (target.maximized) shape = "maximized";
         else if (target.fullscreen) shape = "fullscreen";
-        lines.push_back(str_format("Window '%s' %dx%d at (%d,%d) | %s | screen (%d,%d)-(%d,%d) | %d%%",
+        if (!target.visible) shape += ", hidden";
+        lines.push_back(str_format("Azy Skin %s - window '%s' %dx%d at (%d,%d) | %s | screen (%d,%d)-(%d,%d) | %d%%", kAppVersion,
                                    win::to_utf8(target.window_class).c_str(), target.visible_frame.width(),
                                    target.visible_frame.height(), target.visible_frame.left, target.visible_frame.top,
                                    shape.c_str(), target.monitor.left, target.monitor.top, target.monitor.right,
                                    target.monitor.bottom, static_cast<int>(target.dpi * 100u / 96u)));
     } else {
-        lines.push_back("Window: none attached yet");
+        lines.push_back(str_format("Azy Skin %s - no Premiere window attached yet", kAppVersion));
     }
 
     const win::RingReport& ring = engine_.ring_report();
@@ -731,6 +738,11 @@ std::vector<std::string> AppController::diagnostics_lines() const {
                                    ring.thickness_px, ring.frame.left, ring.frame.top, ring.frame.right,
                                    ring.frame.bottom, static_cast<unsigned>(ring.max_alpha),
                                    ring.above ? "yes" : "no"));
+        if (ring.misplaced_strips > 0) {
+            lines.push_back(str_format(
+                "Note: %d of the 4 ring strips are not where Windows was asked to put them.",
+                ring.misplaced_strips));
+        }
     } else if (!ring.error.empty()) {
         lines.push_back("Ring: not on screen - " + ring.error);
     } else {
@@ -743,6 +755,9 @@ std::vector<std::string> AppController::diagnostics_lines() const {
     return lines;
 }
 
+// One word for "what is on screen right now". The settings window shows this
+// verbatim in its headline, so it must never be more optimistic than the engine:
+// "active" means the ring is on screen, not merely that the settings allow it.
 std::string AppController::state_summary() const {
     if (engine_.frame_applied() && engine_.surface_visible()) return "active";
     if (engine_.frame_applied()) return "partial";

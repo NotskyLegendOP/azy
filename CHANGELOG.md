@@ -27,6 +27,18 @@ All notable changes to Azy Skin are documented here. The format follows
   window of a lower integrity process be drawn above a higher integrity one, so
   the skin cannot be visible in that configuration - previously it simply looked
   like Azy was doing nothing.
+* **Azy now speaks up when the skin cannot be seen.** If the ring is expected but
+  the engine could not put it on screen (the strips were placed behind Premiere,
+  the bitmap came out empty, the surface refused to present), that is logged once
+  as a warning and shown as a tray notification with the reason, instead of leaving
+  a silent utility that looks like it is doing nothing.
+* One `window frame:` line per geometry change records what Windows reports for
+  the tracked window (DWM bounds and `GetWindowRect`), the rectangle the ring is
+  drawn on, the screen and its work area, the window state and the DPI - the
+  complete reasoning behind the ring's placement in a single line.
+* `tools/check-version.py` verifies that the version in `CMakeLists.txt`,
+  `version_string.hpp`, `AzySkin.iss`, the resource file and the release workflow
+  all agree, and `scripts/verify.sh` runs it on every push.
 
 ### Fixed
 
@@ -34,6 +46,16 @@ All notable changes to Azy Skin are documented here. The format follows
   Windows does not report as maximized (Premiere's own fullscreen mode, for
   example) hangs over the monitor edges just like a maximized one, and was
   decorated off screen for the same reason.
+* **A hidden window is no longer decorated.** Premiere keeps a few hidden
+  top-level windows; if one of them was ever tracked, Azy drew a ring around
+  nothing while every status line said "active". A window has to be on screen to
+  be skinned, and the status now says "Premiere window hidden" when it is not.
+* **A ring that renders nothing is reported as a failure** instead of a success:
+  the strongest alpha in the painted bitmap is checked before the surface is
+  declared visible, so an empty ring can no longer pass as a working one.
+* The strips are verified against their requested rectangles after placement, and
+  a strip Windows moved elsewhere is logged (and shown in the panel) rather than
+  silently producing a misplaced ring.
 
 ## [1.0.1] — 2026-09-20
 

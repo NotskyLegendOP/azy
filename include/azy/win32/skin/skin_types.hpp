@@ -28,6 +28,7 @@ struct SkinTarget {
     UINT dpi = 96;
     bool minimized = false;
     bool maximized = false;
+    bool visible = false;  // IsWindowVisible: the window is not hidden by its owner
     bool fullscreen = false;
     bool cloaked = false;
     bool foreground = false;
@@ -35,7 +36,12 @@ struct SkinTarget {
 
     std::wstring window_class;
 
-    bool valid() const { return hwnd != nullptr && !minimized && !cloaked && !visible_frame.empty(); }
+    // A target is only usable when there is really something on screen to decorate:
+    // a hidden window (Premiere keeps a few) would otherwise be decorated off screen
+    // while every status line happily reported "active".
+    bool valid() const {
+        return hwnd != nullptr && visible && !minimized && !cloaked && !visible_frame.empty();
+    }
 
     // Corner radius actually usable for this window: never larger than 20% of
     // the shorter side (so a small floating dialog cannot become a pill), and
@@ -61,6 +67,7 @@ enum class SuspendReason {
     NoWindow,         // Premiere not running / no editor window yet
     Minimized,        // Premiere minimized (and the user asked us to suspend)
     Inactive,         // Premiere not in the foreground (opt-in)
+    Hidden,           // the tracked window is hidden (not on screen at all)
     Dragging,         // user is inside a modal move/size loop
     Moving,           // user just moved/resized the window
     FullscreenTransition,

@@ -42,7 +42,6 @@ bool WindowTracker::set_window(HWND hwnd, unsigned long pid) {
     needs_apply_ = true;
     last_window_count_check_ = 0.0;
     was_minimized_ = false;
-    clamp_logged_ = false;
 
     // Fill the snapshot immediately so the first apply has real geometry.
     RefreshResult result = refresh(monotonic_seconds());
@@ -58,7 +57,6 @@ void WindowTracker::clear() {
     target_ = SkinTarget{};
     has_applied_ = false;
     needs_apply_ = true;
-    clamp_logged_ = false;
 }
 
 WindowTracker::RefreshResult WindowTracker::refresh(double now) {
@@ -86,6 +84,7 @@ WindowTracker::RefreshResult WindowTracker::refresh(double now) {
     const bool minimized = is_window_minimized(target_.hwnd);
     const bool maximized = is_window_maximized(target_.hwnd);
     const bool cloaked = is_window_cloaked(target_.hwnd);
+    const bool shown = IsWindowVisible(target_.hwnd) != FALSE;
 
     HMONITOR monitor = MonitorFromWindow(target_.hwnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO monitor_info{};
@@ -100,6 +99,9 @@ WindowTracker::RefreshResult WindowTracker::refresh(double now) {
     const UINT dpi = win::api().get_dpi_for_window ? win::dpi_for_window(target_.hwnd)
                                                    : win::dpi_for_rect(frame);
 
+    // The ring frame: what the user can actually see of this window, which is not
+    // always what Windows reports (see ring_frame).
+    //
     // Windows places a maximized window so that its invisible resize border hangs
     // over the monitor edges, and the numbers we read back can therefore start at
     // a negative coordinate. The ring is drawn inside the frame edge, so those
@@ -108,19 +110,10 @@ WindowTracker::RefreshResult WindowTracker::refresh(double now) {
     const bool fullscreen_raw = !minimized && !maximized && new_visible == monitor_rect;
     const Rect reported_visible = new_visible;
     new_visible = ring_frame(new_visible, monitor_rect, work_area, maximized, fullscreen_raw);
-    if (new_visible != reported_visible && !clamp_logged_) {
-        clamp_logged_ = true;
-        log_info("ring frame: the window reports (%d,%d)-(%d,%d), which is not entirely on screen; drawing on the "
-                 "visible %s (%d,%d)-(%d,%d) instead",
-                 reported_visible.left, reported_visible.top, reported_visible.right, reported_visible.bottom,
-                 maximized ? "work area" : "display area", new_visible.left, new_visible.top, new_visible.right,
-                 new_visible.bottom);
-    }
-
     const bool geometry_changed = rect_changed(target_.visible_frame, new_visible, 0) ||
                                   rect_changed(target_.frame, new_frame, 0);
     const bool state_changed = minimized != target_.minimized || maximized != target_.maximized ||
-                               cloaked != target_.cloaked || dpi != target_.dpi ||
+                               cloaked != target_.cloaked || shown != target_.visible || dpi != target_.dpi ||
                                monitor_rect != target_.monitor;
 
     target_.frame = new_frame;
@@ -131,6 +124,7 @@ WindowTracker::RefreshResult WindowTracker::refresh(double now) {
     target_.minimized = minimized;
     target_.maximized = maximized;
     target_.cloaked = cloaked;
+    target_.visible = shown;
     target_.fullscreen = fullscreen_raw;
     target_.foreground = window_is_foreground(target_.hwnd, target_.pid);
 
@@ -145,6 +139,23 @@ WindowTracker::RefreshResult WindowTracker::refresh(double now) {
 
     if (geometry_changed) {
         last_geometry_change_ = now;
+        // One line per geometry change (never per timer tick): the reported frame,
+        // the rect the ring will really be drawn on, and the screen it sits on.
+        log_info("window frame: reported (%d,%d)-(%d,%d) [dwm], window (%d,%d)-(%d,%d) [getwindowrect], "
+                 "ring on (%d,%d)-(%d,%d), screen (%d,%d)-(%d,%d), work area top %d bottom %d, %s%s, %u dpi",
+                 reported_visible.left, reported_visible.top, reported_visible.right, reported_visible.bottom,
+                 new_frame.left, new_frame.top, new_frame.right, new_frame.bottom, new_visible.left,
+                 new_visible.top, new_visible.right, new_visible.bottom, monitor_rect.left, monitor_rect.top,
+                 monitor_rect.right, monitor_rect.bottom, work_area.top, work_area.bottom,
+                 maximized ? "maximized" : (fullscreen_raw ? "fullscreen" : "windowed"),
+                 shown ? "" : ", hidden", dpi);
+        if (new_visible != reported_visible) {
+            log_info("ring frame: the window reports (%d,%d)-(%d,%d) and is %s; drawing on the visible %s "
+                     "(%d,%d)-(%d,%d) instead - the reported rectangle would put the ring off screen",
+                     reported_visible.left, reported_visible.top, reported_visible.right, reported_visible.bottom,
+                     maximized ? "maximized" : "fullscreen", maximized ? "work area" : "display area",
+                     new_visible.left, new_visible.top, new_visible.right, new_visible.bottom);
+        }
         result.changed = true;
         // While the user is dragging or the window is moving, Azy keeps its own
         // surface out of the way (see PerformanceManager); the geometry is still

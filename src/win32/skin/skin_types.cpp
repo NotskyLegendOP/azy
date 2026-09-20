@@ -11,6 +11,7 @@ const char* suspend_reason_name(SuspendReason reason) {
         case SuspendReason::NoWindow: return "no Premiere window";
         case SuspendReason::Minimized: return "Premiere minimized";
         case SuspendReason::Inactive: return "Premiere inactive";
+        case SuspendReason::Hidden: return "Premiere window hidden";
         case SuspendReason::Dragging: return "window being dragged";
         case SuspendReason::Moving: return "window just moved";
         case SuspendReason::FullscreenTransition: return "fullscreen transition";

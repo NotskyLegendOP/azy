@@ -41,6 +41,7 @@ struct RingReport {
     size_t bitmap_bytes = 0;
     unsigned char max_alpha = 0; // 0 would mean an invisible bitmap
     bool above = false;          // strips sit in front of the target window
+    int misplaced_strips = 0;    // strips Windows did not leave where they were placed
     std::string error;           // last failure, empty when the last present worked
 };
 

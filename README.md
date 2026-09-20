@@ -109,6 +109,32 @@ Every change applies live — there is no OK/Apply step. Settings are stored in
 `%LOCALAPPDATA%\Azy Skin\settings.ini`, which is plain INI and safe to edit by
 hand (Azy notices and reloads it). See [`docs/SETTINGS.md`](docs/SETTINGS.md).
 
+### If you cannot see the skin
+
+The status area of the settings window reports what Azy is actually doing, on the
+machine it is doing it on — including the version that is running:
+
+```
+Azy Skin 1.0.2 - window 'Premiere Pro' 1920x1040 at (0,0) | maximized | screen (0,0)-(1920,1080) | 100%
+Ring 12px at (0,0)-(1920,1040) | brightest pixel 199/255 | in front of Premiere: yes
+```
+
+1. **Check the version on the first line** — it is the build you installed.
+2. `Ring: not on screen - ...` names the reason (nothing attached yet, the strips
+   could not be placed in front of Premiere, an empty bitmap).
+3. `brightest pixel 0/255` would mean the ring rendered nothing; `in front of
+   Premiere: no` means something is stacked above the strips.
+4. If both lines look right, the ring *is* on screen: it is drawn just inside the
+   rectangle named in the second line. The default look is deliberately subtle —
+   raise **Border intensity** and **Overall darkness** to make it unmistakable, then
+   dial back. On a maximized window the ring follows the monitor's work area.
+5. If Premiere Pro runs as administrator, start Azy Skin as administrator too:
+   Windows does not allow a lower-integrity process to draw above a higher-integrity
+   one, and Azy says so in the panel and in a tray notification.
+
+The same facts are in `%LOCALAPPDATA%\Azy Skin\azy.log` (Settings → *Open log
+file*), where `docs/TESTING.md` explains every field.
+
 ---
 
 ## The look

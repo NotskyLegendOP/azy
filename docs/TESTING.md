@@ -43,13 +43,41 @@ The `ring:` line is the one to read when a user reports "the skin does nothing":
 | `strongest pixel alpha` | the strongest pixel the renderer produced. `0` means the bitmap came out fully transparent - a rendering fault, not a placement one |
 | `above Premiere: yes` | the strips sit in front of the Premiere window in the z-order. `no` means something is covering them (a lower-integrity process cannot be placed above a higher-integrity one), and the skin is invisible no matter how well it was rendered |
 
+| `strips misplaced: 0` | strips Windows did not leave where they were put. Anything but `0` means the ring is in the wrong place while every call reported success |
+
 The same two facts are on screen, under the status lines of the settings window, so a
 user report can carry them without a log file:
 
 ```
-Window 'Premiere Pro' 1920x1040 at (0,0) | maximized | screen (0,0)-(1920,1080) | 100%
+Azy Skin 1.0.2 - window 'Premiere Pro' 1920x1040 at (0,0) | maximized | screen (0,0)-(1920,1080) | 100%
 Ring 12px at (0,0)-(1920,1040) | brightest pixel 199/255 | in front of Premiere: yes
 ```
+
+Whenever the window's geometry changes, the *reasoning* behind that rectangle is in
+the log as one more line:
+
+```
+window frame: reported (0,0)-(1920,1040) [dwm], window (-8,-8)-(1928,1048) [getwindowrect],
+ring on (0,0)-(1920,1040), screen (0,0)-(1920,1080), work area top 0 bottom 1040, maximized, 96 dpi
+```
+
+### "The skin does nothing" - in order
+
+1. Is the version in the panel the one you installed? The first diagnostic line
+   always names it.
+2. `Ring: not drawn yet` - no Premiere window is attached yet, or the window is
+   smaller than 200x200. The line above names the window Azy attached to.
+3. `Ring: not on screen - ...` - the reason is spelled out: z-order blocked
+   (Premiere runs elevated: start Azy as administrator too), the bitmap was empty,
+   the frame was empty.
+4. `brightest pixel 0/255` - a rendering fault; the bitmap came out transparent.
+5. `in front of Premiere: no` - something is stacked above the strips. A tray
+   notification says so as well.
+6. Everything looks healthy but you still cannot see the ring: it is drawn on the
+   rectangle in the second line, in the colours of the selected theme. Raise
+   *Border intensity* and *Overall darkness* in Settings - the defaults are
+   deliberately subtle. On a maximized window the ring follows the monitor work
+   area (not the invisible border that hangs off the screen).
 
 ---
 

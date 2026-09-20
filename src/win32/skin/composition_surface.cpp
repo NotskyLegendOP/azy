@@ -253,6 +253,24 @@ bool CompositionSurface::present(HWND below, const Rect& frame, const RingVisual
         if (alpha > strongest) strongest = alpha;
     }
     const bool above = below == nullptr || !IsWindow(below) || sits_above(strips_[kTop].hwnd, below);
+
+    // Confirm the strips ended up where they were put. A window that Windows moves
+    // back (a virtual desktop switch mid-present, a policy on window placement)
+    // produces no error anywhere - just a ring in the wrong place.
+    int misplaced = 0;
+    for (const Strip& strip : strips_) {
+        RECT actual{};
+        if (strip.hwnd == nullptr || !GetWindowRect(strip.hwnd, &actual)) continue;
+        if (actual.left == strip.rect.left && actual.top == strip.rect.top && actual.right == strip.rect.right &&
+            actual.bottom == strip.rect.bottom) {
+            continue;
+        }
+        ++misplaced;
+        log_debug("surface strip asked for (%d,%d)-(%d,%d) but sits at (%d,%d)-(%d,%d)", strip.rect.left,
+                  strip.rect.top, strip.rect.right, strip.rect.bottom, actual.left, actual.top, actual.right,
+                  actual.bottom);
+    }
+
     report_ = RingReport{};
     report_.presented = true;
     report_.frame = frame;
@@ -262,11 +280,24 @@ bool CompositionSurface::present(HWND below, const Rect& frame, const RingVisual
     report_.bitmap_bytes = bitmap_bytes();
     report_.max_alpha = strongest;
     report_.above = above;
+    report_.misplaced_strips = misplaced;
     log_info("ring: %dx%d frame at (%d,%d), %dpx thick, band %dpx, radius %dpx, %zu KB, "
-             "strongest pixel alpha %u, above Premiere: %s",
+             "strongest pixel alpha %u, above Premiere: %s, strips misplaced: %d",
              frame.width(), frame.height(), frame.left, frame.top, reported.thickness_px, visual.band_px,
              reported.radius_px, bitmap_bytes() / 1024, static_cast<unsigned>(strongest),
-             above ? "yes" : "no");
+             above ? "yes" : "no", misplaced);
+
+    // A ring that painted nothing cannot be seen, however well the windows were
+    // placed. Every call would have reported success; report the truth instead.
+    if (strongest == 0) {
+        report_.presented = false;
+        report_.error = "the ring bitmap came out empty (nothing would be visible)";
+        hide();
+        if (error) *error = report_.error;
+        log_warn("composition surface: %s", report_.error.c_str());
+        return false;
+    }
+
     if (!above) {
         report_.presented = false;
         report_.error = "the strips could not be placed above the Premiere window (z-order blocked)";
