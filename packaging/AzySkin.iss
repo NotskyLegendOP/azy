@@ -81,7 +81,10 @@ Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 ; The Run entry is owned by the application (it also sets it from the tray), so
 ; the uninstaller only ever removes the value - it never needs to add it here.
 [Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; \
+; ValueType "none" is deliberate: Setup must not create a value here (an empty Run
+; entry would be a broken startup item). The uninstaller only removes the value the
+; application itself created, and dontcreatekey keeps Setup from creating the key.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; \
     ValueName: "Azy Skin"; Flags: dontcreatekey uninsdeletevalue
 
 ; Setup hands its two choices to the application through a one-shot file; Azy
@@ -89,15 +92,15 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 ; never overwritten by a re-install.
 [INI]
 Filename: "{localappdata}\Azy Skin\install-defaults.ini"; Section: "skin"; \
-    Key: "enabled"; StringValue: "1"
+    Key: "enabled"; String: "1"
 Filename: "{localappdata}\Azy Skin\install-defaults.ini"; Section: "skin"; \
-    Key: "start_with_windows"; StringValue: "1"; Tasks: autostart
+    Key: "start_with_windows"; String: "1"; Tasks: autostart
 Filename: "{localappdata}\Azy Skin\install-defaults.ini"; Section: "skin"; \
-    Key: "start_with_windows"; StringValue: "0"; Tasks: not autostart
+    Key: "start_with_windows"; String: "0"; Tasks: not autostart
 Filename: "{localappdata}\Azy Skin\install-defaults.ini"; Section: "skin"; \
-    Key: "apply_automatically"; StringValue: "1"; Tasks: autoskin
+    Key: "apply_automatically"; String: "1"; Tasks: autoskin
 Filename: "{localappdata}\Azy Skin\install-defaults.ini"; Section: "skin"; \
-    Key: "apply_automatically"; StringValue: "0"; Tasks: not autoskin
+    Key: "apply_automatically"; String: "0"; Tasks: not autoskin
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Parameters: "--tray"; \
