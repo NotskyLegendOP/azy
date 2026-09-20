@@ -1,10 +1,11 @@
 #include "azy/win32/detect/process_scanner.hpp"
+#include <cstddef>
+#include <mutex>
+#include <string>
+#include <vector>
 
 #include <tlhelp32.h>
 #include <wbemidl.h>
-
-#include <mutex>
-#include <vector>
 
 #include "azy/core/log.hpp"
 #include "azy/core/strings.hpp"

@@ -1,4 +1,6 @@
 #include "azy/win32/skin/composition_surface.hpp"
+#include <cstddef>
+#include <string>
 
 #include "azy/core/log.hpp"
 #include "azy/core/strings.hpp"

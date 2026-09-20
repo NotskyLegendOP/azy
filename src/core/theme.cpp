@@ -1,6 +1,7 @@
 #include "azy/core/theme.hpp"
-
 #include <algorithm>
+#include <string>
+
 #include <cmath>
 
 #include "azy/core/strings.hpp"

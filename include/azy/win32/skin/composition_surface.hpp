@@ -20,6 +20,7 @@
 #pragma once
 
 #include <string>
+#include <cstddef>
 
 #include "azy/core/geometry.hpp"
 #include "azy/win32/os/win_compat.hpp"

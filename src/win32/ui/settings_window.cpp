@@ -1,4 +1,6 @@
 #include "azy/win32/ui/settings_window.hpp"
+#include <string>
+#include <utility>
 
 #include <commctrl.h>
 

@@ -14,6 +14,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Include hygiene (MSVC safety)
+        # clang resolves far more through transitive includes than MSVC does, so a
+        # file that omits <string>/<utility>/<cstddef> can build here and fail on
+        # Windows. This check has no dependencies and takes microseconds.
+        run: python3 tools/check-includes.py
       - name: Configure
         run: cmake -S . -B build -DAZY_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
       - name: Build
@@ -36,7 +41,16 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install ziglang cmake
       - name: Build (x64)
-        run: ./scripts/build-windows.sh build-zig
+        run: |
+          set -o pipefail
+          if ! ./scripts/build-windows.sh build-zig 2>&1 | tee /tmp/build.log; then
+            # Report the compiler errors as check annotations, so a failure is
+            # readable without downloading the raw job log.
+            grep -E "error:|fatal error|undefined reference|No such file|FAILED" /tmp/build.log \
+              | head -10 | while IFS= read -r line; do echo "::error title=cross build::$line"; done
+            exit 1
+          fi
+          tail -n 6 /tmp/build.log
       - name: Verify the artifact is a Windows GUI executable
         run: |
           python - <<'PY'
@@ -66,7 +80,19 @@ jobs:
       - name: Configure
         run: cmake -S . -B build -DAZY_BUILD_TESTS=ON
       - name: Build
-        run: cmake --build build --config Release --parallel
+        shell: pwsh
+        run: |
+          $output = cmake --build build --config Release --parallel 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          Set-Content -Path build.log -Value $output
+          $output
+          if ($code -ne 0) {
+            # Same idea as the cross build: turn the compiler errors into annotations.
+            ($output -split "`r?`n" |
+              Where-Object { $_ -match 'error [A-Z]+[0-9]+|error RC[0-9]+|fatal error|LNK[0-9]+|FAILED:' } |
+              Select-Object -First 10) | ForEach-Object { Write-Output "::error title=MSVC build::$($_.Trim())" }
+            exit 1
+          }
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
       - uses: actions/upload-artifact@v4

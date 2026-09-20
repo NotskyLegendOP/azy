@@ -1,4 +1,6 @@
 #include "azy/app/app_settings_store.hpp"
+#include <filesystem>
+#include <string>
 
 #include "azy/core/log.hpp"
 #include "azy/core/strings.hpp"

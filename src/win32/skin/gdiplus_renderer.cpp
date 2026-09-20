@@ -1,8 +1,9 @@
 #include "azy/win32/skin/gdiplus_renderer.hpp"
+#include <algorithm>
+#include <string>
 
 #include <objidl.h>
 
-#include <algorithm>
 #include <cmath>
 
 #include <gdiplus.h>

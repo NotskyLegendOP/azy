@@ -13,6 +13,7 @@
 #include <atomic>
 #include <functional>
 #include <string>
+#include <utility>
 
 #include "azy/win32/os/win_compat.hpp"
 

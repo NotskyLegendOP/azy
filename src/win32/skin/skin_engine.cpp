@@ -1,4 +1,6 @@
 #include "azy/win32/skin/skin_engine.hpp"
+#include <algorithm>
+#include <string>
 
 #include "azy/core/log.hpp"
 #include "azy/core/strings.hpp"

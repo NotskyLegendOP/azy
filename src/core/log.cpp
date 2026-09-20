@@ -1,8 +1,12 @@
 #include "azy/core/log.hpp"
-
 #include <chrono>
 #include <cstdarg>
+#include <cstddef>
 #include <cstdio>
+#include <filesystem>
+#include <string>
+#include <system_error>
+
 #include <ctime>
 
 #include "azy/core/strings.hpp"

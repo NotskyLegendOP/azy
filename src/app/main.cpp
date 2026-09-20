@@ -9,12 +9,11 @@
 // unaffected.
 
 #include "azy/win32/os/win_compat.hpp"  // windows.h first: everything else needs it
+#include <string>
 
 #include <commctrl.h>
 #include <objbase.h>
 #include <shellapi.h>
-
-#include <string>
 
 #include "azy/app/app_controller.hpp"
 #include "azy/core/log.hpp"

@@ -1,4 +1,6 @@
 #include "azy/core/product.hpp"
+#include <cstddef>
+#include <string>
 
 #include "azy/core/strings.hpp"
 

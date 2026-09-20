@@ -1,7 +1,10 @@
 #include "azy/core/settings.hpp"
-
 #include <algorithm>
+#include <cstddef>
 #include <cstdio>
+#include <string>
+#include <vector>
+
 #include <set>
 
 #include "azy/core/strings.hpp"

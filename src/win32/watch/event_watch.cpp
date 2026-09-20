@@ -1,4 +1,5 @@
 #include "azy/win32/watch/event_watch.hpp"
+#include <string>
 
 #include "azy/core/log.hpp"
 #include "azy/win32/os/win_util.hpp"

@@ -1,10 +1,14 @@
 #include "azy/win32/os/win_util.hpp"
+#include <chrono>
+#include <cstddef>
+#include <filesystem>
+#include <string>
+#include <system_error>
+#include <vector>
 
 #include <shlobj.h>
 
-#include <chrono>
 #include <cstdio>
-#include <system_error>
 
 #include "azy/core/strings.hpp"
 #include "azy/win32/os/win_api.hpp"

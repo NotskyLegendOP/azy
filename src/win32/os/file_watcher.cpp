@@ -1,4 +1,7 @@
 #include "azy/win32/os/file_watcher.hpp"
+#include <filesystem>
+#include <string>
+#include <system_error>
 
 #include "azy/core/log.hpp"
 #include "azy/win32/os/win_util.hpp"

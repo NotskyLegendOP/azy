@@ -1,8 +1,9 @@
 #include "azy/win32/detect/premiere_probe.hpp"
+#include <filesystem>
+#include <string>
+#include <vector>
 
 #include <winver.h>
-
-#include <vector>
 
 #include "azy/core/log.hpp"
 #include "azy/core/strings.hpp"

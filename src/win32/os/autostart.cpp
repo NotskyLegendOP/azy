@@ -1,4 +1,5 @@
 #include "azy/win32/os/autostart.hpp"
+#include <string>
 
 #include "azy/win32/os/win_compat.hpp"  // windows.h first
 

@@ -1,4 +1,7 @@
 #include "azy/win32/detect/premiere_detector.hpp"
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "azy/core/log.hpp"
 #include "azy/core/strings.hpp"

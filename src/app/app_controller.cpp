@@ -1,4 +1,8 @@
 #include "azy/app/app_controller.hpp"
+#include <filesystem>
+#include <string>
+#include <system_error>
+#include <vector>
 
 #include <shellapi.h>
 

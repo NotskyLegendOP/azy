@@ -1,4 +1,5 @@
 #include "azy/win32/os/win_version.hpp"
+#include <string>
 
 #include <vector>
 

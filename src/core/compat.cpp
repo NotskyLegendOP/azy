@@ -1,4 +1,5 @@
 #include "azy/core/compat.hpp"
+#include <string>
 
 #include "azy/core/strings.hpp"
 

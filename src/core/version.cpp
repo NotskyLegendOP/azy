@@ -1,7 +1,9 @@
 #include "azy/core/version.hpp"
+#include <cstddef>
+#include <cstdio>
+#include <string>
 
 #include <cctype>
-#include <cstdio>
 
 namespace azy {
 namespace {

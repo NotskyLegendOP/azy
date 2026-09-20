@@ -1,4 +1,6 @@
 #include "azy/win32/ui/tray.hpp"
+#include <string>
+#include <utility>
 
 #include <windowsx.h>  // GET_X_LPARAM / GET_Y_LPARAM
 

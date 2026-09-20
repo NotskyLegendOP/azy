@@ -1,4 +1,5 @@
 #include "azy/core/failure_tracker.hpp"
+#include <string>
 
 #include "azy/core/strings.hpp"
 
