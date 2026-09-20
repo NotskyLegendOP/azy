@@ -2,7 +2,9 @@
 
 **Version audited:** v1.2.1
 **Fixes shipped in:** v1.2.2 (the six code defects in §3, the accuracy fixes in
-§3's table, and the dead scratch files removed from `tools/`)
+§3's table, and the dead scratch files removed from `tools/`). The later deep
+review's findings and fixes are in [`DEEP_BUG_REPORT.md`](DEEP_BUG_REPORT.md),
+released as v1.2.3.
 **Audit date:** 2026-09-20
 **Scope:** every source file in `src/` and `include/`, the build scripts, the
 installer script, the release pipeline, and all documentation.

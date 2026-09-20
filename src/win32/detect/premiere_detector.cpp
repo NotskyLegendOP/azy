@@ -71,7 +71,13 @@ void PremiereDetector::pump(double now) {
     // A process start/stop is worth handling immediately; pure window activity
     // is throttled so a burst of events (docking panels, opening a menu) turns
     // into one rescan instead of dozens.
-    const double minimum_interval = pending_is_process_event_ ? 0.0 : kMinScanIntervalSeconds;
+    // A process start/stop is worth handling immediately; pure window activity is
+    // throttled so a burst of events (docking panels, opening a menu) turns into one
+    // rescan instead of dozens - and, when nothing is being tracked yet, throttled
+    // further still: see kIdleScanIntervalSeconds.
+    const double minimum_interval = pending_is_process_event_ ? 0.0
+                                    : has_target_            ? kMinScanIntervalSeconds
+                                                             : kIdleScanIntervalSeconds;
     if (last_scan_ >= 0.0 && (now - last_scan_) < minimum_interval) return;
 
     last_scan_ = now;

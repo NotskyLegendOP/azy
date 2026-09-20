@@ -87,14 +87,25 @@ void GdiPlusSession::stop() {
 bool GdiPlusSession::active() { return g_gdiplus_active; }
 
 void GdiPlusRenderer::release() {
+    // Order matters, and it is not cosmetic. The GDI+ Bitmap wraps `bitmap_`, so it
+    // goes first; the DIB is still selected into the memory DC, so the original
+    // object has to go back before either can be released. Deleting a DC that has
+    // a bitmap selected into it fails - and deleting the bitmap while it is
+    // selected fails too - so the old order leaked one device context and one
+    // DIB section on every resize, every DPI change and every monitor move, until
+    // the process ran out of GDI handles and the ring stopped being drawn.
     if (graphics_bitmap_ != nullptr) {
         delete static_cast<Gdiplus::Bitmap*>(graphics_bitmap_);
         graphics_bitmap_ = nullptr;
     }
     if (memory_dc_ != nullptr) {
+        if (previous_bitmap_ != nullptr) {
+            SelectObject(memory_dc_, previous_bitmap_);
+        }
         DeleteDC(memory_dc_);
         memory_dc_ = nullptr;
     }
+    previous_bitmap_ = nullptr;
     if (bitmap_ != nullptr) {
         DeleteObject(bitmap_);
         bitmap_ = nullptr;
@@ -149,12 +160,18 @@ bool GdiPlusRenderer::ensure_size(int width, int height, std::string* error) {
         if (error) *error = "SelectObject failed";
         return false;
     }
+    // Remembered so release() can put it back (see the note there).
+    previous_bitmap_ = previous;
 
     // Premultiplied ARGB is what UpdateLayeredWindow expects (AC_SRC_ALPHA).
     auto* gdi_bitmap =
         new Gdiplus::Bitmap(width, height, width * 4, PixelFormat32bppPARGB, static_cast<BYTE*>(bits));
     if (gdi_bitmap->GetLastStatus() != Gdiplus::Ok) {
         delete gdi_bitmap;
+        // The DIB is selected into the DC by now: put the old object back first, or
+        // neither handle can be released (the leak this fix exists for).
+        SelectObject(memory_dc_, previous_bitmap_);
+        previous_bitmap_ = nullptr;
         DeleteObject(bitmap);
         DeleteDC(memory_dc_);
         memory_dc_ = nullptr;

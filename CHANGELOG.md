@@ -4,6 +4,60 @@ All notable changes to Azy Skin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] — 2026-09-20
+
+A deep second-pass review: architecture, runtime behaviour, Windows API usage and
+resource lifetime. Seven defects in code were found and fixed, three of them in
+paths that run on every event. The reports are
+`docs/ARCHITECTURE_REVIEW.md`, `docs/DEEP_BUG_REPORT.md` and
+`docs/RUNTIME_RISK.md`.
+
+### Fixed
+
+* **A blocking cross-process call on every window of the desktop.** The window
+  enumerator fetched each window's title (a `WM_GETTEXT` send that blocks on the
+  owning process' UI thread) and then discarded it - a leftover from a scoring
+  heuristic that no longer exists. Any hung application on the machine could
+  freeze Azy's message loop. The fetch is gone, and the enumerator now filters by
+  process id first, so per-window work happens only for Premiere's own windows
+  instead of for hundreds of unrelated ones.
+* **The idle scan storm.** While nothing was tracked, every window event anywhere
+  on the desktop scheduled a full process snapshot, at up to five per second. The
+  detector now decides whether window activity is worth acting on (a target whose
+  window has not appeared yet, or no target and no process observer), and the
+  fallback cadence is 1 s instead of 0.2 s. With the observer live, an idle Azy
+  scans nothing at all.
+* **A GDI resource leak: one device context and one DIB section per resize.** The
+  DIB stayed selected in the memory DC, so `DeleteDC` and `DeleteObject` both
+  failed and both handles leaked on every resize, DPI change and monitor move -
+  until the process ran out of GDI handles and the ring silently stopped being
+  drawn. The previous object is now restored before either deletion.
+* **A recycled window handle could be restyled.** Only `IsWindow` was checked, and
+  Windows recycles handle values: a handle that named Premiere's frame a moment
+  ago could name an unrelated window, which Azy would then give a dark title bar
+  and a ring - or, on detach, "restore" attributes on. New
+  `window_belongs_to(hwnd, pid)` is now checked in the tracker and in the DWM
+  composer before anything is written or drawn.
+* **A dead once-per-second desktop enumeration.** A diagnostics counter nothing
+  read was computed by enumerating every top-level window on the desktop and
+  asking DWM whether each visible one was cloaked. Field, code and helper
+  deleted.
+* **The DWM dark frame was not un-applied when the feature was switched off**
+  (performance mode, Safe Mode, a per-feature override) while attached: the title
+  bar stayed dark while every surface of Azy's own UI said otherwise. It is now
+  restored immediately.
+* **A dangling stack pointer in the version-string fallback:** the query buffer
+  was declared inside the block that filled it and used after that block ended.
+
+### Removed
+
+* Dead code with no callers: `PremiereProbe::find_top_level_windows`,
+  `win_util::window_text`, `SkinTarget::window_count`.
+
+### Changed
+
+* The veil caches its brush instead of creating one inside every paint.
+
 ## [1.2.2] — 2026-09-20
 
 A complete implementation audit, and the defects it found. Nothing was added to

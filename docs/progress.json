@@ -1,7 +1,7 @@
 {
   "product": "Azy Skin",
   "spec": "Azy Skin for Adobe Premiere Pro - Complete Implementation Specification",
-  "shipped": "1.2.2",
+  "shipped": "1.2.3",
   "note": "Single source of truth for docs/progress.html and docs/PROGRESS.md. Edit the items, run tools/progress.py, commit all three. status: done | partial | todo | blocked | impossible. class: A (done/possible), B (possible, planned), C (approximation only), D (not possible - forbidden techniques, excluded from the totals).",
   "packaging": {
     "title": "Packaging & distribution",
@@ -122,6 +122,11 @@
           "status": "done",
           "weight": 1,
           "note": "Performance manager with settled/suspended/perf intervals"
+        },
+        {
+          "name": "Stored window handles validated against their owning process before use (handle recycling)",
+          "class": "A",
+          "status": "done"
         }
       ]
     },
@@ -442,6 +447,11 @@
           "status": "done",
           "weight": 2,
           "note": "Work happens once the window settles, not per WM_SIZE"
+        },
+        {
+          "name": "Idle-cost and resource-lifetime defects found by the deep review fixed (scan storm, desktop enumeration, GDI leak)",
+          "class": "A",
+          "status": "done"
         }
       ]
     },

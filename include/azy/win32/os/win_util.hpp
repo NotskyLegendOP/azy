@@ -62,6 +62,16 @@ HWND z_order_anchor(HWND below);
 // API still reports success.
 bool window_is_above(HWND window, HWND other);
 
+// True when `hwnd` names a live window that still belongs to `pid`.
+//
+// A window handle is only unique while the window lives: Windows recycles handle
+// values, so a handle that belonged to Premiere a moment ago can name an unrelated
+// window now. IsWindow() cannot tell the difference - it answers "yes" for the
+// recycled handle - which is why every path that *acts* on a stored handle
+// (styling a frame, drawing a ring around it) checks this first. A pid of 0 means
+// "owner unknown", and then only liveness can be checked.
+bool window_belongs_to(HWND hwnd, unsigned long pid);
+
 // Reads pixels straight out of the composited desktop (physical screen pixels).
 // Used only by the on-demand visibility check - never in a loop, and never to
 // capture anything but a handful of points - so that Azy can tell "the user can
@@ -116,7 +126,6 @@ std::wstring hresult_text(HRESULT hr);
 bool iequals_wide(const std::wstring& a, const std::wstring& b);
 
 std::wstring window_class_name(HWND hwnd);
-std::wstring window_text(HWND hwnd);
 
 // --- Windows --------------------------------------------------------------
 

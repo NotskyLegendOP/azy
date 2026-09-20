@@ -33,7 +33,6 @@ struct SkinTarget {
     bool fullscreen = false;
     bool cloaked = false;
     bool foreground = false;
-    int window_count = 0;  // visible top-level windows of the process
 
     std::wstring window_class;
 

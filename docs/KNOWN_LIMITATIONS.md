@@ -3,7 +3,7 @@
 Everything Azy Skin cannot do, does not do yet, or has not been proven to do.
 Nothing in this file is a bug report — the bugs found by the audit are in
 [`AZYSKIN_AUDIT.md`](AZYSKIN_AUDIT.md). This is the honest boundary of the
-product as shipped in **v1.2.2**.
+product as shipped in **v1.2.3**.
 
 Legend: **Permanent** = a consequence of the "no injection, no Adobe APIs, no
 project changes" rule. **Open** = planned or possible later. **Unverified** =

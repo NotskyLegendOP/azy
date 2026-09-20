@@ -14,10 +14,6 @@ namespace {
 // owns the "should the skin be working right now" policy. This class only
 // records geometry and tells the caller whether a re-apply is required.
 
-// Visible-window counting walks the top level window list, so it is refreshed at
-// most once per second (it only feeds diagnostics).
-constexpr double kWindowCountIntervalSeconds = 1.0;
-
 bool window_is_foreground(HWND hwnd, unsigned long pid) {
     const HWND foreground = GetForegroundWindow();
     if (foreground == nullptr) return false;
@@ -40,7 +36,6 @@ bool WindowTracker::set_window(HWND hwnd, unsigned long pid) {
 
     has_applied_ = false;
     needs_apply_ = true;
-    last_window_count_check_ = 0.0;
     was_minimized_ = false;
 
     // Fill the snapshot immediately so the first apply has real geometry.
@@ -65,7 +60,13 @@ WindowTracker::RefreshResult WindowTracker::refresh(double now) {
         result.window_gone = true;
         return result;
     }
-    if (!IsWindow(target_.hwnd)) {
+    // Liveness is not enough: a recycled handle is a valid window that belongs to
+    // somebody else. Without this check Azy would keep drawing its ring around -
+    // and, worse, applying frame attributes to - whatever window inherited the
+    // handle after Premiere's window was destroyed.
+    if (!window_belongs_to(target_.hwnd, target_.pid)) {
+        log_info("window tracker: handle 0x%p is no longer Premiere's (pid %lu); dropping the target",
+                 reinterpret_cast<void*>(target_.hwnd), target_.pid);
         result.window_gone = true;
         return result;
     }
@@ -127,15 +128,6 @@ WindowTracker::RefreshResult WindowTracker::refresh(double now) {
     target_.visible = shown;
     target_.fullscreen = fullscreen_raw;
     target_.foreground = window_is_foreground(target_.hwnd, target_.pid);
-
-    if (now - last_window_count_check_ >= kWindowCountIntervalSeconds) {
-        last_window_count_check_ = now;
-        int count = 0;
-        for (HWND window : PremiereProbe::find_top_level_windows(target_.pid)) {
-            if (IsWindowVisible(window) && !is_window_cloaked(window)) ++count;
-        }
-        target_.window_count = count;
-    }
 
     if (geometry_changed) {
         last_geometry_change_ = now;

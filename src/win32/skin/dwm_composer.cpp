@@ -67,12 +67,22 @@ DwmComposer::ApplyResult DwmComposer::apply(const SkinTarget& target, const Them
         result.any_failed = true;
         return result;
     }
+    // Never write to a handle we cannot prove is still Premiere's: a recycled
+    // handle would silently restyle an unrelated application's window.
+    if (!window_belongs_to(target.hwnd, target.pid)) {
+        result.error = "the window no longer belongs to Premiere";
+        result.any_failed = true;
+        return result;
+    }
 
     // A different window: undo the previous one first so only one Premiere
     // window is ever modified.
     if (applied_.hwnd != nullptr && applied_.hwnd != target.hwnd) revert();
 
-    if (applied_.hwnd == nullptr) applied_.hwnd = target.hwnd;
+    if (applied_.hwnd == nullptr) {
+        applied_.hwnd = target.hwnd;
+        applied_.pid = target.pid;
+    }
 
     // --- Dark frame (Windows 10 1809+) ------------------------------------
     if (features.dark_frame) {
@@ -95,6 +105,18 @@ DwmComposer::ApplyResult DwmComposer::apply(const SkinTarget& target, const Them
         } else {
             result.dark_frame = true;
         }
+    } else if (applied_.dark) {
+        // The feature was switched off (performance mode, Safe Mode, a per-feature
+        // override in settings.ini) while the window was styled. Leaving it on would
+        // make the window disagree with everything Azy reports about itself, so the
+        // original value goes back now rather than at detach time.
+        const BOOL value = applied_.dark_saved ? applied_.previous_dark : FALSE;
+        if (!set_bool(target.hwnd, dwm_attr::kUseImmersiveDarkMode, value)) {
+            set_bool(target.hwnd, dwm_attr::kUseImmersiveDarkModeLegacy, value);
+        }
+        applied_.dark = false;
+        result.dark_frame = false;
+        log_debug("dwm: dark title bar removed (feature switched off)");
     }
 
     // --- Frame colours (Windows 11 22000+) --------------------------------
@@ -175,8 +197,11 @@ void DwmComposer::revert() {
     if (applied_.hwnd == nullptr) return;
     HWND hwnd = applied_.hwnd;
 
-    // Window already gone: nothing to restore, and no DWM call is safe.
-    if (!IsWindow(hwnd)) {
+    // Window already gone: nothing to restore, and no DWM call is safe. The same
+    // goes for a handle that has been recycled by another window - restoring
+    // "Premiere's" previous colours onto somebody else's window would be worse
+    // than leaving it alone.
+    if (!window_belongs_to(hwnd, applied_.pid)) {
         reset_state();
         return;
     }

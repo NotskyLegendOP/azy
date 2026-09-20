@@ -66,10 +66,16 @@ private:
 
     bool ensure_created(std::string* error);
     void apply_attributes();
+    // Lazily created, kept between paints (see the member).
+    HBRUSH brush_for_color();
     void paint_now();
 
     HWND hwnd_ = nullptr;
     std::wstring class_name_;
+    // The veil paints one colour; the brush is kept for it and rebuilt only when the
+    // colour changes, instead of being created and destroyed inside every WM_PAINT.
+    HBRUSH brush_ = nullptr;
+    Rgba brush_color_{0, 0, 0, 0};
     Rgba color_{0, 0, 0, 0};
     Rect rect_;
     bool painted_ = false;

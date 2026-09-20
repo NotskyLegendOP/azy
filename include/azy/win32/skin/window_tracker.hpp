@@ -52,7 +52,6 @@ private:
     bool has_applied_ = false;
     bool needs_apply_ = true;
     double last_geometry_change_ = 0.0;
-    double last_window_count_check_ = 0.0;
     bool was_minimized_ = false;
 };
 

@@ -49,6 +49,10 @@ public:
 private:
     struct FrameState {
         HWND hwnd = nullptr;
+        // Who owned the window when it was styled. Checked before every write, so a
+        // recycled handle can never be handed Premiere's treatment - or, on the way
+        // out, have another application's frame attributes "restored".
+        unsigned long pid = 0;
         bool dark = false;
         bool colors = false;
         bool rounded = false;

@@ -46,9 +46,6 @@ public:
     // while it is still starting up).
     static HWND find_main_window(unsigned long pid);
 
-    // All visible top-level windows of the process (main window + any floating
-    // panels). Used for diagnostics and for the window count shown in Settings.
-    static std::vector<HWND> find_top_level_windows(unsigned long pid);
 };
 
 }  // namespace win

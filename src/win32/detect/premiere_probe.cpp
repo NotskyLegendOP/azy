@@ -20,11 +20,33 @@ struct WindowCandidate {
     bool is_maximized = false;
 };
 
+struct EnumCandidatesParam {
+    unsigned long pid = 0;
+    std::vector<WindowCandidate>* out = nullptr;
+};
+
+// Walks the top-level window list and keeps the candidates *of one process*.
+//
+// The pid filter is first on purpose. Every check below it costs real time:
+// GetWindowThreadProcessId is cheap, but DwmGetWindowAttribute (the cloak query)
+// is a round trip to the DWM process, and anything that reads text or state of a
+// window owned by another process is worse than that. A desktop has hundreds of
+// top-level windows; Premiere has a handful. Filtering first turns "work per
+// window on the desktop" into "work per window of the application we care about",
+// which is the difference between a scan taking microseconds and taking
+// milliseconds - and it means Azy never touches a window that is not Premiere's.
+//
+// Reading a foreign window's *title* is deliberately not done at all here. It
+// used to be, and the result was thrown away ((void)title). GetWindowTextLength/
+// GetWindowTextW on another process' window sends WM_GETTEXT and blocks until
+// that process' UI thread answers: one hung application (an installer, a game, an
+// IDE mid-build) would stall Azy's message loop for as long as Windows allows.
 BOOL CALLBACK enum_windows_proc(HWND hwnd, LPARAM param) {
-    auto* candidates = reinterpret_cast<std::vector<WindowCandidate>*>(param);
+    auto* data = reinterpret_cast<EnumCandidatesParam*>(param);
 
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
+    if (static_cast<unsigned long>(pid) != data->pid) return TRUE;
 
     if (!IsWindowVisible(hwnd)) return TRUE;
     if (is_window_cloaked(hwnd)) return TRUE;
@@ -39,36 +61,12 @@ BOOL CALLBACK enum_windows_proc(HWND hwnd, LPARAM param) {
     const LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
     if ((style & WS_CHILD) != 0) return TRUE;
 
-    const std::wstring title = window_text(hwnd);
-    const std::wstring klass = window_class_name(hwnd);
-
     WindowCandidate candidate;
     candidate.hwnd = hwnd;
     candidate.area = width * height;
     candidate.has_caption = (style & WS_CAPTION) == WS_CAPTION;
     candidate.is_maximized = is_window_maximized(hwnd) != FALSE;
-
-    // A splash screen or a "Loading..." window is not the editor UI. Requiring
-    // either a title or a window style that looks like a frame keeps us from
-    // skinning a splash into something odd; it is retried on the next event
-    // anyway, and the title usually appears within a few hundred ms.
-    (void)title;
-    (void)klass;
-    candidates->push_back(candidate);
-    return TRUE;
-}
-
-struct EnumPidParam {
-    unsigned long pid = 0;
-    std::vector<HWND>* out = nullptr;
-};
-
-BOOL CALLBACK enum_pid_proc(HWND hwnd, LPARAM param) {
-    auto* data = reinterpret_cast<EnumPidParam*>(param);
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    if (static_cast<unsigned long>(pid) != data->pid) return TRUE;
-    data->out->push_back(hwnd);
+    data->out->push_back(candidate);
     return TRUE;
 }
 
@@ -120,11 +118,16 @@ bool PremiereProbe::read_file_version(const std::wstring& path, Version& out, st
     };
     Translation* translation = nullptr;
     UINT translation_length = 0;
+    // `dynamic_query` lives in this scope, not inside the if below it: the pointer
+    // is used after that block, and a buffer whose lifetime ended would leave
+    // `query` dangling. (It was, until this was fixed - the string was read from
+    // a dead stack frame, which usually still held the right bytes and sometimes
+    // did not.)
+    wchar_t dynamic_query[128];
     const wchar_t* query = L"\\StringFileInfo\\040904B0\\FileVersion";
     if (VerQueryValueW(buffer.data(), L"\\VarFileInfo\\Translation", reinterpret_cast<void**>(&translation),
                        &translation_length) &&
         translation != nullptr && translation_length >= sizeof(Translation)) {
-        wchar_t dynamic_query[128];
         std::swprintf(dynamic_query, 128, L"\\StringFileInfo\\%04x%04x\\FileVersion", translation->language,
                       translation->codepage);
         query = dynamic_query;
@@ -165,24 +168,15 @@ bool PremiereProbe::read_identity(unsigned long pid, ProcessRecord& out) {
     return true;
 }
 
-std::vector<HWND> PremiereProbe::find_top_level_windows(unsigned long pid) {
-    std::vector<HWND> windows;
-    EnumPidParam param;
-    param.pid = pid;
-    param.out = &windows;
-    EnumWindows(&enum_pid_proc, reinterpret_cast<LPARAM>(&param));
-    return windows;
-}
-
 HWND PremiereProbe::find_main_window(unsigned long pid) {
     std::vector<WindowCandidate> candidates;
-    EnumWindows(&enum_windows_proc, reinterpret_cast<LPARAM>(&candidates));
+    EnumCandidatesParam param;
+    param.pid = pid;
+    param.out = &candidates;
+    EnumWindows(&enum_windows_proc, reinterpret_cast<LPARAM>(&param));
 
     WindowCandidate best;
     for (const WindowCandidate& candidate : candidates) {
-        DWORD candidate_pid = 0;
-        GetWindowThreadProcessId(candidate.hwnd, &candidate_pid);
-        if (static_cast<unsigned long>(candidate_pid) != pid) continue;
         // Prefer a framed, maximized, large window: that is the editor UI, not a
         // progress window or a floating panel.
         const int score = (candidate.has_caption ? 1 : 0) + (candidate.is_maximized ? 1 : 0);

@@ -132,14 +132,6 @@ std::wstring window_class_name(HWND hwnd) {
     return length > 0 ? std::wstring(buffer, static_cast<size_t>(length)) : std::wstring();
 }
 
-std::wstring window_text(HWND hwnd) {
-    const int length = GetWindowTextLengthW(hwnd);
-    if (length <= 0) return std::wstring();
-    std::vector<wchar_t> buffer(static_cast<size_t>(length) + 1);
-    const int copied = GetWindowTextW(hwnd, buffer.data(), length + 1);
-    return copied > 0 ? std::wstring(buffer.data(), static_cast<size_t>(copied)) : std::wstring();
-}
-
 bool visible_frame_rect(HWND hwnd, RECT& out) {
     RECT bounds{};
     const HRESULT hr = DwmGetWindowAttribute(hwnd, dwm_attr::kExtendedFrameBounds, &bounds, sizeof(bounds));
@@ -228,6 +220,14 @@ HWND z_order_anchor(HWND below) {
     // taskbar, usually.)
     if ((GetWindowLongPtrW(above, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0) return HWND_TOP;
     return above;
+}
+
+bool window_belongs_to(HWND hwnd, unsigned long pid) {
+    if (hwnd == nullptr || !IsWindow(hwnd)) return false;
+    if (pid == 0) return true;  // nothing to compare against
+    DWORD owner = 0;
+    GetWindowThreadProcessId(hwnd, &owner);
+    return static_cast<unsigned long>(owner) == pid;
 }
 
 bool window_is_above(HWND window, HWND other) {

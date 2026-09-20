@@ -1,7 +1,7 @@
 # Verification status
 
-Per-feature evidence for **v1.2.2** (the audit's fixes; the logic is unchanged
-from v1.2.1 apart from those fixes). This file answers one question only:
+Per-feature evidence for **v1.2.3** (the deep review's fixes; the logic is
+unchanged from v1.2.2 apart from those fixes). This file answers one question only:
 *what has actually been proven, and how?*
 
 Three levels are used, and nothing is promoted between them without evidence:

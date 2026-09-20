@@ -83,6 +83,11 @@ private:
 
     HDC memory_dc_ = nullptr;
     HBITMAP bitmap_ = nullptr;
+    // The object that was selected into `memory_dc_` before the DIB was. A device
+    // context cannot be deleted while a bitmap is selected into it, and the bitmap
+    // cannot be deleted either: both calls fail and both handles are leaked. This
+    // is restored in release(), before either delete.
+    HGDIOBJ previous_bitmap_ = nullptr;
     void* bits_ = nullptr;
     void* graphics_bitmap_ = nullptr;  // Gdiplus::Bitmap*, hidden from the header
     int width_ = 0;

@@ -519,13 +519,19 @@ void AppController::sync(const char* reason_name) {
     const double now = win::monotonic_seconds();
 
     // --- 1. Premiere detection (no work unless something changed) ----------
-    // A process scan costs a toolhelp snapshot, so it is only worth doing while we
-    // are still looking for Premiere or for its editor window. Once a target is
-    // attached, process changes arrive as WMI events and window changes are
-    // handled by the tracker below - so normal interaction in Premiere produces
-    // no process enumeration at all.
-    if (watch_.consume_dirty()) {
-        if (!detector_.has_target() || tracker_.hwnd() == nullptr) detector_.note_window_activity();
+    // A process scan costs a toolhelp snapshot of every process on the machine, so
+    // it is only worth doing while we are still looking for Premiere or for its
+    // editor window. Once a target is attached, process changes arrive as WMI
+    // events and window changes are handled by the tracker below - so normal
+    // interaction in Premiere, and a desktop full of other applications doing
+    // whatever they like, produces no process enumeration at all.
+    //
+    // The detector decides, not the event, because the answer depends on what is
+    // already known: with a live process observer and no target, "a window
+    // appeared somewhere" is not a reason to enumerate every process on the
+    // machine once more.
+    if (watch_.consume_dirty() && detector_.wants_window_activity()) {
+        detector_.note_window_activity();
     }
     detector_.pump(now);
 

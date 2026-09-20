@@ -38,17 +38,14 @@ LRESULT CALLBACK OverlayVeil::window_proc(HWND hwnd, UINT message, WPARAM wparam
         case WM_ERASEBKGND:
             return 1;  // the veil is one fill, with no erase pass
         case WM_PAINT: {
-            const auto* self = reinterpret_cast<const OverlayVeil*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+            auto* self = reinterpret_cast<OverlayVeil*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
             PAINTSTRUCT paint{};
             HDC dc = BeginPaint(hwnd, &paint);
             if (dc != nullptr && self != nullptr) {
                 RECT client{};
                 GetClientRect(hwnd, &client);
-                HBRUSH brush = CreateSolidBrush(RGB(self->color_.r, self->color_.g, self->color_.b));
-                if (brush != nullptr) {
-                    FillRect(dc, &client, brush);
-                    DeleteObject(brush);
-                }
+                HBRUSH brush = self->brush_for_color();
+                if (brush != nullptr) FillRect(dc, &client, brush);
             }
             EndPaint(hwnd, &paint);
             return 0;
@@ -108,6 +105,22 @@ void OverlayVeil::apply_attributes() {
     // A constant alpha over the whole window: Windows blends one colour, so there
     // is no bitmap and no per-pixel work anywhere.
     SetLayeredWindowAttributes(hwnd_, 0, color_.a, LWA_ALPHA);
+}
+
+HBRUSH OverlayVeil::brush_for_color() {
+    // The alpha lives in the layered window attributes, not in the brush, so the
+    // brush only has to follow the colour channels.
+    if (brush_ != nullptr && brush_color_.r == color_.r && brush_color_.g == color_.g &&
+        brush_color_.b == color_.b) {
+        return brush_;
+    }
+    if (brush_ != nullptr) {
+        DeleteObject(brush_);
+        brush_ = nullptr;
+    }
+    brush_ = CreateSolidBrush(RGB(color_.r, color_.g, color_.b));
+    brush_color_ = color_;
+    return brush_;
 }
 
 void OverlayVeil::paint_now() {
@@ -254,6 +267,11 @@ void OverlayVeil::destroy() {
         DestroyWindow(hwnd_);
         hwnd_ = nullptr;
     }
+    if (brush_ != nullptr) {
+        DeleteObject(brush_);
+        brush_ = nullptr;
+    }
+    brush_color_ = Rgba{0, 0, 0, 0};
     visible_ = false;
     painted_ = false;
     rect_ = Rect{};
