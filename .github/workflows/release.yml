@@ -116,10 +116,12 @@ jobs:
           | ``AzySkin-$version-x64-portable.zip`` | The executable plus the documentation, unpack anywhere and run |
           | ``AzySkin-$version-source.zip`` | The full source tree at this version |
 
-          **What it does:** a dark frame treatment plus a four-strip ring (1px hairline,
-          1px raised bezel, soft inner falloff) around Premiere Pro's window. No plugin,
-          no injection, no patching, nothing written into an Adobe directory, and no
-          animation of any kind.
+          **What it does:** a dark frame treatment, a whole-window overlay (one
+          translucent charcoal layer over everything Premiere draws) and a four-strip
+          ring (1px hairline, 1px raised bezel, soft inner falloff). No plugin, no
+          injection, no patching, nothing written into an Adobe directory, and no
+          animation of any kind. The overlay strength is a slider in Settings - 0%
+          leaves only the edge treatment.
 
           Requires 64-bit Windows 10 1809 or newer. The executables are unsigned.
 
