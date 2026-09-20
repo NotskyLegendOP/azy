@@ -231,6 +231,19 @@ bool OverlayVeil::probe_visible(std::string* detail) {
     return on_screen;
 }
 
+bool OverlayVeil::reposition(HWND below, HWND ring_strip) {
+    if (!visible_ || hwnd_ == nullptr) return false;
+    const HWND anchor = (ring_strip != nullptr && IsWindow(ring_strip)) ? ring_strip : z_order_anchor(below);
+    SetWindowPos(hwnd_, anchor, rect_.left, rect_.top, rect_.width(), rect_.height(),
+                 SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+    const bool above = below == nullptr || !IsWindow(below) || window_is_above(hwnd_, below);
+    if (!above) {
+        log_warn("overlay: the veil is no longer above the Premiere window (z-order blocked)");
+        hide();
+    }
+    return above;
+}
+
 void OverlayVeil::hide() {
     if (hwnd_ != nullptr) ShowWindow(hwnd_, SW_HIDE);
     visible_ = false;

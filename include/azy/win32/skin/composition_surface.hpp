@@ -59,6 +59,13 @@ public:
     // application.
     bool present(HWND below, const Rect& frame, const RingVisual& visual, std::string* error);
 
+    // Puts the strips back directly above `below` without repainting them. Something
+    // raising Premiere (activating it is enough - Azy's strips are ordinary windows)
+    // leaves the ring *behind* the window it decorates, where it is invisible: every
+    // call still succeeds and nothing reports a problem. Returns true when the strips
+    // end up in front of `below`.
+    bool reposition(HWND below);
+
     void hide();
     void destroy();
 

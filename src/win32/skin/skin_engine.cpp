@@ -98,17 +98,22 @@ void SkinEngine::shutdown() {
     // Azy is going away: give the strips, their DIB sections and their device
     // contexts back to Windows instead of leaving hidden layered windows behind.
     surface_.destroy();
+    veil_.destroy();
+    target_ = nullptr;
 }
 
 void SkinEngine::revert() {
     composer_.revert();
     surface_.hide();
+    veil_.hide();
     has_key_ = false;
     last_key_ = VisualKey{};
 }
 
 void SkinEngine::release_surface() {
     surface_.destroy();
+    veil_.destroy();
+    target_ = nullptr;
     log_debug("composition surface destroyed");
 }
 
@@ -165,6 +170,7 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
 
     const bool want_skin = request.skin_enabled && request.palette.visible;
     const bool window_alive = request.target.hwnd != nullptr && IsWindow(request.target.hwnd);
+    target_ = window_alive ? request.target.hwnd : nullptr;
 
     // The frame keeps its DWM treatment while the window merely exists: those
     // attributes cost nothing while Premiere is minimised or hidden, and
@@ -316,6 +322,22 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
         ++state_out.applies;
     }
     return changed;
+}
+
+void SkinEngine::reassert_stacking() {
+    if (target_ == nullptr || !IsWindow(target_)) return;
+    const bool surface_up = surface_.visible();
+    const bool veil_up = veil_.visible();
+    if (!surface_up && !veil_up) return;
+
+    // The topmost of Azy's surfaces is the one that has to be in front of Premiere;
+    // when it is, the ones below it are too (they were stacked in order).
+    HWND top = surface_up ? surface_.hwnd() : veil_.hwnd();
+    if (top == nullptr || window_is_above(top, target_)) return;
+
+    log_info("stacking: Premiere was raised above Azy's surfaces; placing them back in front");
+    if (surface_up) surface_.reposition(target_);
+    if (veil_up) veil_.reposition(target_, surface_.visible() ? surface_.hwnd() : nullptr);
 }
 
 bool SkinEngine::probe_on_screen(std::string* detail) {

@@ -52,6 +52,15 @@ public:
     static UINT sync_message_id();
     static UINT settings_changed_message_id();
     static UINT open_settings_message_id();
+    // Asked by a *newer* build that wants to take over from this instance (see
+    // main.cpp): the process that owns the skin is the one that has to give it up.
+    static UINT exit_request_message_id();
+    // A running instance answers this with its version (see packed_version), so a
+    // freshly started build can tell "the user opened Azy again" from "an older
+    // build is still skinning Premiere and this launch would be a no-op".
+    static UINT version_query_message_id();
+    // Version packed for comparison across processes (see azy::pack_version).
+    static unsigned packed_version();
 
 private:
     static LRESULT CALLBACK message_window_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam);
@@ -80,6 +89,9 @@ private:
     void update_tray();
     void update_settings_window_status();
     void open_log_file() const;
+    // Restarts Azy with administrator rights (one UAC prompt) so it can draw above a
+    // Premiere that is running elevated - the one situation Azy cannot work around.
+    void restart_elevated();
     // Measures the composed desktop and reports what it found, so that "the skin
     // does nothing" can be answered with a measurement instead of a guess. Returns
     // the report text for the settings window to display.

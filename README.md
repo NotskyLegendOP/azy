@@ -89,6 +89,7 @@ Start with Windows
 Suspend Skin
 Reload Configuration                               (after hand-editing settings.ini)
 Open Log File
+Restart as Administrator                           (only when Premiere runs elevated)
 Exit
 ```
 
@@ -115,7 +116,7 @@ The status area of the settings window reports what Azy is actually doing, on th
 machine it is doing it on — including the version that is running:
 
 ```
-Azy Skin 1.1.0 - window 'Premiere Pro' 1920x1040 at (0,0) | maximized | screen (0,0)-(1920,1080) | 100%
+Azy Skin 1.1.1 - window 'Premiere Pro' 1920x1040 at (0,0) | maximized | screen (0,0)-(1920,1080) | 100%
 Ring 12px at (0,0)-(1920,1040) | brightest pixel 199/255 | in front of Premiere: yes
 Overlay: 30% tint over the whole window
 ```
@@ -246,7 +247,7 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 Packaging: `powershell -File scripts\package.ps1` (needs Inno Setup 6) produces
-`dist\AzySkin-1.1.0-setup.exe`.
+`dist\AzySkin-1.1.1-setup.exe`.
 
 Full instructions, including what the cross build can and cannot verify:
 [`docs/BUILDING.md`](docs/BUILDING.md).

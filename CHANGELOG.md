@@ -4,6 +4,55 @@ All notable changes to Azy Skin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] — 2026-09-20
+
+The fix for "I don't see anything": the two ways Azy could be running perfectly while
+showing nothing at all.
+
+### Fixed
+
+* **The tray menu never ran anything.** Every item - *Skin Enabled*, *Theme*,
+  *Settings*, *Start with Windows*, *Suspend Skin*, *Reload Configuration*, *Open Log
+  File*, *Exit* - was handed to the notification handler, which expects the shell's
+  notification layout (and rejects anything that is not its own icon id or code), so
+  each command decoded as "not for me" and returned. Nothing was logged, nothing
+  happened. Menu commands now have their own id range and their own dispatch, and the
+  menu works. (Until now, the reliable way to reach *Settings* was to start Azy a
+  second time - a second launch opens the settings window, which is why the menu
+  being dead was easy to miss.)
+* **Azy's layers could be left behind the Premiere window.** Activating Premiere is
+  enough: Windows raises the active window to the top of its band, and Azy's ring and
+  overlay are ordinary windows - so they ended up *behind* the window they decorate,
+  where they are invisible, while every single call still reported success. The skin
+  now checks its own z-order against the tracked window and puts itself back in front
+  (a walk of the z-order, then a `SetWindowPos` per layer only when the order is
+  actually wrong), on every state change and on the low-frequency settle tick. The
+  same check refuses to leave a surface behind an opaque window: if Windows will not
+  let it stay in front, it is hidden and reported instead of pretending.
+* **Installing a new build while Azy was running did nothing.** The new process saw
+  the single-instance mutex, exited quietly, and left the old build in charge - the
+  built-in cause of "I installed the update and nothing changed". A launch now asks
+  the running instance which build it is: the same build just opens the settings
+  window (unchanged), a *different* build is asked to release the skin and exit, and
+  the new build takes over. If the old instance does not answer within four seconds,
+  Azy says so instead of disappearing.
+* The status word in the settings window and the tray tooltip no longer ignores the
+  overlay: with the edge ring unavailable but the overlay on screen the state is
+  `active`, not `partial`.
+
+### Added
+
+* **Tray menu → *Restart as Administrator***, shown only when it is the answer to a
+  real problem: when Premiere Pro is running with administrator rights, Windows
+  refuses to let a non-elevated process draw above it, and Azy cannot work around
+  that. One UAC prompt later Azy runs at the same level and the skin appears.
+
+### Notes
+
+* No settings changed, and nothing new is written outside `%LOCALAPPDATA%\Azy Skin`.
+* The first line of the settings window's diagnostics now starts with the version of
+  the build that is running, so a report always says which build produced it.
+
 ## [1.1.0] — 2026-09-20
 
 The skin now covers the whole window, not only its edge.

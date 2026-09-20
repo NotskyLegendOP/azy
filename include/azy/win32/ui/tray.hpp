@@ -27,6 +27,7 @@ public:
         std::function<void(bool suspended)> on_suspend;
         std::function<void()> on_reload_settings;
         std::function<void()> on_open_log;
+        std::function<void()> on_restart_elevated;  // "Restart as Administrator"
         std::function<void()> on_exit;
     };
 
@@ -36,6 +37,10 @@ public:
         bool start_with_windows = false;
         ThemeId theme = ThemeId::AzyDarkGlass;
         std::string status_line;  // e.g. "Premiere Pro 2025 - Azy Dark Glass active"
+        // Premiere is running at a higher integrity level than Azy, so Windows will
+        // not let Azy draw above it. The fix is a restart with administrator rights,
+        // which only ever happens when the user asks for it.
+        bool elevation_mismatch = false;
     };
 
     ~TrayIcon() { destroy(); }
@@ -59,6 +64,9 @@ public:
 
 private:
     void show_menu(const POINT* anchor);
+    // Runs one menu command. Separate from handle_message() because the two carry
+    // different payloads: a command is an id, a notification is a code plus an icon.
+    void handle_menu_command(UINT command);
 
     HWND owner_ = nullptr;
     Callbacks callbacks_;

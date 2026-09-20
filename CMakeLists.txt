@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(AzySkin
-    VERSION 1.1.0
+    VERSION 1.1.1
     DESCRIPTION "Azy Skin - a lightweight visual skin for Adobe Premiere Pro"
     LANGUAGES CXX)
 

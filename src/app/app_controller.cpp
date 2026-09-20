@@ -34,6 +34,20 @@ std::wstring to_wide_path(const std::filesystem::path& path) { return path.wstri
 UINT AppController::sync_message_id() { return kSyncMessage; }
 UINT AppController::settings_changed_message_id() { return kSettingsChangedMessage; }
 UINT AppController::open_settings_message_id() { return kOpenSettingsMessage; }
+UINT AppController::exit_request_message_id() {
+    // Registered by *name*, not as a fixed number: a build that has just been
+    // installed has to be able to ask a build that is already running - compiled
+    // long before it existed - to release the skin and exit.
+    static const UINT id = RegisterWindowMessageW(L"AzySkin.ExitRequest");
+    return id;
+}
+
+UINT AppController::version_query_message_id() {
+    static const UINT id = RegisterWindowMessageW(L"AzySkin.VersionQuery");
+    return id;
+}
+
+unsigned AppController::packed_version() { return pack_version(kAppVersion); }
 
 bool AppController::initialize(HINSTANCE instance, const CommandLine& command_line, std::string* error) {
     instance_ = instance;
@@ -143,6 +157,7 @@ bool AppController::initialize(HINSTANCE instance, const CommandLine& command_li
             update_settings_window_status();
         };
         callbacks.on_open_log = [this]() { open_log_file(); };
+        callbacks.on_restart_elevated = [this]() { restart_elevated(); };
         callbacks.on_exit = [this]() { request_exit(0); };
 
         std::string tray_error;
@@ -242,6 +257,15 @@ LRESULT AppController::handle_message(HWND hwnd, UINT message, WPARAM wparam, LP
     if (message == win::TrayIcon::taskbar_created_message_id()) {
         tray_.recreate_after_shell_restart();
         return 0;
+    }
+    if (message == exit_request_message_id()) {
+        // A newer build is starting and needs this instance to let go of the skin.
+        log_info("another build asked this instance to exit; shutting down");
+        request_exit(0);
+        return 0;
+    }
+    if (message == version_query_message_id()) {
+        return static_cast<LRESULT>(packed_version());
     }
     switch (message) {
         case kSyncMessage:
@@ -590,6 +614,15 @@ void AppController::sync(const char* reason_name) {
                   detector_.stats().scans, detector_.stats().events_from_wmi);
     }
 
+    // --- 4c. Keep Azy's surfaces in front of Premiere ----------------------
+    // Activating Premiere puts it at the top of the window band, above Azy's strips
+    // and overlay - which are ordinary windows - so the skin would silently vanish
+    // behind the very window it decorates. A bounded z-order walk, and a SetWindowPos
+    // only when the order is really wrong, so this costs a few GetWindow calls per
+    // sync (events, plus the low-frequency settle timer) and nothing at all while the
+    // order is already correct.
+    engine_.reassert_stacking();
+
     // --- 4b. Say something when the ring cannot be seen -------------------
     // A utility whose entire purpose is to be visible must not fail silently.
     // When everything says the ring should be on screen and it is not (the strips
@@ -799,7 +832,8 @@ std::vector<std::string> AppController::diagnostics_lines() const {
     }
 
     if (premiere_elevated_) {
-        lines.push_back("Note: Premiere runs as administrator, Azy Skin does not - Windows blocks drawing above it.");
+        lines.push_back("Note: Premiere runs as administrator, Azy Skin does not - Windows blocks drawing above "
+                        "it. Tray menu -> Restart as Administrator fixes that.");
     }
     return lines;
 }
@@ -808,7 +842,11 @@ std::vector<std::string> AppController::diagnostics_lines() const {
 // verbatim in its headline, so it must never be more optimistic than the engine:
 // "active" means the ring is on screen, not merely that the settings allow it.
 std::string AppController::state_summary() const {
-    if (engine_.frame_applied() && engine_.surface_visible()) return "active";
+    // "active" means something of Azy's is really on screen - the ring or the
+    // overlay. The overlay alone is a complete answer to "is the skin applying?",
+    // so it must not be reported as merely partial.
+    const bool surface_on_screen = engine_.surface_visible() || engine_.overlay_visible();
+    if (engine_.frame_applied() && surface_on_screen) return "active";
     if (engine_.frame_applied()) return "partial";
     if (!detector_.has_target()) return "idle";
     return win::suspend_reason_name(engine_state_.suspend);
@@ -843,6 +881,7 @@ void AppController::update_tray() {
     view.start_with_windows = store_.settings().start_with_windows;
     view.theme = store_.settings().appearance.theme;
     view.status_line = status_line();
+    view.elevation_mismatch = premiere_elevated_;
     tray_.update(view);
 }
 
@@ -863,6 +902,24 @@ void AppController::update_settings_window_status() {
                                 : std::string();
     settings_window_.refresh(store_.settings(), status, store_.settings().enabled,
                              suspended_manual_ || performance_.suspended());
+}
+
+void AppController::restart_elevated() {
+    // Premiere running at a higher integrity level than Azy is the one situation Azy
+    // cannot work around: Windows does not let a lower-integrity process place a
+    // window above a higher-integrity one, so the ring and the overlay would sit
+    // behind Premiere. Running Azy elevated as well is the fix, and it needs the
+    // user's consent - one UAC prompt, then this instance steps aside.
+    const std::wstring exe = win::executable_path().wstring();
+    const HINSTANCE started = ShellExecuteW(nullptr, L"runas", exe.c_str(), L"--tray", nullptr, SW_SHOWNORMAL);
+    if (reinterpret_cast<INT_PTR>(started) <= 32) {
+        log_warn("restarting with administrator rights was cancelled or refused");
+        tray_.notify(L"Azy Skin", L"Restarting as administrator was cancelled. Premiere stays unskinned "
+                                  L"while it runs elevated.");
+        return;
+    }
+    log_info("restarting with administrator rights so Azy can draw above an elevated Premiere");
+    request_exit(0);
 }
 
 void AppController::open_log_file() const {

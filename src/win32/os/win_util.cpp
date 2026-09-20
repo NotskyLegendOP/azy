@@ -211,6 +211,12 @@ HWND z_order_anchor(HWND below) {
     // window between that window and `below`.
     HWND above = GetWindow(below, GW_HWNDPREV);
     if (above == nullptr || above == HWND_TOPMOST) return HWND_TOP;
+    // A topmost window must not be used as the anchor either: positioning a window
+    // after a topmost one makes it topmost as well, which would lift Azy's surfaces
+    // above every other application instead of just above Premiere. (The window
+    // above the top window of the normal band is exactly such a window - the
+    // taskbar, usually.)
+    if ((GetWindowLongPtrW(above, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0) return HWND_TOP;
     return above;
 }
 

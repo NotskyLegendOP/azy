@@ -41,6 +41,10 @@ public:
     // which case it is placed directly below that instead - keeping the ring on top.
     bool present(HWND below, HWND ring_strip, const Rect& frame, const Rgba& color, std::string* error);
 
+    // Puts the veil back directly above `below` (and below the ring) without
+    // repainting it; see CompositionSurface::reposition.
+    bool reposition(HWND below, HWND ring_strip);
+
     void hide();
     void destroy();
 

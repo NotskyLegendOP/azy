@@ -366,6 +366,39 @@ bool CompositionSurface::probe_visible(std::string* detail) {
     return on_screen;
 }
 
+bool CompositionSurface::reposition(HWND below) {
+    if (!visible_ || strips_[kTop].hwnd == nullptr) return false;
+
+    auto place = [this](HWND anchor) {
+        for (Strip& strip : strips_) {
+            if (strip.hwnd == nullptr) continue;
+            SetWindowPos(strip.hwnd, anchor, strip.rect.left, strip.rect.top, strip.rect.width(),
+                         strip.rect.height(), SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+        }
+    };
+
+    place(z_order_anchor(below));
+    bool above = below == nullptr || !IsWindow(below) || window_is_above(strips_[kTop].hwnd, below);
+    if (!above) {
+        // Second attempt, top of the normal band: only used when inserting relative
+        // to the window in front of Premiere did not survive (that window can be
+        // destroyed or moved between the call and the placement).
+        place(HWND_TOP);
+        above = below == nullptr || !IsWindow(below) || window_is_above(strips_[kTop].hwnd, below);
+    }
+
+    report_.above = above;
+    if (!above) {
+        // Leaving the strips behind an opaque window would be worse than hiding
+        // them: the user would see nothing while every status line claimed success.
+        hide();
+        report_.presented = false;
+        report_.error = "the strips could not be placed above the Premiere window (z-order blocked)";
+        log_warn("composition surface: %s", report_.error.c_str());
+    }
+    return above;
+}
+
 void CompositionSurface::hide() {
     for (Strip& strip : strips_) {
         if (strip.hwnd != nullptr) ShowWindow(strip.hwnd, SW_HIDE);

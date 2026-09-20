@@ -43,6 +43,25 @@ struct SingleInstance {
     }
 };
 
+// Asks the instance that already owns the skin to let go of it, then waits until the
+// single-instance mutex is ours. Returns false when the other process does not
+// respond, so the caller can say so instead of disappearing silently.
+bool take_over(HWND existing, HANDLE mutex, int timeout_ms) {
+    if (existing != nullptr) {
+        // The registered message is understood by builds that know it (this one and
+        // anything from 1.1.1 on); WM_CLOSE is the second signal, handled by every
+        // build - a hidden message window closes the application.
+        PostMessageW(existing, azy::app::AppController::exit_request_message_id(), 0, 0);
+        PostMessageW(existing, WM_CLOSE, 0, 0);
+    }
+    const ULONGLONG deadline = GetTickCount64() + static_cast<ULONGLONG>(timeout_ms);
+    for (;;) {
+        const DWORD wait = WaitForSingleObject(mutex, 100);
+        if (wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED) return true;  // ours now
+        if (GetTickCount64() >= deadline) return false;
+    }
+}
+
 // Makes every window Azy creates per-monitor-DPI aware. The application manifest
 // already does this; the runtime call is the belt to the manifest's braces (it
 // also covers the case of a build without an embedded manifest).
@@ -116,18 +135,43 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int) {
         logger.set_min_level(LogLevel::Debug);  // debugger-only mode
     }
 
-    // 3. Single instance: a second launch just shows the settings window.
+    // 3. Single instance: the same build just shows its settings window, an older
+    //    build is asked to step aside.
     SingleInstance single;
     single.mutex = CreateMutexW(nullptr, TRUE, kSingleInstanceMutex);
     if (single.mutex != nullptr && GetLastError() == ERROR_ALREADY_EXISTS) {
-        // A second launch is treated as "show me Azy": bring up Settings so the
-        // user can see the state and change it, rather than starting a rival
-        // instance that would fight over the same window.
-        if (HWND existing = FindWindowW(L"AzySkin.MessageWindow", nullptr)) {
-            PostMessageW(existing, app::AppController::open_settings_message_id(), 0, 0);
+        HWND existing = FindWindowW(L"AzySkin.MessageWindow", nullptr);
+        unsigned running_version = 0;
+        if (existing != nullptr) {
+            DWORD_PTR answer = 0;
+            if (SendMessageTimeoutW(existing, app::AppController::version_query_message_id(), 0, 0,
+                                    SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &answer) != 0) {
+                running_version = static_cast<unsigned>(answer);
+            }
         }
-        log_info("another Azy Skin instance is already running; exiting");
-        return 0;
+
+        if (existing != nullptr && running_version == app::AppController::packed_version()) {
+            // The same build is already running: the user is asking to see Azy, not
+            // to start a second copy of it.
+            PostMessageW(existing, app::AppController::open_settings_message_id(), 0, 0);
+            log_info("another Azy Skin instance of build %s is running; showing its settings",
+                     kProductVersion);
+            return 0;
+        }
+
+        // A *different* build owns the skin. Exiting quietly here is exactly how
+        // "I installed the new version and nothing changed" happens: the older
+        // process keeps skinning Premiere while the new one disappears without a
+        // word. Hand the skin over instead.
+        log_info("replacing the running Azy Skin instance (build 0x%06x)", running_version);
+        if (!take_over(existing, single.mutex, 4000)) {
+            MessageBoxW(nullptr,
+                        L"An older copy of Azy Skin is still running and did not close.\n\n"
+                        L"Right-click its tray icon, choose Exit, then start this version again.",
+                        L"Azy Skin", MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND);
+            return 0;
+        }
+        log_info("the older instance released the skin; continuing with %s", kProductVersion);
     }
 
     // 4. COM (used for the optional WMI process notifications) and the common

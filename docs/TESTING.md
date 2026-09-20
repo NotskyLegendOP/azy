@@ -102,6 +102,8 @@ ring on (0,0)-(1920,1040), screen (0,0)-(1920,1080), work area top 0 bottom 1040
 | 2.0a | Settings → Appearance → uncheck *Cover the whole window* | The tint over the whole window disappears immediately; the edge ring stays. Log: `overlay: … veil …` is no longer followed by anything until it is re-enabled |
 | 2.0b | Re-enable it and drag *Overlay strength* 0 → 100% | The tint deepens smoothly and immediately (no animation, no repaint storm: one `SetLayeredWindowAttributes` call and one fill per change). At 100% the layer reaches 60% alpha; at 0% only the ring remains |
 | 2.0c | With the overlay on, click into the Premiere timeline, drag a clip, scroll, use shortcuts | Nothing is intercepted: the overlay is click-through (`WS_EX_TRANSPARENT`), never activated (`WS_EX_NOACTIVATE`) and never appears in Alt+Tab |
+| 2.0d | Tint the window, then click into Premiere, move the pointer over it, alt-tab away and back | The tint and the ring stay **in front of** Premiere. Log once per correction: `stacking: Premiere was raised above Azy's surfaces; placing them back in front`. Nothing is repainted and no timer is involved |
+| 2.0e | Settings → *Check visibility* | The message box says the skin is on screen and names what changed, e.g. `the ring is on screen: 32 sample points …, 24 changed by up to 199/255`. Press it with Premiere minimised: it must say the ring is *not* on screen rather than pretend |
 | 2.1 | Single left-click the tray icon (skin ON → OFF) | Frame reverts **immediately** and exactly to its previous appearance (title bar colour, corner rounding, border). Log: `skin removed (skin disabled)`, `skin disabled by the user` |
 | 2.2 | Single left-click again | Skin returns instantly. No Premiere restart, no flicker beyond one apply |
 | 2.3 | Toggle 20 times in a row | No leakage (see §8), no flicker between states, no delay |
@@ -173,6 +175,9 @@ ring on (0,0)-(1920,1040), screen (0,0)-(1920,1080), work area top 0 bottom 1040
 | 7.8 | Restart Windows with Premiere open in the session | Azy starts with Windows (if enabled), detects Premiere, applies the skin, nothing blocks the shutdown |
 | 7.9 | Manually delete the HKCU Run entry while *Start with Windows* is checked | Tray still shows it checked until toggled; unchecking/rechecking recreates it correctly (documented behaviour, no crash) |
 | 7.10 | Run with two Premiere versions installed, start the non-default one | Azy identifies and attaches to whichever is actually running (no path assumptions) |
+| 7.11 | Start Premiere with *Run as administrator* while Azy runs normally | Log warning about integrity levels; settings window: `Note: Premiere runs as administrator …`; tray menu offers *Restart as Administrator*. Clicking it raises one UAC prompt, the skin comes back, and the old instance is gone from Task Manager |
+| 7.12 | Install a new build while the previous one is running, and launch it from the installer | The new build asks the old instance to release the skin, the old process exits, the new one takes over. Log: `replacing the running Azy Skin instance …`. Launching the *same* build again only opens its settings window |
+| 7.13 | Start Azy with an old instance running that ignores the hand-over (simulated: hang it in a debugger) | After four seconds a message box says an older copy is still running and how to exit it; no silent exit, no second instance fighting over the same windows |
 
 ## 8. Resource discipline (leak checks)
 

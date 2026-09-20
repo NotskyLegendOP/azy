@@ -130,7 +130,9 @@ is started with "Run as administrator" and Azy Skin is not, Azy's ring is compos
 Azy compares its own integrity level with Premiere's when it attaches, logs a
 warning, says so in the settings window, and shows a one-time tray notification.
 The two ways out are the same two Windows offers: run Azy Skin as administrator as
-well, or run Premiere Pro normally (which is what Adobe supports).
+well - the tray menu has a *Restart as Administrator* item for exactly this, one UAC
+prompt and the skin comes back - or run Premiere Pro normally (which is what Adobe
+supports).
 
 There is no way around this restriction that Azy would accept: bypassing it means
 injecting code or privileges into another process, which is exactly the kind of

@@ -20,6 +20,7 @@
 #include "azy/core/strings.hpp"
 #include "azy/core/theme.hpp"
 #include "azy/core/version.hpp"
+#include "azy/core/version_string.hpp"
 
 namespace {
 
@@ -111,6 +112,27 @@ void test_version() {
 }
 
 // ---------------------------------------------------------------------------
+// The key two processes compare: a freshly installed build uses it to tell whether
+// the instance already running is the same build (show its settings) or a different
+// one (ask it to hand the skin over).
+void test_build_key() {
+    group("build key");
+
+    CHECK_INT(pack_version("1.1.1"), 0x010101);
+    CHECK_INT(pack_version("1.0.0"), 0x010000);
+    CHECK_INT(pack_version("1.1.1.0"), 0x010101);
+    CHECK_INT(pack_version("2.0"), 0x020000);
+    CHECK_INT(pack_version("0.0.0"), 0);
+    CHECK_INT(pack_version(""), 0);
+    CHECK_INT(pack_version(nullptr), 0);
+    // Suffixes stop the parse instead of breaking it: "1.1.1-beta" is still 1.1.1,
+    // and a beta of the next build still compares as newer than the released one.
+    CHECK_INT(pack_version("1.1.1-beta"), 0x010101);
+    CHECK(pack_version("1.0.2") < pack_version(kAppVersion) || pack_version(kAppVersion) == pack_version("1.0.2"));
+    CHECK(pack_version("1.1.1") > pack_version("1.0.2"));
+    CHECK(pack_version(kAppVersion) != 0);
+}
+
 void test_product() {
     group("Premiere product identification");
 
@@ -741,6 +763,7 @@ void test_ring_layout() {
 int main() {
     std::printf("Azy Skin core tests\n===================");
     test_version();
+    test_build_key();
     test_product();
     test_compat();
     test_theme();

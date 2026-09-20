@@ -15,18 +15,24 @@ namespace {
 
 constexpr UINT kTrayMessage = WM_APP + 1;
 
+// Menu commands live in their own range: the shell's notification codes are in the
+// WM_USER range (NIN_SELECT, NIN_BALLOONUSERCLICK, ...), and a menu id that collided
+// with one of them would be indistinguishable from a click on the icon.
 enum MenuId : unsigned short {
-    kStatus = 1000,
-    kToggleSkin = 1001,
-    kThemeGlass = 1011,
-    kThemeDark = 1012,
-    kThemeOriginal = 1013,
-    kSettings = 1020,
-    kStartWithWindows = 1030,
-    kSuspend = 1031,
-    kReloadSettings = 1040,
-    kOpenLog = 1041,
-    kExit = 1050,
+    kMenuFirst = 2000,
+    kStatus = 2000,
+    kToggleSkin = 2001,
+    kThemeGlass = 2011,
+    kThemeDark = 2012,
+    kThemeOriginal = 2013,
+    kSettings = 2020,
+    kStartWithWindows = 2030,
+    kSuspend = 2031,
+    kReloadSettings = 2040,
+    kOpenLog = 2041,
+    kRestartElevated = 2042,
+    kExit = 2050,
+    kMenuLast = 2050,
 };
 
 const wchar_t* kTooltipTitle = L"Azy Skin";
@@ -164,6 +170,13 @@ void TrayIcon::show_menu(const POINT* anchor) {
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kReloadSettings, L"&Reload Configuration");
     AppendMenuW(menu, MF_STRING, kOpenLog, L"Open Lo&g File");
+    if (state_.elevation_mismatch) {
+        // Only offered when it is the actual problem: this is the one situation Azy
+        // cannot work around, and the user should not have to guess the fix.
+        AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(menu, MF_STRING, kRestartElevated,
+                    L"Restart as &Administrator (Premiere is elevated)");
+    }
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kExit, L"E&xit");
 
@@ -184,7 +197,53 @@ void TrayIcon::show_menu(const POINT* anchor) {
         SetForegroundWindow(previous_foreground);
     }
 
-    if (command != 0) handle_message(static_cast<WPARAM>(command), 0);
+    // Dispatched directly, not through handle_message: a menu command is not a
+    // notification, and the notification parser would reject its layout. (Handing
+    // menu ids to that parser is exactly how every item in this menu used to end up
+    // doing nothing at all.)
+    if (command != 0) handle_menu_command(command);
+}
+
+void TrayIcon::handle_menu_command(UINT command) {
+    switch (command) {
+        case kToggleSkin:
+            if (callbacks_.on_toggle_skin) callbacks_.on_toggle_skin(!state_.skin_enabled);
+            return;
+        case kThemeGlass:
+            if (callbacks_.on_theme) callbacks_.on_theme(ThemeId::AzyDarkGlass);
+            return;
+        case kThemeDark:
+            if (callbacks_.on_theme) callbacks_.on_theme(ThemeId::AzyDark);
+            return;
+        case kThemeOriginal:
+            if (callbacks_.on_theme) callbacks_.on_theme(ThemeId::Original);
+            return;
+        case kSettings:
+            if (callbacks_.on_settings) callbacks_.on_settings();
+            return;
+        case kStartWithWindows:
+            if (callbacks_.on_start_with_windows) {
+                callbacks_.on_start_with_windows(!state_.start_with_windows);
+            }
+            return;
+        case kSuspend:
+            if (callbacks_.on_suspend) callbacks_.on_suspend(!state_.suspended);
+            return;
+        case kReloadSettings:
+            if (callbacks_.on_reload_settings) callbacks_.on_reload_settings();
+            return;
+        case kOpenLog:
+            if (callbacks_.on_open_log) callbacks_.on_open_log();
+            return;
+        case kRestartElevated:
+            if (callbacks_.on_restart_elevated) callbacks_.on_restart_elevated();
+            return;
+        case kExit:
+            if (callbacks_.on_exit) callbacks_.on_exit();
+            return;
+        default:
+            return;
+    }
 }
 
 void TrayIcon::handle_message(WPARAM wparam, LPARAM lparam) {

@@ -76,6 +76,14 @@ public:
     // fresh look at the screen: nothing has changed, so nothing would be presented).
     void invalidate() { has_key_ = false; }
 
+    // Puts the surfaces back in front of Premiere when something raised it above
+    // them - activating Premiere is enough, because Azy's surfaces are ordinary
+    // windows and an active window goes to the top of the band. A z-order walk and,
+    // only when the order is actually wrong, one SetWindowPos per surface - so the
+    // usual call (window events, and the low-frequency settle timer) costs a few
+    // GetWindow calls and nothing else.
+    void reassert_stacking();
+
     // Checks with the desktop itself that the skin is really reaching the screen:
     // the overlay first (it covers everything, so it is the easiest to detect),
     // then the ring. `detail` always describes what was measured, so the answer can
@@ -96,6 +104,7 @@ private:
     DwmComposer composer_;
     CompositionSurface surface_;
     OverlayVeil veil_;
+    HWND target_ = nullptr;  // the Premiere window the surfaces were placed against
     VisualKey last_key_;
     bool has_key_ = false;
 };
