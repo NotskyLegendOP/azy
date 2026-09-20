@@ -67,7 +67,7 @@ schema=1
 | `shadow_intensity` | 0–1 | `0.40` | Soft inner shadow at the window band, 10% → 32% black. Ignored in Performance mode |
 | `darkness` | 0–1 | `0.50` | Position on the charcoal ramp between "lifted" (46,47,51) and "deep" (11,11,13). Never pure black at either end |
 | `overlay` | bool | `1` | Cover the **whole** window with one translucent charcoal layer (the overlay), instead of decorating only its edge. Off = the ring alone |
-| `overlay_intensity` | 0–1 | `0.35` | How strong that layer is: alpha 5% → 60%. 0 is identical to `overlay=0`. It also widens the edge falloff proportionally, so the window is framed rather than outlined |
+| `overlay_intensity` | 0–1 | `0.35` | How strong that layer is: alpha 5% → 60%, and the edge falloff deepens with it (10 px with the overlay off, ~40 px at the default, ~72 px at 100%). 0 is identical to `overlay=0` |
 
 ### `[performance]`
 

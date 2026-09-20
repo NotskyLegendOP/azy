@@ -102,11 +102,19 @@ bool OverlayVeil::ensure_created(std::string* error) {
     return true;
 }
 
-void OverlayVeil::apply_color() {
+void OverlayVeil::apply_attributes() {
     if (hwnd_ == nullptr) return;
     // A constant alpha over the whole window: Windows blends one colour, so there
     // is no bitmap and no per-pixel work anywhere.
     SetLayeredWindowAttributes(hwnd_, 0, color_.a, LWA_ALPHA);
+}
+
+void OverlayVeil::paint_now() {
+    if (hwnd_ == nullptr) return;
+    // The class has no CS_HREDRAW/CS_VREDRAW and no background brush, so growing the
+    // window does *not* repaint the newly exposed area: without this, the veil would
+    // be one pixel of colour in a window the size of Premiere. Repaint explicitly,
+    // synchronously, once per change (never per frame).
     InvalidateRect(hwnd_, nullptr, FALSE);
     RedrawWindow(hwnd_, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOERASE);
     painted_ = true;
@@ -126,8 +134,10 @@ bool OverlayVeil::present(HWND below, HWND ring_strip, const Rect& frame, const 
 
     const bool color_changed = !painted_ || color_.r != color.r || color_.g != color.g || color_.b != color.b ||
                                color_.a != color.a;
+    const bool rect_changed = frame != rect_;
     color_ = color;
-    if (color_changed) apply_color();
+    rect_ = frame;
+    if (color_changed) apply_attributes();
 
     // Directly below the ring when there is one (so the ring's hairline and bezel
     // stay crisp above the tint), otherwise directly above Premiere.
@@ -150,8 +160,10 @@ bool OverlayVeil::present(HWND below, HWND ring_strip, const Rect& frame, const 
         return false;
     }
 
-    const bool rect_changed = frame != rect_;
-    rect_ = frame;
+    // The window has just been resized (and shown), so the client area is painted
+    // now - after the new size is known, never before.
+    if (color_changed || rect_changed) paint_now();
+
     visible_ = true;
     if (color_changed || rect_changed) {
         log_info("overlay: %dx%d veil at (%d,%d), tint %u/255 (%d%%) over the whole window", frame.width(),

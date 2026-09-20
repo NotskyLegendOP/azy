@@ -44,8 +44,25 @@ bool window_large_enough_for_ring(const Rect& frame, int band_px, int radius_px)
 // cannot be swallowed by its own decoration, and kept thin in performance mode,
 // where the treatment is a static edge rather than a shaded one.
 int ring_band_px(const SkinRequest& request) {
-    const int nominal = request.performance_mode ? dip_to_px(3, request.target.dpi)
-                                                 : dip_to_px(10, request.target.dpi);
+    // Performance mode: a bare edge (two constant strokes).
+    if (request.performance_mode) {
+        const int thin = dip_to_px(3, request.target.dpi);
+        const int shorter_px = request.target.visible_frame.width() < request.target.visible_frame.height()
+                                   ? request.target.visible_frame.width()
+                                   : request.target.visible_frame.height();
+        const int cap = shorter_px / 4;
+        const int band = thin < cap ? thin : cap;
+        return band < 2 ? 2 : band;
+    }
+
+    // With the whole-window overlay on, the edge treatment deepens with it: a 10px
+    // band plus a tint reads as "a border and a wash", while a wide soft falloff
+    // reads as one skin. The extra width follows the overlay's own strength, so the
+    // single slider controls both, and switching the overlay off restores exactly
+    // the previous edge.
+    const double veil = static_cast<double>(request.palette.surface_veil.a) / 255.0;
+    const double extra_dip = veil > 0.0 ? 8.0 + 90.0 * veil : 0.0;
+    const int nominal = dip_to_px(10.0 + extra_dip, request.target.dpi);
     const int shorter = request.target.visible_frame.width() < request.target.visible_frame.height()
                             ? request.target.visible_frame.width()
                             : request.target.visible_frame.height();

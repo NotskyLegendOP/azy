@@ -54,7 +54,8 @@ private:
     static LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam);
 
     bool ensure_created(std::string* error);
-    void apply_color();
+    void apply_attributes();
+    void paint_now();
 
     HWND hwnd_ = nullptr;
     std::wstring class_name_;
