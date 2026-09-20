@@ -14,7 +14,7 @@
 │               performance/  PerformanceManager (suspend policy + cadence)     │
 │               skin/         WindowTracker · SkinEngine · DwmComposer ·        │
 │                             CompositionSurface · GdiPlusRenderer ·           │
-│                             InputGuard                                        │
+│                             OverlayVeil · InputGuard                          │
 │               os/           win_api (optional APIs) · win_util · win_version │
 │                             autostart · file_watcher                          │
 │               ui/           TrayIcon · SettingsWindow · app_icon              │

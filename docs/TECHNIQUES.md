@@ -183,6 +183,40 @@ them (see [`LIMITATIONS.md`](LIMITATIONS.md) for why).
 
 ---
 
+### 2.4 The whole-window overlay (`SetLayeredWindowAttributes`, one solid layer)
+
+The ring decorates the edge; the overlay covers everything inside it, which is what
+makes the application read as skinned rather than outlined. It is one more
+click-through, non-activating, layered top-level window — created 1×1, moved over
+the tracked window's visible frame, painted with a single solid charcoal fill, and
+blended by Windows with a *constant* alpha (`LWA_ALPHA`).
+
+The point of the constant alpha is what it is not: there is no bitmap anywhere, so a
+4K window costs the same as a 600×400 one. A per-pixel ARGB layer of the same size
+would be ~8 MB at 1080p and ~33 MB at 4K of Azy's own memory, and DWM would blend
+every pixel of it on every change. A constant-alpha solid layer is one fill, once,
+then nothing.
+
+Safe because it is the same contract as every other Azy surface:
+
+* `WS_EX_TRANSPARENT` + `WS_EX_NOACTIVATE` + `WS_EX_LAYERED` + `WS_EX_TOOLWINDOW`,
+  verified on the live window (`InputGuard`), with `HTTRANSPARENT` from
+  `WM_NCHITTEST` as a second line of defence — a click, drag or shortcut always
+  reaches Premiere;
+* bounded by Premiere's own visible frame: never the desktop, never another monitor,
+  never another application;
+* stacked directly above Premiere and directly *below* the ring, so the 1px hairline
+  and the bezel stay crisp on top of the tint;
+* static — no animation, no gradient, no invalidate loop: one repaint per colour or
+  geometry change;
+* hidden the instant the skin is suspended, and destroyed with the process.
+
+Its honest limitation is in [`LIMITATIONS.md`](LIMITATIONS.md): covering the whole
+window also covers the video monitors, which is why the strength is a slider
+(default ~30% tint) and why the whole layer can be switched off.
+
+---
+
 ## Level 0 — Detection and observation (used, and free)
 
 | Mechanism | Purpose | Notes |
@@ -210,7 +244,7 @@ them (see [`LIMITATIONS.md`](LIMITATIONS.md) for why).
 | **`SetWindowsHookEx(WH_CBT)` process-wide hooks for detection** | Would require code inside Premiere's processes to be useful, and WinEvent hooks already provide everything needed without injection. |
 | **Memory patching / resource editing of `Adobe Premiere Pro.exe`** | Modifies Adobe files and breaks updates, signatures and support. Forbidden. |
 | **Replacing Premiere's theme files or DLLs** (e.g. shipping `dark` variants) | Same as above: modifies Adobe installation content and cannot be cleanly uninstalled. |
-| **A transparent full-screen overlay window** | The brief forbids it: it would cover the whole desktop, block input or need fragile hit-test trickery, and would cost GPU time continuously. Azy's surface is bounded by Premiere's frame instead. |
+| **A transparent full-screen overlay window** (over the desktop, or over several applications at once) | Would cover windows Azy was not asked to touch, would need hit-test trickery to stay usable, and would cost GPU time continuously. Azy's surfaces are bounded by Premiere's own frame instead; `SetLayeredWindowAttributes` over that frame (§2.4) is the nearest *accepted* technique, and it stays bounded, constant-alpha and static. |
 | **`SetWindowCompositionAttribute` acrylic/blur "hacks"** | Undocumented (`user32` private export), historically unstable, interacts badly with DWM, and blurs *behind* a fully opaque client area would be invisible anyway. Rejected even though it is popular in "glass" utilities. |
 | **`BitBlt` of Premiere's window to fake translucency** | Requires screen capture of another process's surface (performance cost, DWM restrictions, content protection), and produces wrong results on 10-bit/HDR displays. |
 | **Applying a dark title bar by creating an owner window with `WS_EX_LAYERED` and using it as Premiere's parent** | Reparenting another process's window changes its message routing and z-order semantics. Never safe, never necessary. |
