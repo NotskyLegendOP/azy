@@ -1,0 +1,139 @@
+name: release
+
+# Publishes downloadable bundles for a version: the Inno Setup installer, a portable
+# build, and the source archive. Run it from the Actions tab (or `gh workflow run
+# release`), or by pushing a v* tag.
+#
+# The assets are attached to a GitHub release, which is where users get them from -
+# no build machine needed, and no artefact expiry to worry about.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (must match AppVersion in packaging/AzySkin.iss)"
+        required: true
+        default: "1.0.0"
+      prerelease:
+        description: "Mark the release as a pre-release"
+        type: boolean
+        default: false
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: build and publish
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Work out the version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "push") {
+            $version = "${{ github.ref_name }}".TrimStart("v")
+          } else {
+            $version = "${{ inputs.version }}"
+          }
+          $declared = (Select-String -Path packaging/AzySkin.iss -Pattern '#define AppVersion "([^"]+)"').Matches[0].Groups[1].Value
+          if ($declared -ne $version) {
+            throw "release $version does not match AppVersion '$declared' in packaging/AzySkin.iss"
+          }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Output "version: $version (matches the installer script)"
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build (MSVC Release)
+        run: |
+          cmake -S . -B build
+          cmake --build build --config Release --parallel
+
+      - name: Run the tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Compile the installer
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging\AzySkin.iss
+          if (-not (Test-Path "dist/AzySkin-$version-setup.exe")) {
+            throw "the installer was not produced"
+          }
+          Get-Item "dist/AzySkin-$version-setup.exe" | Format-List Name, Length
+
+      - name: Assemble the download bundles
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+
+          # 1. The installer.
+          Copy-Item "dist/AzySkin-$version-setup.exe" "out/AzySkin-$version-setup.exe"
+
+          # 2. Source archive, straight from the repository (no build output).
+          git archive --format=zip --prefix="azy-skin-$version/" -o "out/AzySkin-$version-source.zip" HEAD
+
+          # 3. Portable build: the executable plus the documentation, for anyone who
+          #    would rather not install anything.
+          $portable = "staging/AzySkin-$version"
+          New-Item -ItemType Directory -Force -Path $portable | Out-Null
+          Copy-Item "build/Release/AzySkin.exe" "$portable/AzySkin.exe"
+          Copy-Item "release/README.txt" "$portable/README.txt"
+          Copy-Item "LICENSE", "README.md" -Destination $portable
+          Copy-Item "docs" -Destination $portable -Recurse
+          Compress-Archive -Path $portable -DestinationPath "out/AzySkin-$version-x64-portable.zip" -Force
+
+          Get-ChildItem out | Format-Table Name, Length
+
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $tag = "v$version"
+          $flags = @()
+          if ("${{ inputs.prerelease }}" -eq "true") { $flags += "--prerelease" }
+
+          $notes = @"
+          Azy Skin $version - a lightweight, native Win32 skin layer for Adobe Premiere Pro.
+
+          **Downloads**
+
+          | File | What it is |
+          |---|---|
+          | ``AzySkin-$version-setup.exe`` | The installer (per-user, no admin rights, adds Start-with-Windows and auto-apply as options) |
+          | ``AzySkin-$version-x64-portable.zip`` | The executable plus the documentation, unpack anywhere and run |
+          | ``AzySkin-$version-source.zip`` | The full source tree at this version |
+
+          **What it does:** a dark frame treatment plus a four-strip ring (1px hairline,
+          1px raised bezel, soft inner falloff) around Premiere Pro's window. No plugin,
+          no injection, no patching, nothing written into an Adobe directory, and no
+          animation of any kind.
+
+          Requires 64-bit Windows 10 1809 or newer. The executables are unsigned.
+
+          See ``README.md`` in the source archive for the full description and
+          ``docs/TESTING.md`` for the manual test matrix.
+          "@
+          $notes | Set-Content -Path release-notes.md -Encoding utf8
+
+          # Only create the tag/release if it is not there yet; otherwise just attach
+          # the freshly built assets to the existing one.
+          gh release view $tag --repo "${{ github.repository }}" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag out/* --clobber --repo "${{ github.repository }}"
+          } else {
+            gh release create $tag out/* --title "Azy Skin $version" --notes-file release-notes.md `
+              --target "${{ github.sha }}" @flags --repo "${{ github.repository }}"
+          }
