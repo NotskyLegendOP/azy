@@ -79,13 +79,21 @@ rendering are all exactly what Adobe shipped.
 
 ## Other boundaries worth stating plainly
 
-* **Azy cannot make Premiere translucent as a whole.** Making Premiere's client
-  area translucent would require either `WS_EX_LAYERED` on Premiere's own window
-  (which changes its painting and hit-testing semantics — a behaviour change, not
-  a visual one) or capturing and re-compositing its output (expensive, wrong on
-  HDR/10-bit displays, and content-protected in some configurations). The glass
-  effect is therefore applied to Azy's *own* surfaces, at the window band, where
-  it is safe and where it reads as depth rather than as a see-through editor.
+* **Azy cannot make Premiere itself see-through.** Making Premiere's client area
+  translucent would require either `WS_EX_LAYERED` on Premiere's own window (which
+  changes its painting and hit-testing semantics — a behaviour change, not a visual
+  one) or capturing and re-compositing its output (expensive, wrong on HDR/10-bit
+  displays, and content-protected in some configurations). What Azy does instead is
+  *cover* the window with its own constant-alpha layer (the overlay): the desktop
+  never shows through, Premiere is never modified, and the whole window still reads
+  as one darker, framed surface.
+* **The overlay dims everything, including the video.** It is one solid translucent
+  layer over the entire window, so the Program and Source monitors are ~30% darker
+  at the default strength. That is the honest cost of "the skin covers the whole
+  window": the alternative would be to find and skip Premiere's video rectangles,
+  which means reading Premiere's internal layout, which Azy does not do. Turn
+  *Cover the whole window* off, or pull *Overlay strength* down, when you grade
+  footage — the edge treatment alone never touches the picture.
 * **Azy cannot follow Premiere's internal docking.** If the user undocks a panel
   into a floating window, Azy does not decorate that floating window. It remains a
   normal Premiere window; the main window's treatment is unaffected. Decorating
@@ -93,9 +101,10 @@ rendering are all exactly what Adobe shipped.
   does not provide for child windows of a foreign process.
 * **Azy cannot theme Premiere's own splash screen**, which appears before the
   editor window exists — and it should not try; Azy waits for the real window.
-* **Azy is not a substitute for Premiere's dark theme.** Its job is the
-  surrounding frame and the sense of depth and separation, not re-tinting
-  Premiere's content.
+* **Azy is not a substitute for Premiere's dark theme.** It can darken and frame
+  the whole window (the overlay) and give its edge depth and separation, but it does
+  not repaint Premiere's panels, timeline, buttons or icons — those are drawn by
+  Premiere from its own theme, and changing them means changing Premiere.
 * **On Windows 10, the frame stays square and uncoloured.** Windows simply does
   not offer those attributes for another process's window on that OS. Azy reports
   this honestly in Settings ("Treatment: reduced") rather than faking it.
