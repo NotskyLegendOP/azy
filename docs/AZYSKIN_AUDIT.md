@@ -31,7 +31,7 @@ position/state change. The only timer in the program is a 1 Hz safety net that
 costs a dozen comparisons per tick (§6). The forbidden
 techniques are genuinely absent. The pure logic (theme maths, DPI geometry, panel
 map, settings round-trip, failure tracking, version compatibility) is covered by
-578 native checks that pass. The build is warning-clean from Azy's own sources.
+578 native checks that passed at that time (649 as of v1.3.0), The build is warning-clean from Azy's own sources.
 
 **What the audit found.** Nine fixes, of which seven are code defects — five in
 the Windows layer, which has never been executed and is therefore exactly where
@@ -381,8 +381,8 @@ Condensed; the per-feature table with evidence is
 
 | Area | Verified | Compiled only | Unverified |
 | --- | --- | --- | --- |
-| Build, versioning, release assets | ✅ `verify.sh` 1/2/4/5/6 (6/6 green), CI run `35521355164` for v1.2.2 | | |
-| Pure logic (theme, DPI, panel map, settings, failure tracking, compat) | ✅ 578 checks, 0 failures | | |
+| Build, versioning, release assets | ✅ `verify.sh` 1/2/4/5/6 (6/6 green at v1.2.3; 7/7 as of v1.3.0), CI run `35521355164` for v1.2.2 | | |
+| Pure logic (theme, DPI, panel map, settings, failure tracking, compat) | ✅ 578 checks at v1.2.3, 0 failures (649 as of v1.3.0) | | |
 | Detection, monitoring, tracking | | ✅ | |
 | Ring / veil / DWM frame rendering | | ✅ | |
 | Layering, click-through, focus safety | | ✅ | |

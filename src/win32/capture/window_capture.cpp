@@ -236,7 +236,7 @@ void WindowCapture::thread_main() {
     std::string problem;
 
     do {
-        if (FAILED(shared_->device->QueryInterface(IID_IDXGIDevice, reinterpret_cast<void**>(&dxgi_device)))) {
+        if (FAILED(shared_->device->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void**>(&dxgi_device)))) {
             failure = CaptureStart::DeviceFailed;
             problem = "device is not a DXGI device";
             break;

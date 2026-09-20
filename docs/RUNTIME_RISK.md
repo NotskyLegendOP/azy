@@ -10,6 +10,14 @@ Terms: **VERIFIED** (a machine checked it) · **STRONGLY SUPPORTED** (documentat
 + code evidence, no runtime) · **UNVERIFIED** (needs the real environment) ·
 **HIGH RISK** (an unresolved uncertainty that could invalidate the approach).
 
+
+> **Scope note (v1.3.0):** this document is the v1.2.3 runtime risk list. It covers the static layers
+> (frame colours, the ring, the sheet) and is still accurate for them. The duplicate
+> window added in v1.3.0 is covered by
+> [`AZY_OVERLAY_ARCHITECTURE.md`](AZY_OVERLAY_ARCHITECTURE.md) and
+> [`AZY_OVERLAY_TEST_PLAN.md`](AZY_OVERLAY_TEST_PLAN.md), and carries its own claim
+> label: IMPLEMENTED — RUNTIME UNVERIFIED.
+
 ---
 
 ## 1. The theoretical runtime simulation
@@ -154,7 +162,7 @@ Nothing below has been observed. All of it is UNVERIFIED.
 
 Roughly ten minutes, on the machine that has Premiere:
 
-1. Install v1.2.3 (or run the portable build). Open Premiere, **maximise** it.
+1. Install v1.3.0 (or run the portable build). Open Premiere, **maximise** it.
 2. Settings → **Check visibility**. The window reports whether the overlay and the
    ring reached the screen, in plain words. If it says "NOT on screen", stop here
    and send that line — it is the whole diagnosis.
@@ -177,7 +185,7 @@ Roughly ten minutes, on the machine that has Premiere:
 
 | | |
 | --- | --- |
-| Verified without a runtime | Build, versioning, release pipeline, 578 logic checks, absence of injection/input/hook/capture techniques, GDI/DWM resource discipline, the strip geometry contract |
+| Verified without a runtime | Build, versioning, release pipeline, 578 logic checks at v1.2.3 (649 as of v1.3.0), absence of injection/input/hook/capture techniques, GDI/DWM resource discipline, the strip geometry contract |
 | Strongly supported, no runtime | Detection and lifecycle state machine, event wiring, click-through contract, DPI arithmetic, idle-cost design |
 | Unverified | Everything that draws or runs next to Premiere |
 | High risk | R1 (playback/overlay-plane interaction), R2 (visibility on the user's machine, unresolved since round 3) |

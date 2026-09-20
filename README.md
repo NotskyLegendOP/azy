@@ -241,7 +241,7 @@ Measured numbers and the method: [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md).
 | Property | How it is guaranteed |
 |---|---|
 | Never steals focus | Azy's surface window is created with `WS_EX_NOACTIVATE`; Azy has no focusable window at all while idle |
-| Never eats input | `WS_EX_TRANSPARENT` (hit-test pass-through) + `WS_EX_TOOLWINDOW` on every window of Azy's, including the duplicate; verified at runtime, and the contract is re-checked on every surface creation |
+| Never eats input | `WS_EX_LAYERED` + `WS_EX_TRANSPARENT` (the pair that passes a click through *across processes*) + `WS_EX_TOOLWINDOW` on every window of Azy's, including the duplicate; the contract is re-checked on every surface creation and by `tools/check-overlay.py` |
 | Never takes a keystroke | No keyboard hook, no hotkey registration, nowhere in the codebase. The duplicate cannot be activated (`WS_EX_NOACTIVATE`) |
 | Never captures anything but Premiere | The capture is created for the tracked window and re-validated against its owning process id before use; the *monitor* form of the capture API appears nowhere in `src/` and `tools/check-overlay.py` fails the build if it ever does |
 | Never mirrors itself | Window capture, not screen capture: Azy's own windows cannot appear in the captured image, and the capture refuses to attach to Azy's own process |

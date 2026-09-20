@@ -170,7 +170,7 @@
           "class": "B",
           "status": "done",
           "weight": 3,
-          "note": "Superseded by the duplicate window (round 8): per-region treatment now happens in the composition shader, with the monitors passed through and the panel hairlines drawn from the panel model"
+          "note": "Superseded in v1.3.0: the duplicate window treats regions through its own shader - Program and Source Monitors passed through untouched, 1px panel separators, edge vignette (see P10)."
         },
         {
           "name": "Efficiency harness (CPU/GPU/RAM over 30 minutes)",
@@ -495,7 +495,7 @@
           "class": "C",
           "status": "todo",
           "weight": 4,
-          "note": "Needs Premiere: the rows are written down in docs/TESTING.md \u00a72-\u00a79 | Round 8 adds the overlay first-run checklist and the ten scenarios (docs/AZY_OVERLAY_TEST_PLAN.md) to this run"
+          "note": "Needs Premiere: the rows are written down in docs/TESTING.md \u00a72-\u00a79 | Round 8 adds the overlay first-run checklist and the ten scenarios (docs/AZY_OVERLAY_TEST_PLAN.md) to this run v1.3.0 adds the duplicate-window run to the same session: docs/AZY_OVERLAY_TEST_PLAN.md - first-run checklist plus ten scenarios."
         },
         {
           "name": "Visual quality compared against the reference image (\u00a746)",
@@ -572,7 +572,7 @@
           "class": "B",
           "status": "done",
           "weight": 3,
-          "note": "WS_EX_TRANSPARENT + WS_EX_NOACTIVATE + WS_EX_TOOLWINDOW, HTTRANSPARENT, MA_NOACTIVATE; no keyboard hook anywhere"
+          "note": "WS_EX_TRANSPARENT + WS_EX_NOACTIVATE + WS_EX_TOOLWINDOW, HTTRANSPARENT, MA_NOACTIVATE; no keyboard hook anywhere Enforced, not just implemented: tools/check-overlay.py fails the build if the layered/transparent styles, the non-topmost rule or HTTRANSPARENT ever change, and each rule was mutation-tested."
         },
         {
           "name": "Smart pacing: idle low, editing event-driven, playback high",

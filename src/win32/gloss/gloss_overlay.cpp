@@ -66,7 +66,7 @@ using D3DCompileFn = HRESULT(WINAPI*)(LPCVOID source, SIZE_T size, LPCSTR name, 
 // defeat the point of the whole feature. The capture path uses the same rule.
 bool get_dxgi_factory(ID3D11Device* device, IDXGIFactory2** out, std::string* error) {
     IDXGIDevice* dxgi_device = nullptr;
-    if (FAILED(device->QueryInterface(IID_IDXGIDevice, reinterpret_cast<void**>(&dxgi_device))) ||
+    if (FAILED(device->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void**>(&dxgi_device))) ||
         dxgi_device == nullptr) {
         if (error != nullptr) *error = "device is not a DXGI device";
         return false;
@@ -78,7 +78,7 @@ bool get_dxgi_factory(ID3D11Device* device, IDXGIFactory2** out, std::string* er
         if (error != nullptr) *error = "adapter could not be resolved";
         return false;
     }
-    const HRESULT factory_hr = adapter->GetParent(IID_IDXGIFactory2, reinterpret_cast<void**>(out));
+    const HRESULT factory_hr = adapter->GetParent(__uuidof(IDXGIFactory2), reinterpret_cast<void**>(out));
     adapter->Release();
     if (FAILED(factory_hr) || *out == nullptr) {
         if (error != nullptr) *error = "DXGI 1.2 factory is unavailable";
@@ -248,7 +248,7 @@ bool GlossOverlay::create_device_resources(std::string* error) {
     }
 
     ID3D11Texture2D* buffer = nullptr;
-    hr = swap_chain_->GetBuffer(0, IID_ID3D11Texture2D, reinterpret_cast<void**>(&buffer));
+    hr = swap_chain_->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&buffer));
     if (FAILED(hr) || buffer == nullptr) {
         if (error != nullptr) *error = "swap chain buffer is unavailable";
         return false;
@@ -261,7 +261,7 @@ bool GlossOverlay::create_device_resources(std::string* error) {
     }
 
     IDXGIDevice* dxgi_device = nullptr;
-    if (FAILED(shared_.device->QueryInterface(IID_IDXGIDevice, reinterpret_cast<void**>(&dxgi_device))) ||
+    if (FAILED(shared_.device->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void**>(&dxgi_device))) ||
         dxgi_device == nullptr) {
         if (error != nullptr) *error = "device is not a DXGI device";
         return false;
@@ -540,7 +540,7 @@ bool GlossOverlay::resize_swap_chain(int width, int height, std::string* error) 
         return false;
     }
     ID3D11Texture2D* buffer = nullptr;
-    if (FAILED(swap_chain_->GetBuffer(0, IID_ID3D11Texture2D, reinterpret_cast<void**>(&buffer))) || buffer == nullptr) {
+    if (FAILED(swap_chain_->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&buffer))) || buffer == nullptr) {
         if (error != nullptr) *error = "swap chain buffer is unavailable after resize";
         return false;
     }

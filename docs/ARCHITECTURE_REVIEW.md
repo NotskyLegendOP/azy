@@ -18,6 +18,14 @@ Evidence vocabulary, used strictly:
 | **UNVERIFIED** | Requires Windows and Premiere Pro. |
 | **HIGH RISK** | An unresolved uncertainty that could invalidate the approach. |
 
+
+> **Scope note (v1.3.0):** this document is READY FOR REAL-WORLD TESTING (v1.2.3). It covers the static layers
+> (frame colours, the ring, the sheet) and is still accurate for them. The duplicate
+> window added in v1.3.0 is covered by
+> [`AZY_OVERLAY_ARCHITECTURE.md`](AZY_OVERLAY_ARCHITECTURE.md) and
+> [`AZY_OVERLAY_TEST_PLAN.md`](AZY_OVERLAY_TEST_PLAN.md), and carries its own claim
+> label: IMPLEMENTED — RUNTIME UNVERIFIED.
+
 ---
 
 ## 1. The question this review had to answer
@@ -108,8 +116,8 @@ draws rounded-rect stroke paths and nothing else).
 
 | Subsystem | State | Notes |
 | --- | --- | --- |
-| Core logic (theme, DPI maths, panel map, settings, versioning, failure tracking) | **Stable** | 578 checks, 0 failures; pure C++ with no Windows dependency. |
-| Build, packaging, CI, releases | **Stable** | `verify.sh` 6/6, artifact inspection + size budget, CI release green for v1.0.0–v1.2.2. |
+| Core logic (theme, DPI maths, panel map, settings, versioning, failure tracking) | **Stable** | 578 checks at v1.2.3, 0 failures (649 as of v1.3.0); pure C++ with no Windows dependency. |
+| Build, packaging, CI, releases | **Stable** | `verify.sh` 6/6 at v1.2.3 (7/7 as of v1.3.0), artifact inspection + size budget, CI release green for v1.0.0–v1.2.3. |
 | Process detection & lifecycle | **Stable** | Event-driven (WMI + toolhelp fallback), now scoped so that idle costs nothing when the observer is live. |
 | Window discovery | **Needs Improvement → improved** | The enumerator was desktop-wide and performed a blocked cross-process text query per window. Rewritten in this review. |
 | Window tracking | **Needs Improvement → improved** | Geometry/DPI/state refresh was sound; handle-recycling validation was missing and has been added. |

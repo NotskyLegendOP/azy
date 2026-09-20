@@ -16,6 +16,14 @@ Verification words are used strictly: **VERIFIED** = a machine checked it,
 **STRONGLY SUPPORTED** = API documentation plus code evidence, no runtime,
 **UNVERIFIED** = needs Premiere on Windows, **HIGH RISK** = unresolved.
 
+
+> **Scope note (v1.3.0):** this document is the v1.2.3 deep review. It covers the static layers
+> (frame colours, the ring, the sheet) and is still accurate for them. The duplicate
+> window added in v1.3.0 is covered by
+> [`AZY_OVERLAY_ARCHITECTURE.md`](AZY_OVERLAY_ARCHITECTURE.md) and
+> [`AZY_OVERLAY_TEST_PLAN.md`](AZY_OVERLAY_TEST_PLAN.md), and carries its own claim
+> label: IMPLEMENTED — RUNTIME UNVERIFIED.
+
 ---
 
 ## DB-1 — A blocking cross-process window-text query on every window of the desktop
@@ -28,7 +36,7 @@ Verification words are used strictly: **VERIFIED** = a machine checked it,
 | **Why it happens** | `window_text()` calls `GetWindowTextLengthW` + `GetWindowTextW`. For a window owned by another process those are **`WM_GETTEXT` sends**: the caller blocks until the owning UI thread pumps messages. `EnumWindows` visits every top-level window on the desktop, so Azy called this for every window of every application. |
 | **Potential user impact** | Any application on the machine that is busy or hung — an installer, a game, an IDE mid-build, a "Not responding" dialog — stalls Azy inside its own message loop. The tray stops answering, the settings window freezes, the skin stops following Premiere, and Windows may badge Azy as "Not Responding". It happens on every rescan, which was up to 5×/second. |
 | **Fix** | The discarded fetch is gone entirely, and the enumerator now filters by pid **first**, so all remaining per-window work (the DWM cloak query, `GetWindowRect`, style reads) happens only for Premiere's own windows — a handful instead of hundreds. |
-| **Verification method** | `grep -rn "GetWindowTextW" src/` returns no callers; `window_text()` was deleted because nothing used it after the fix. Rebuilt clean (zero warnings from `src/` + `include/`); `verify.sh` 6/6. |
+| **Verification method** | `grep -rn "GetWindowTextW" src/` returns no callers; `window_text()` was deleted because nothing used it after the fix. Rebuilt clean (zero warnings from `src/` + `include/`); `verify.sh` 6/6 at that time (7/7 as of v1.3.0). |
 | **Current status** | **Fixed.** Residual risk: none identified — the call no longer exists in the codebase. |
 
 ---

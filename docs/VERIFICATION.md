@@ -39,7 +39,8 @@ zero warnings from `src/` + `include/`.
 
 | Feature | Status | Evidence |
 | --- | --- | --- |
-| Sources compile for Windows x64 (zig + MinGW, `-Werror`-clean) | VERIFIED | `scripts/verify.sh` step 4; zero warnings attributable to `src/` or `include/` |
+| Sources compile for Windows x64 (zig + MinGW, warning-clean) | VERIFIED | `scripts/verify.sh` step 5; zero warnings attributable to `src/` or `include/` |
+| The same sources compile and **link** with MSVC on Windows (the supported toolchain, incl. the resource compiler) | VERIFIED | GitHub Actions `build` workflow, `windows build (MSVC)` job on this commit — the job that caught the `IID_*` link failure the cross-compile could not see |
 | Include hygiene (every header self-sufficient) | VERIFIED | `verify.sh` step 1, catches transitive-include use |
 | Version agrees across every file (exe, RC, manifest, ISS, README, docs) | VERIFIED | `verify.sh` step 2 + `tools/check-version.py` |
 | Shipped exe is a GUI binary with the expected imports | VERIFIED | `verify.sh` step 5 (inspection of the produced PE) |

@@ -105,7 +105,7 @@ and inspected, not executed**. That means:
   composition, the veil's alpha, tray behaviour, the settings window at 150–200 %
   scaling, and every part of the "does it look right" question.
 - The pure logic (version handling, theme maths, panel map, DPI geometry,
-  settings round-trip, failure tracking) is covered by 578 native checks that do
+  settings round-trip, failure tracking) is covered by 649 native checks that do
   run. See [`VERIFICATION.md`](VERIFICATION.md) for the exact split.
 - Azy has never been run next to Adobe Premiere Pro. Behaviour alongside real
   Premiere — including the maximised-window case the user reported — is

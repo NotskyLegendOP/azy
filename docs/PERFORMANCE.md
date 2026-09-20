@@ -76,7 +76,7 @@ frequency in the usual sense.
 
 | Component | Cost |
 |---|---|
-| Executable on disk | ~550 KB (Release, x64; 560,128 bytes at the time of writing) |
+| Executable on disk | ~615 KB (Release, x64; 614,400 bytes at the time of writing) |
 | Private working set | ~6–10 MB (Win32 + GDI+ + C++ runtime, no framework) |
 | Surface bitmaps | the ring is four thin strips, not a window-sized layer: 2 × width × thickness + 2 × (height − 2 × thickness) × thickness pixels × 4 bytes. 1080p at 100% DPI: 12px strips, 279 KB. 1080p at 125%: 348 KB. 4K at 200%: 1.0 MB. A single window-sized ARGB layer would be 33 MB at 4K |
 | GDI+/DWM resources | 4 DIB sections, 4 memory DCs, 4 layered windows, 1 tray icon — all released when Premiere exits |
