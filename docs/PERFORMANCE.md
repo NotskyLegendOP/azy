@@ -17,7 +17,7 @@ rule used throughout the codebase is:
 | Premiere being dragged/resized | **Near 0%** | `EVENT_SYSTEM_MOVESIZE_START` hides the surface; the frame attributes need no help because Windows moves them with the window. One repaint after the movement settles |
 | Premiere launched | one short burst | Process identification (one toolhelp snapshot + one version-resource read) then one apply. Then idle again |
 | Memory (working set) | **< 100 MB target** (expected ≈ 6–10 MB) | See "Memory" below |
-| GPU | **zero** | No D3D, no DirectComposition, no video engine; one GDI+ bitmap handed to DWM |
+| GPU | **zero** | No D3D, no DirectComposition, no video engine; four small GDI+ bitmaps handed to DWM |
 
 ---
 
@@ -76,13 +76,13 @@ frequency in the usual sense.
 |---|---|
 | Executable on disk | ~440 KB (Release, x64) |
 | Private working set | ~6–10 MB (Win32 + GDI+ + C++ runtime, no framework) |
-| Surface bitmaps | the ring is four thin strips, not a window-sized layer: ~2 × width × thickness + 2 × height × thickness pixels × 4 bytes. At 1920×1080/100% DPI that is ~78 KB; at 3840×2160/200% DPI (thickness 40px) ~920 KB. A single window-sized layer would be ~33 MB at 4K |
+| Surface bitmaps | the ring is four thin strips, not a window-sized layer: 2 × width × thickness + 2 × (height − 2 × thickness) × thickness pixels × 4 bytes. 1080p at 100% DPI: 12px strips, 279 KB. 1080p at 125%: 348 KB. 4K at 200%: 1.0 MB. A single window-sized ARGB layer would be 33 MB at 4K |
 | GDI+/DWM resources | 4 DIB sections, 4 memory DCs, 4 layered windows, 1 tray icon — all released when Premiere exits |
 | Settings/tracker/log buffers | a few KB |
 
 For comparison, an Electron-based equivalent with the same visual result would
 start at roughly 80–150 MB and a helper process — which is exactly why Azy is
-plain Win32 with GDI+ for one bitmap.
+plain Win32 with GDI+ for the ring's four strips.
 
 There is no caching layer, no image atlas, no script engine and no UI toolkit.
 

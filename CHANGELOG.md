@@ -34,7 +34,9 @@ changing anything about how Premiere works.
   shadow, a barely visible top highlight and an optional translucent wash — all
   painted once per change with GDI+ in frame coordinates and presented with
   `UpdateLayeredWindow`, so a 1px line is exactly one pixel and the ring costs
-  ~78 KB of bitmaps on a 1080p window rather than a window-sized ARGB layer.
+  ~280 KB of bitmaps on a 1080p window rather than a 33 MB window-sized ARGB layer.
+  A *lighter* 1px bezel sits just inside the hairline, because a purely dark edge
+  treatment is invisible over Premiere's own near-black panels.
 * Optional (Advanced, off by default) Windows 11 Mica backdrop on the window
   frame.
 * `Original` theme that removes every Azy change; `Azy Dark` for an opaque

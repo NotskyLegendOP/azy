@@ -146,10 +146,14 @@ twice.
   another application.
 * Inserted directly **above Premiere** in the z-order, so it follows Premiere's
   own stacking (minimise, cover, virtual desktop switch) instead of floating.
-* Band thickness = 10 DIP (3 DIP in performance mode), capped at 25% of the
-  shorter window side (a 90px floating panel gets a 2px band, not a 10px one).
+* Band thickness = 10 DIP (3 DIP in performance mode), capped at a twelfth of the
+  shorter window side with a 3px floor, so a small floating panel gets a
+  proportionally small ring (a 300px panel keeps its 15px band; a 90px one gets 7px)
+  instead of four thick strips that meet in the middle.
 * Strip thickness = band + 2px, or the corner radius when that is larger, so a
-  large radius is never clipped.
+  large radius is never clipped; the radius itself is capped at thickness − 1 for
+  the same reason. Both come from one shared helper (`azy/core/ring_layout.hpp`)
+  that the unit tests exercise.
 * On a maximized/fullscreen window the ring runs along the physical screen edges,
   so the bezel is halved to avoid reading as a border drawn around the display.
 * Hidden (not merely transparent) whenever the skin is off, suspended,
@@ -161,7 +165,7 @@ twice.
 
 GDI+ (`gdiplus.dll`, shipped with Windows) is used for anti-aliased rounded
 rectangles, a 1px pen and a fixed-bucket shadow falloff. It is not a rendering
-engine Azy runs continuously: one bitmap is painted per geometry/appearance
+engine Azy runs continuously: the strips are painted once per geometry/appearance
 change, cached, and handed to the compositor. No GPU work, no animation, no
 per-frame path re-tessellation.
 

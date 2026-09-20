@@ -158,8 +158,8 @@ Azy Skin is built around *not* doing work:
 * **One paint per change, never per frame.** Azy's ring is four thin cached
   strips (top/bottom/left/right) handed to the compositor with
   `UpdateLayeredWindow`; they are only regenerated when the geometry, DPI or
-  appearance actually changes. Splitting the ring keeps its bitmap at ~78 KB on a
-  1080p window instead of a 33 MB window-sized layer at 4K.
+  appearance actually changes. Splitting the ring keeps its bitmaps at ~280 KB on a
+  1080p window (1.0 MB at 4K/200%) instead of a 33 MB window-sized layer at 4K.
 * **While suspended, it is invisible.** Minimised, inactive (opt-in), dragged,
   hidden or unskinned: the surface is *hidden*, the DWM work is skipped, and no
   resources are held.
