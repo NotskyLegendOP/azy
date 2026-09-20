@@ -31,3 +31,6 @@ desktop.ini
 # Python caches (from the build/verification tools)
 __pycache__/
 *.pyc
+
+# Generated bundles (the release workflow publishes these as release assets)
+*.zip
