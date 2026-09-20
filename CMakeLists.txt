@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(AzySkin
-    VERSION 1.2.0
+    VERSION 1.2.1
     DESCRIPTION "Azy Skin - a lightweight visual skin for Adobe Premiere Pro"
     LANGUAGES CXX)
 
@@ -45,6 +45,7 @@ add_library(azy_core STATIC
     src/core/compat.cpp
     src/core/failure_tracker.cpp
     src/core/log.cpp
+    src/core/panel_map.cpp
     src/core/product.cpp
     src/core/settings.cpp
     src/core/strings.cpp
@@ -70,6 +71,7 @@ if(WIN32)
         src/win32/os/win_version.cpp
         src/win32/performance/performance_manager.cpp
         src/win32/skin/composition_surface.cpp
+        src/win32/skin/debug_overlay.cpp
         src/win32/skin/dwm_composer.cpp
         src/win32/skin/gdiplus_renderer.cpp
         src/win32/skin/input_guard.cpp

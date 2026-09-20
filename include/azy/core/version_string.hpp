@@ -7,7 +7,7 @@
 #pragma once
 
 #ifndef AZY_VERSION_STRING
-#define AZY_VERSION_STRING "1.2.0"
+#define AZY_VERSION_STRING "1.2.1"
 #endif
 
 namespace azy {
@@ -18,7 +18,7 @@ constexpr const char* kAppVersion = AZY_VERSION_STRING;
 // process boundary, where only a message result can travel: a build that has just
 // been installed uses it to recognise that a *different* build is already running
 // and owns the skin (see the take-over in main.cpp). Parsing stops at the first
-// character that is neither a digit nor a dot, so "1.2.0-beta" compares as 1.2.0;
+// character that is neither a digit nor a dot, so "1.2.1-beta" compares as 1.2.1;
 // missing components are zero.
 constexpr unsigned pack_version(const char* text) {
     unsigned parts[3] = {0, 0, 0};

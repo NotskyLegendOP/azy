@@ -14,6 +14,7 @@
 #include "azy/core/compat.hpp"
 #include "azy/core/failure_tracker.hpp"
 #include "azy/core/geometry.hpp"
+#include "azy/core/panel_map.hpp"
 #include "azy/core/product.hpp"
 #include "azy/core/ring_layout.hpp"
 #include "azy/core/settings.hpp"
@@ -548,6 +549,133 @@ void test_design_tokens() {
     CHECK(!preset_from_key("ultra-max", preset));
 }
 
+// The panel map is the whole basis of the region work, so its two promises are
+// tested directly: the panels cover the client area without overlapping, and they
+// scale with DPI instead of being pixel coordinates in disguise.
+void test_panel_map() {
+    group("panel map");
+
+    // Keys and names round-trip; an unknown profile is rejected rather than
+    // silently becoming the Editing layout.
+    WorkspaceId workspace = WorkspaceId::Auto;
+    CHECK(workspace_from_key("color", workspace));
+    CHECK(workspace == WorkspaceId::Color);
+    CHECK(workspace_from_key(" Graphics ", workspace));
+    CHECK(workspace == WorkspaceId::Graphics);
+    CHECK(workspace_from_key("", workspace));
+    CHECK(workspace == WorkspaceId::Auto);
+    CHECK(!workspace_from_key("timeline-only", workspace));
+    CHECK(workspace == WorkspaceId::Auto);          // resolve() is separate from parse()
+    CHECK(resolve_workspace(WorkspaceId::Auto) == WorkspaceId::Editing);
+    CHECK(resolve_workspace(WorkspaceId::Audio) == WorkspaceId::Audio);
+
+    // A real maximized 1080p client area at 100%: 1920x1040.
+    const Rect client = Rect::from_size(0, 0, 1920, 1040);
+    const std::vector<PanelRect> panels = build_panel_map(client, 96, WorkspaceId::Editing);
+    CHECK_INT(static_cast<int>(panels.size()), static_cast<int>(PanelId::Count));
+
+    const PanelRect* menu = nullptr;
+    const PanelRect* header = nullptr;
+    const PanelRect* timeline = nullptr;
+    const PanelRect* program = nullptr;
+    const PanelRect* project = nullptr;
+    for (const PanelRect& panel : panels) {
+        // `usable` is a promise about size, and the model must never claim a panel
+        // it cannot actually place: the two must agree exactly.
+        CHECK(panel.usable == (panel.rect.width() >= 24 && panel.rect.height() >= 24));
+        if (panel.id == PanelId::StatusBar) continue;  // not placed at all by default
+        CHECK(panel.usable);                          // everything else fits at 1080p
+        if (panel.id == PanelId::MenuBar) menu = &panel;
+        if (panel.id == PanelId::ApplicationHeader) header = &panel;
+        if (panel.id == PanelId::Timeline) timeline = &panel;
+        if (panel.id == PanelId::ProgramMonitor) program = &panel;
+        if (panel.id == PanelId::Project) project = &panel;
+    }
+    CHECK(menu != nullptr && header != nullptr && timeline != nullptr && program != nullptr &&
+          project != nullptr);
+
+    // Every panel is inside the client area, and every *usable* one has a real
+    // size: the failure mode this guards against is the model inventing geometry
+    // outside the window, which would draw chrome over unrelated applications.
+    for (const PanelRect& panel : panels) {
+        CHECK(panel.rect.left >= client.left);
+        CHECK(panel.rect.top >= client.top);
+        CHECK(panel.rect.right <= client.right);
+        CHECK(panel.rect.bottom <= client.bottom);
+        CHECK(panel.rect.width() >= 0);
+        CHECK(panel.rect.height() >= 0);
+        if (panel.usable) {
+            CHECK(panel.rect.width() > 0);
+            CHECK(panel.rect.height() > 0);
+        }
+    }
+
+    // The bands are stacked in the order the user sees them, and the timeline owns
+    // the bottom of the window.
+    CHECK_INT(menu->rect.top, 0);
+    CHECK_INT(menu->rect.height(), 24);              // 24 DIP at 96 dpi = 24 px
+    CHECK_INT(header->rect.top, menu->rect.bottom);
+    CHECK_INT(timeline->rect.bottom, client.bottom);
+    CHECK(timeline->rect.top > program->rect.bottom - 1);   // timeline below the monitors
+    CHECK_INT(project->rect.top, header->rect.bottom);      // left column starts under the header
+
+    // Panels that share an edge must not overlap: the timeline and the middle band
+    // are exactly adjacent, which is what makes a 1px separator meaningful.
+    const PanelRect* right = nullptr;
+    for (const PanelRect& panel : panels) {
+        if (panel.id == PanelId::RightDock) right = &panel;
+    }
+    CHECK(right != nullptr);
+    CHECK_INT(timeline->rect.top, right->rect.bottom);
+    CHECK(program->rect.right <= right->rect.left);
+
+    // DPI: the fixed bands scale, so the same window at 150% has a proportionally
+    // taller header but the same *physical* size. A model with pixel coordinates
+    // baked in would fail here.
+    const std::vector<PanelRect> scaled = build_panel_map(client, 144, WorkspaceId::Editing);
+    for (const PanelRect& panel : scaled) {
+        if (panel.id != PanelId::MenuBar) continue;
+        CHECK_INT(panel.rect.height(), 36);          // 24 DIP * 1.5
+    }
+
+    // A different workspace really is a different layout.
+    const std::vector<PanelRect> audio = build_panel_map(client, 96, WorkspaceId::Audio);
+    for (const PanelRect& panel : audio) {
+        if (panel.id != PanelId::RightDock) continue;
+        CHECK(panel.rect.width() > right->rect.width());
+    }
+
+    // A small window: whatever is too small for the minimum is rejected, and
+    // nothing is invented outside the client area. Asking for a minimum larger than
+    // the whole window must reject everything, which is the degenerate case a
+    // 320x200 floating window would hit.
+    const std::vector<PanelRect> small = build_panel_map(Rect::from_size(0, 0, 320, 200), 96,
+                                                         WorkspaceId::Editing);
+    for (const PanelRect& panel : small) {
+        CHECK(panel.rect.left >= 0);
+        CHECK(panel.rect.top >= 0);
+        CHECK(panel.rect.right <= 320);
+        CHECK(panel.rect.bottom <= 200);
+        CHECK(panel.usable == (panel.rect.width() >= 24 && panel.rect.height() >= 24));
+    }
+    const std::vector<PanelRect> too_strict = build_panel_map(Rect::from_size(0, 0, 320, 200), 96,
+                                                              WorkspaceId::Editing, 400);
+    for (const PanelRect& panel : too_strict) CHECK(!panel.usable);
+
+    // An empty client area is answered honestly rather than crashing.
+    const std::vector<PanelRect> none = build_panel_map(Rect{}, 96, WorkspaceId::Editing);
+    CHECK_INT(static_cast<int>(none.size()), static_cast<int>(PanelId::Count));
+    for (const PanelRect& panel : none) CHECK(!panel.usable);
+
+    // The description is what lands in the log and in a bug report: it must name
+    // the panels and their rectangles, and say when one could not be placed.
+    const std::string described = describe_panel_map(panels);
+    CHECK(described.find("Timeline") != std::string::npos);
+    CHECK(described.find("1920x") != std::string::npos);
+    const std::string described_tiny = describe_panel_map(too_strict);
+    CHECK(described_tiny.find("not placeable") != std::string::npos);
+}
+
 void test_settings() {
     group("settings INI round-trip");
 
@@ -893,6 +1021,7 @@ int main() {
     test_theme();
     test_dpi_geometry();
     test_settings();
+    test_panel_map();
     test_design_tokens();
     test_failure_tracker();
     test_strings();

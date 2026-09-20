@@ -8,6 +8,7 @@
 
 #include "azy/core/compat.hpp"
 #include "azy/core/geometry.hpp"
+#include "azy/core/panel_map.hpp"
 #include "azy/core/theme.hpp"
 #include "azy/win32/os/win_compat.hpp"
 
@@ -84,6 +85,13 @@ struct SkinRequest {
     ThemePalette palette;
     bool performance_mode = false;
     bool experimental = false;
+
+    // Debug mode (spec §41): draw the panel map Azy believes in, plus the facts
+    // around it, so one screenshot is enough to correct the model. It is a debug
+    // aid, not a feature: it is off unless the user asks for it, and it costs
+    // nothing while it is off (no window, no paint).
+    bool debug_mode = false;
+    WorkspaceId workspace = WorkspaceId::Auto;
 };
 
 // What the engine actually did (used for logging, tray tooltip, diagnostics).

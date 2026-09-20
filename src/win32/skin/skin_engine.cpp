@@ -4,6 +4,7 @@
 
 #include "azy/core/log.hpp"
 #include "azy/core/ring_layout.hpp"
+#include "azy/core/version_string.hpp"
 #include "azy/core/strings.hpp"
 #include "azy/win32/os/win_util.hpp"
 #include "azy/win32/skin/input_guard.hpp"
@@ -99,6 +100,8 @@ void SkinEngine::shutdown() {
     // contexts back to Windows instead of leaving hidden layered windows behind.
     surface_.destroy();
     veil_.destroy();
+    debug_.destroy();
+    panels_.clear();
     target_ = nullptr;
 }
 
@@ -106,6 +109,7 @@ void SkinEngine::revert() {
     composer_.revert();
     surface_.hide();
     veil_.hide();
+    debug_.hide();
     has_key_ = false;
     last_key_ = VisualKey{};
 }
@@ -113,6 +117,8 @@ void SkinEngine::revert() {
 void SkinEngine::release_surface() {
     surface_.destroy();
     veil_.destroy();
+    debug_.destroy();
+    panels_.clear();
     target_ = nullptr;
     log_debug("composition surface destroyed");
 }
@@ -309,6 +315,78 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
         changed = true;
     } else {
         state_out.overlay_visible = veil_.visible();
+    }
+
+    // --- the panel map (spec §3 Layer 2, §41) --------------------------------
+    // Built from the same geometry the ring uses, so it is exact by construction:
+    // a ratio layout applied to the client rectangle at this DPI. A mistake here
+    // costs a missing region, never a broken layout, which is why a panel that
+    // does not fit is marked unusable instead of being driven to a negative size.
+    const Rect client = Rect::from_size(0, 0, key.surface_rect.width(), key.surface_rect.height());
+    const std::vector<PanelRect> panels = build_panel_map(client, request.target.dpi, request.workspace);
+    const bool map_changed =
+        panels.size() != panels_.size() ||
+        !std::equal(panels.begin(), panels.end(), panels_.begin(),
+                    [](const PanelRect& a, const PanelRect& b) {
+                        return a.id == b.id && a.usable == b.usable && a.rect == b.rect;
+                    });
+    if (map_changed) {
+        panels_ = panels;
+        client_origin_ = key.surface_rect;
+        // One line per layout change (never per timer tick): the model's own view of
+        // the window, which is what a bug report needs to be actionable.
+        log_info("panel map (%s workspace, %dx%d client, %u dpi):\n%s",
+                 workspace_name(resolve_workspace(request.workspace)), client.width(), client.height(),
+                 request.target.dpi, describe_panel_map(panels_).c_str());
+    }
+
+    // --- debug overlay (spec §41) -------------------------------------------
+    // The rectangles are translated into screen coordinates here: the map is built
+    // for a client area that starts at (0,0), while the overlay window covers the
+    // same rectangle the ring does.
+    const bool want_debug = request.debug_mode && request.suspend == SuspendReason::None &&
+                            request.target.valid() && request.skin_enabled;
+    const bool debug_requested = want_debug && !panels_.empty();
+    if (debug_requested) {
+        std::vector<PanelRect> on_screen = panels_;
+        for (PanelRect& panel : on_screen) {
+            if (!panel.usable) continue;
+            panel.rect.left += client_origin_.left;
+            panel.rect.top += client_origin_.top;
+            panel.rect.right += client_origin_.left;
+            panel.rect.bottom += client_origin_.top;
+        }
+        std::vector<std::string> facts;
+        facts.push_back("Azy Skin " + std::string(kAppVersion) + " - debug mode");
+        facts.push_back(str_format("window 0x%p class '%s'  %dx%d at (%d,%d)", (void*)request.target.hwnd,
+                                   to_utf8(request.target.window_class).c_str(),
+                                   request.target.visible_frame.width(), request.target.visible_frame.height(),
+                                   request.target.visible_frame.left, request.target.visible_frame.top));
+        facts.push_back(str_format("client %dx%d at (%d,%d) | %u dpi (%d%%) | screen (%d,%d)-(%d,%d)",
+                                   client.width(), client.height(), client_origin_.left, client_origin_.top,
+                                   request.target.dpi, static_cast<int>(request.target.dpi * 100u / 96u),
+                                   request.target.monitor.left, request.target.monitor.top,
+                                   request.target.monitor.right, request.target.monitor.bottom));
+        facts.push_back(str_format("workspace %s | %zu panels modelled, %zu usable",
+                                   workspace_name(resolve_workspace(request.workspace)), panels_.size(),
+                                   static_cast<size_t>(std::count_if(panels_.begin(), panels_.end(),
+                                                                     [](const PanelRect& p) { return p.usable; }))));
+        facts.push_back("press Check visibility in Settings, then screenshot this window");
+
+        std::string debug_error;
+        const bool shown = debug_.present(request.target.hwnd,
+                                          state_out.surface_visible ? surface_.hwnd() : nullptr,
+                                          key.surface_rect, on_screen, facts, &debug_error);
+        if (!shown && debug_.visible()) debug_.hide();
+        if (!shown && !debug_error.empty()) {
+            // Reported once per change, never per tick: a debug aid must not become
+            // a log flood.
+            log_warn("debug overlay: %s", debug_error.c_str());
+        }
+        changed = changed || shown;
+    } else if (debug_.visible()) {
+        debug_.hide();
+        changed = true;
     }
 
     if (changed) {

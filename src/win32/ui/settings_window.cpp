@@ -53,6 +53,8 @@ enum ControlId : int {
     kSuspendMinimized,
     kSuspendInactive,
     kExperimental,
+    kDebugMode,
+    kUiProfileCombo,
     kSafeModeText,
     kReenableButton,
     kResetButton,
@@ -356,6 +358,28 @@ void SettingsWindow::layout(int dpi) {
     y += 18;
     checkbox(kExperimental, y, width, L"Enable &experimental visual features");
     y += kRowHeight;
+    // Debug mode (spec 41): draws the panel map Azy currently believes in over
+    // the tracked window, plus the facts around it. It exists so one screenshot
+    // from a user is enough to correct the model, and it costs nothing while off.
+    checkbox(kDebugMode, y, width, L"&Debug mode: show the panel map over the window");
+    y += kRowHeight;
+    label(-1, kMargin, y, kLabelWidth, kRowHeight, SS_CENTERIMAGE, L"UI &profile", font_);
+    {
+        HWND combo = CreateWindowExW(0, L"COMBOBOX", L"",
+                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST,
+                                     px(kMargin + kLabelWidth), px(y), px(200), px(200), hwnd_,
+                                     id_of(kUiProfileCombo), nullptr, nullptr);
+        if (combo != nullptr) {
+            if (font_ != nullptr) SendMessageW(combo, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
+            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Auto (Editing layout)"));
+            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Editing"));
+            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Color"));
+            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Audio"));
+            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Effects"));
+            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Graphics"));
+        }
+    }
+    y += kRowHeight + kSectionGap;
     label(kSafeModeText, kMargin, y, width, kRowHeight * 2, SS_WORDELLIPSIS, L"", font_small_);
     y += kRowHeight * 2;
 
@@ -403,6 +427,17 @@ void SettingsWindow::sync_controls() {
     check(kExperimental, settings_.experimental);
     check(kOverlayCheck, settings_.appearance.overlay);
     check(kAnimationsCheck, settings_.appearance.animations);
+    check(kDebugMode, settings_.debug_mode);
+
+    if (HWND combo = GetDlgItem(hwnd_, kUiProfileCombo)) {
+        const int index = settings_.ui_profile == WorkspaceId::Editing    ? 1
+                          : settings_.ui_profile == WorkspaceId::Color    ? 2
+                          : settings_.ui_profile == WorkspaceId::Audio    ? 3
+                          : settings_.ui_profile == WorkspaceId::Effects  ? 4
+                          : settings_.ui_profile == WorkspaceId::Graphics ? 5
+                                                                          : 0;
+        SendMessageW(combo, CB_SETCURSEL, index, 0);
+    }
 
     if (HWND combo = GetDlgItem(hwnd_, kPresetCombo)) {
         // Custom is index 4 and is only ever shown when the values really are the
@@ -688,6 +723,24 @@ LRESULT SettingsWindow::handle(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
                                                       : index == 2 ? AccentId::Violet
                                                       : index == 3 ? AccentId::Neutral
                                                                    : AccentId::BlueViolet;
+                        push_settings();
+                    }
+                    return 0;
+                case kDebugMode:
+                    settings_.debug_mode =
+                        SendMessageW(GetDlgItem(hwnd_, id), BM_GETCHECK, 0, 0) == BST_CHECKED;
+                    push_settings();
+                    return 0;
+                case kUiProfileCombo:
+                    if (notification == CBN_SELCHANGE) {
+                        const int index =
+                            static_cast<int>(SendMessageW(GetDlgItem(hwnd_, id), CB_GETCURSEL, 0, 0));
+                        settings_.ui_profile = index == 1   ? WorkspaceId::Editing
+                                               : index == 2 ? WorkspaceId::Color
+                                               : index == 3 ? WorkspaceId::Audio
+                                               : index == 4 ? WorkspaceId::Effects
+                                               : index == 5 ? WorkspaceId::Graphics
+                                                            : WorkspaceId::Auto;
                         push_settings();
                     }
                     return 0;

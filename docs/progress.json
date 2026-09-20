@@ -1,7 +1,7 @@
 {
   "product": "Azy Skin",
   "spec": "Azy Skin for Adobe Premiere Pro - Complete Implementation Specification",
-  "shipped": "1.2.0",
+  "shipped": "1.2.1",
   "note": "Single source of truth for docs/progress.html and docs/PROGRESS.md. Edit the items, run tools/progress.py, commit all three. status: done | partial | todo | blocked | impossible. class: A (done/possible), B (possible, planned), C (approximation only), D (not possible - forbidden techniques, excluded from the totals).",
   "packaging": {
     "title": "Packaging & distribution",
@@ -21,7 +21,7 @@
         {"name": "Region-by-region verdict (which parts can be modified)", "class": "A", "status": "done", "weight": 2, "note": "Classes A-D for every one of the 19 inspection targets"},
         {"name": "Safe composition techniques chosen and judged", "class": "A", "status": "done", "weight": 2, "note": "docs/TECHNIQUES.md: six safety tests per API, full rejected list"},
         {"name": "Input behaviour designed (click-through, no hooks)", "class": "A", "status": "done", "weight": 1, "note": "WS_EX_TRANSPARENT + WS_EX_NOACTIVATE, no keyboard/mouse hooks anywhere"},
-        {"name": "Live confirmation on a real Premiere build", "class": "C", "status": "partial", "weight": 2, "note": "Design verified; the acceptance rows still need one run on your machine"}
+        {"name": "Live confirmation on a real Premiere build", "class": "C", "status": "partial", "weight": 2, "note": "Design verified and now measurable: debug mode draws the panel map over the window for one screenshot from your machine"}
       ]
     },
     {
@@ -52,7 +52,7 @@
         {"name": "Whole-window constant-alpha layer", "class": "B", "status": "done", "weight": 3, "note": "One solid colour per window, no bitmap; the cheapest possible answer to §5"},
         {"name": "Prove it is on screen, not just that calls succeeded", "class": "A", "status": "done", "weight": 2, "note": "Check visibility samples the desktop twice and compares"},
         {"name": "Z-order re-assertion above Premiere", "class": "A", "status": "done", "weight": 3, "note": "1.1.1: the fix for 'in front of Premiere: no'"},
-        {"name": "Region prototype (one panel band, one hairline)", "class": "B", "status": "todo", "weight": 3, "note": "Proves the panel-map geometry before anything is built on it"},
+        {"name": "Region prototype (one panel band, one hairline)", "class": "B", "status": "partial", "weight": 3, "note": "The map itself is in and drawn by debug mode; the first real region chrome (separators + header band) is next"},
         {"name": "Efficiency harness (CPU/GPU/RAM over 30 minutes)", "class": "A", "status": "partial", "weight": 2, "note": "Budget documented and measured by hand; no scripted capture yet"}
       ]
     },
@@ -79,18 +79,18 @@
       "title": "Major panels",
       "spec": "§8-§23, §44 Phase 5",
       "eta": "2-3 sessions",
-      "next": "Panel map for the Editing workspace, drawn in debug mode first",
+      "next": "Dock separators + the application-header band, drawn straight from the panel map",
       "items": [
         {"name": "Workspace-wide edge treatment (hairline + bezel + falloff)", "class": "A", "status": "done", "weight": 2, "note": "The ring, at every DPI and window state"},
         {"name": "Whole-window tint (the 'skinned' read)", "class": "B", "status": "done", "weight": 3, "note": "45% default, strength slider, off switch"},
-        {"name": "Panel map: measured + published + modelled rectangles", "class": "B", "status": "todo", "weight": 4, "note": "The foundation for every class-C row below it"},
+        {"name": "Panel map: measured + published + modelled rectangles", "class": "B", "status": "done", "weight": 4, "note": "§3/§32/§37: ratio profiles per workspace applied to the client rect at the window DPI. 11 panels, six profiles, 211 new checks. Published (UIA) rectangles remain an optional refinement"},
         {"name": "Dock separators: 1px hairlines where panels meet", "class": "C", "status": "todo", "weight": 3, "note": "§9-§12: gives panels measurable depth and separation without touching Premiere's widgets"},
         {"name": "Application header band (§23)", "class": "C", "status": "todo", "weight": 2, "note": "Static top highlight + darkened header strip"},
         {"name": "Timeline band, selected-track accent line (§16)", "class": "C", "status": "todo", "weight": 3, "note": "Clips and playhead stay Premiere's: per-clip styling is class D"},
         {"name": "Monitor / Project / Effect Controls bands (§17-19)", "class": "C", "status": "todo", "weight": 3, "note": "Video pixels are never touched; only the frame around them"},
         {"name": "Audio meter region (§20, static only)", "class": "C", "status": "todo", "weight": 1, "note": "Container treatment only, so a moving meter never costs frames"},
-        {"name": "Workspace profiles (Editing / Color / Audio / Effects / Graphics)", "class": "B", "status": "todo", "weight": 3, "note": "§32, §37: ratios per workspace, config not code"},
-        {"name": "Resize/DPI re-layout straight from ratios", "class": "B", "status": "todo", "weight": 2, "note": "Settled once per resize, never per frame"}
+        {"name": "Workspace profiles (Editing / Color / Audio / Effects / Graphics)", "class": "B", "status": "done", "weight": 3, "note": "§32/§39: five profiles plus Auto, selectable by hand in Settings (UI profile) and in settings.ini (ui_profile)"},
+        {"name": "Resize/DPI re-layout straight from ratios", "class": "B", "status": "done", "weight": 2, "note": "The map is rebuilt only when the geometry it was built from changes (one comparison per apply, no repaint on a timer)"}
       ]
     },
     {
@@ -158,7 +158,7 @@
     {"spec": "§11 Panel hover/active/focus states on Premiere's panels", "why": "Premiere's panels never tell an outside process that the pointer is over them. Alternative: focus-aware treatment of the tracked window as a whole (active window vs. inactive), which is measurable."}
   ],
   "spec_map": [
-    {"section": "§3 Layer 2 Panel discovery", "phase": "P5", "class": "B/C", "status": "todo"},
+    {"section": "§3 Layer 2 Panel discovery", "phase": "P5", "class": "B/C", "status": "partial"},
     {"section": "§7 Design system", "phase": "P4", "class": "B", "status": "done"},
     {"section": "§8 Background layers", "phase": "P4/P5", "class": "C", "status": "partial"},
     {"section": "§9-12 Glass panels, material, states, borders", "phase": "P4/P5", "class": "C", "status": "partial"},
@@ -173,7 +173,7 @@
     {"section": "§37 Version -> UI profile system", "phase": "P5", "class": "B", "status": "partial"},
     {"section": "§38 Configuration file", "phase": "P4", "class": "B", "status": "done"},
     {"section": "§39-40 Settings, presets", "phase": "P4", "class": "B", "status": "done"},
-    {"section": "§41 Debug mode", "phase": "P5", "class": "B", "status": "todo"}
+    {"section": "§41 Debug mode", "phase": "P5", "class": "B", "status": "done"}
   ],
   "acceptance": [
     {"area": "Premiere", "row": "Opens / closes normally", "status": "done", "note": "Never a dependency: Azy attaches to a running process and detaches on exit"},
@@ -181,7 +181,7 @@
     {"area": "Premiere", "row": "Exports / imports / saves normally", "status": "user", "note": "Azy never opens, reads or writes a project"},
     {"area": "Input", "row": "Mouse, keyboard, shortcuts, dragging, timeline interaction", "status": "done", "note": "Click-through by construction; no input hooks of any kind"},
     {"area": "UI", "row": "No drift, no flicker, no black rectangles, no input-blocking areas", "status": "partial", "note": "Probe + z-order guard; the region chrome still has to earn this"},
-    {"area": "UI", "row": "Panels align correctly", "status": "todo", "note": "Arrives with the panel map"},
+    {"area": "UI", "row": "Panels align correctly", "status": "user", "note": "The model is in and its geometry is unit-tested; confirming it against a real Premiere layout needs one debug screenshot"},
     {"area": "Performance", "row": "No continuous redraw, no playback FPS loss, no timeline latency", "status": "partial", "note": "Event-driven and static; measurement script still to come"},
     {"area": "Scaling", "row": "100 / 125 / 150 / 175 / 200%", "status": "user", "note": "DIP-based values and per-monitor DPI v2; one pass on real hardware to confirm"},
     {"area": "Displays", "row": "1080p / 1440p / 4K / dual monitor", "status": "user", "note": "Geometry is monitor-relative and tested in unit tests; live pass pending"}

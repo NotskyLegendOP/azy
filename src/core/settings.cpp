@@ -183,6 +183,8 @@ std::string Settings::to_ini() const {
 
     out += "[advanced]\n";
     out += "experimental=" + bool_str(experimental) + "\n";
+    out += "debug_mode=" + bool_str(debug_mode) + "\n";
+    out += std::string("ui_profile=") + workspace_key(ui_profile) + "\n";
     out += "safe_mode=" + bool_str(safe_mode) + "\n";
     out += "safe_mode_reason=" + safe_mode_reason + "\n";
     out += "failures=" + std::to_string(failure_count) + "\n";
@@ -201,7 +203,8 @@ std::string Settings::to_ini() const {
         "border_intensity", "corner_radius", "shadow_intensity", "darkness", "overlay",
         "overlay_intensity", "accent", "accent_intensity", "glow_intensity", "animations", "preset",
         "performance_mode",
-        "suspend_while_minimized", "suspend_while_inactive", "experimental", "safe_mode",
+        "suspend_while_minimized", "suspend_while_inactive", "experimental", "debug_mode",
+        "ui_profile", "safe_mode",
         "safe_mode_reason", "failures", "failure_window_start", "failure_last", "failure_tripped",
         "last_premiere_version", "schema"};
     for (const char* k : kKnown) known.insert(k);
@@ -288,6 +291,16 @@ Settings Settings::from_ini(const std::string& text, std::vector<std::string>* w
         } else if (key == "experimental") {
             bool v = false;
             if (parse_bool(value, v)) s.experimental = v;
+        } else if (key == "debug_mode") {
+            bool v = false;
+            if (parse_bool(value, v)) s.debug_mode = v;
+        } else if (key == "ui_profile") {
+            WorkspaceId workspace = WorkspaceId::Auto;
+            if (workspace_from_key(value, workspace)) {
+                s.ui_profile = workspace;
+            } else if (warnings) {
+                warnings->push_back("unknown ui_profile '" + value + "'; using the Editing layout");
+            }
         } else if (key == "safe_mode") {
             bool v = false;
             if (parse_bool(value, v)) s.safe_mode = v;

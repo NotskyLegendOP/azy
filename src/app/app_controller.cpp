@@ -506,6 +506,11 @@ void AppController::compute_request(win::SkinRequest& request, win::SuspendReaso
     request.palette = effective_palette(win::host_info().capabilities.dark_titlebar);
     request.performance_mode = settings.performance_mode;
     request.experimental = settings.experimental && !safe_mode_;
+    // Debug mode is deliberately not gated behind `experimental`: it draws a
+    // diagnostic picture and changes nothing about the skin itself, and it is
+    // the tool a user needs when something *is* wrong.
+    request.debug_mode = settings.debug_mode;
+    request.workspace = settings.ui_profile;
     reason = win::SuspendReason::NoWindow;
 }
 

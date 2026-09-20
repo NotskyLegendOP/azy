@@ -177,6 +177,30 @@ table, never by editing engine code. See [`COMPATIBILITY.md`](COMPATIBILITY.md).
   reverts, releases the surface and returns to the idle state with the observer
   watching for the next launch.
 
+### The panel map (`core/panel_map`)
+
+Premiere's docked panels are not windows (see [`FEASIBILITY.md`](FEASIBILITY.md)),
+so "where is the timeline?" has no API answer. The panel map is the answer Azy
+uses instead: a **workspace profile** of ratios and DIP heights applied to the
+client rectangle at the window's DPI. Eleven panels, six profiles (Editing, Color,
+Audio, Effects, Graphics and `Auto`, which resolves to Editing).
+
+Three properties make it safe to build on:
+
+* **It is arithmetic, not measurement.** Nothing is captured, probed or guessed
+  from pixels; the only inputs are the client rectangle, the DPI and the profile.
+  That is why resizing, maximising, changing monitor and 100–200% scaling all fall
+  out of the same numbers.
+* **It is honest about what it cannot place.** A rectangle smaller than 24 px in
+  either direction is reported `usable = false` rather than decorated. A client
+  area too small for a panel costs a missing region, never a broken layout.
+* **It is rebuilt once per change.** The engine compares the new map with the one
+  it holds and only logs/redraws when something actually moved - no timer, no
+  per-frame work.
+
+Debug mode (spec §41) draws it: one screenshot of that overlay is enough to
+correct a profile for a Premiere version or a custom workspace.
+
 ## Extension points
 
 | To add… | Touch |

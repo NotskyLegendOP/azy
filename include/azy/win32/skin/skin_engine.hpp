@@ -9,7 +9,9 @@
 
 #include <string>
 
+#include "azy/core/panel_map.hpp"
 #include "azy/win32/skin/composition_surface.hpp"
+#include "azy/win32/skin/debug_overlay.hpp"
 #include "azy/win32/skin/dwm_composer.hpp"
 #include "azy/win32/skin/overlay_veil.hpp"
 #include "azy/win32/skin/skin_types.hpp"
@@ -91,6 +93,14 @@ public:
     // screen; the detail says which.
     bool probe_on_screen(std::string* detail);
     bool overlay_visible() const { return veil_.visible(); }
+    bool debug_visible() const { return debug_.visible(); }
+    // The panel map of the last apply: what Azy currently believes about the
+    // tracked window's layout (spec §41 shows it; the region work will draw with
+    // it). Empty until a window is attached.
+    const std::vector<PanelRect>& panel_map() const { return panels_; }
+    // Where the panel map's client area sits on screen (its origin), so a caller
+    // can translate panel rectangles into screen coordinates.
+    Rect client_origin() const { return client_origin_; }
     unsigned char overlay_alpha() const { return veil_.alpha(); }
     const RingReport& ring_report() const { return surface_.report(); }
     HWND surface_window() const { return surface_.hwnd(); }
@@ -104,6 +114,9 @@ private:
     DwmComposer composer_;
     CompositionSurface surface_;
     OverlayVeil veil_;
+    DebugOverlay debug_;
+    std::vector<PanelRect> panels_;
+    Rect client_origin_;
     HWND target_ = nullptr;  // the Premiere window the surfaces were placed against
     VisualKey last_key_;
     bool has_key_ = false;

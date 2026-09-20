@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "azy/core/panel_map.hpp"
 #include "azy/core/theme.hpp"
 #include "azy/core/version.hpp"
 
@@ -42,9 +43,19 @@ struct Settings {
     bool suspend_when_minimized = true;
     bool suspend_when_inactive = false;
 
-    // --- Advanced ---
+    // --- Advanced / Compatibility ---
     bool experimental = false;         // opt-in to features that need verification
     bool safe_mode = false;
+    // Debug mode (spec §41): draw the panel map and the facts around it over the
+    // tracked window. A developer aid, off by default, costs nothing while off.
+    bool debug_mode = false;
+    // Which layout the panel model should assume (spec §39 "manual UI profile").
+    // `Auto` means "not chosen": the model uses the Editing layout.
+    WorkspaceId ui_profile = WorkspaceId::Auto;
+    // Quality preset last applied, kept so the settings UI can show `Custom`
+    // honestly across restarts. The individual appearance values are always
+    // authoritative; this is only what the combo displays.
+    PresetId preset = PresetId::Balanced;
     std::string safe_mode_reason;
 
     // Failure tracker state (persisted so repeated crashes across restarts

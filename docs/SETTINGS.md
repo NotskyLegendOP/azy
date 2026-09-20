@@ -71,6 +71,8 @@ schema=1
 | `accent` | `blue_violet` \| `blue` \| `violet` \| `neutral` | `blue_violet` | The hue of the lit 1px edge and of the whisper of colour in the overlay. `neutral` is the pre-1.2 look: a white hairline and untouched charcoal |
 | `accent_intensity` | 0–1 | `0.35` | How much of that hue reaches the pixels. 0 is identical to `accent=neutral` |
 | `glow_intensity` | 0–1 | `0` | Soft glow on the accent edge. Raises the edge alpha only - it never widens the band. Off by default: this is the one setting that looks cheap if overdone |
+| `ui_profile` | `auto` \| `editing` \| `color` \| `audio` \| `effects` \| `graphics` | `auto` | Which layout the panel model assumes (spec §39: manual UI profile). `auto` means "not chosen yet" and uses the Editing layout, which is what every Premiere install opens with |
+| `debug_mode` | bool | `0` | Draws the panel map Azy currently believes in over the tracked window, with the window handle, client rectangle, DPI, monitor and workspace. Off by default and free while off (no window is created) |
 | `animations` | bool | `0` | Fades Azy's **own** layers on state changes (80–120 ms). Premiere's widgets cannot be animated from outside a process at all, so this can never affect them. Off by default |
 | `preset` | `ultra` \| `balanced` \| `performance` \| `low_power` \| `custom` | derived | Written for information and for reproducing a look by hand; the individual keys above always win when they disagree. `custom` means the values match none of the four |
 
