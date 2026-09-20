@@ -94,7 +94,7 @@ powershell -ExecutionPolicy Bypass -File scripts\package.ps1
 # requires Inno Setup 6 (choco install innosetup)
 ```
 
-Produces `dist\AzySkin-1.1.1-setup.exe` from `packaging\AzySkin.iss`.
+Produces `dist\AzySkin-1.2.0-setup.exe` from `packaging\AzySkin.iss`.
 
 Installer properties that matter:
 

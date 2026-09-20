@@ -10,7 +10,7 @@
 ;     "Start with Windows" entry - and nothing else.
 
 #define AppName "Azy Skin"
-#define AppVersion "1.1.1"
+#define AppVersion "1.2.0"
 #define AppPublisher "Azy Skin"
 #define AppExeName "AzySkin.exe"
 

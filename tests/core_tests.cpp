@@ -432,6 +432,122 @@ void test_dpi_geometry() {
 }
 
 // ---------------------------------------------------------------------------
+// The design system's new layers: the accent (spec §7, §25), the presets (§40)
+// and the promise that "Neutral" is exactly the pre-accent look.
+void test_design_tokens() {
+    group("design tokens");
+
+    // Accent keys round-trip and are tolerant of the spellings a hand-edited file
+    // might contain.
+    AccentId accent = AccentId::Neutral;
+    CHECK(accent_from_key("blue_violet", accent));
+    CHECK(accent == AccentId::BlueViolet);
+    CHECK(accent_from_key(" Violet ", accent));
+    CHECK(accent == AccentId::Violet);
+    CHECK(accent_from_key("PURPLE", accent));
+    CHECK(accent == AccentId::Violet);
+    CHECK(accent_from_key("", accent));
+    CHECK(accent == AccentId::Neutral);   // an empty value means "no hue"
+    CHECK(!accent_from_key("neon-green", accent));
+    CHECK_STR(accent_key(AccentId::Neutral), "neutral");
+
+    // Every accent is distinguishable, and the neutral one is white.
+    const Rgba blue = accent_color(AccentId::Blue);
+    const Rgba violet = accent_color(AccentId::Violet);
+    const Rgba blue_violet = accent_color(AccentId::BlueViolet);
+    CHECK(blue.r != violet.r);
+    CHECK(blue_violet.b > blue_violet.r);          // a cool hue, as the reference's lighting is
+    const Rgba neutral = accent_color(AccentId::Neutral);
+    CHECK_INT(neutral.r, 255);
+    CHECK_INT(neutral.b, 255);
+
+    Appearance appearance;  // defaults: blue-violet at 35%
+    const ThemePalette lit = make_palette(ThemeId::AzyDarkGlass, appearance, true);
+    CHECK_NEAR(lit.accent_strength, 0.35, 1e-9);
+    CHECK(lit.accent.b > lit.accent.r);            // blue-violet, not warm
+    CHECK(lit.surface_bezel.b > lit.surface_bezel.r);  // ...and it reaches the hairline
+
+    // Neutral reproduces the pre-accent hairline exactly: same weights, white hue.
+    Appearance plain = appearance;
+    plain.accent = AccentId::Neutral;
+    const ThemePalette neutral_palette = make_palette(ThemeId::AzyDarkGlass, plain, true);
+    CHECK_NEAR(neutral_palette.accent_strength, 0.0, 1e-9);
+    Appearance legacy = appearance;
+    legacy.accent = AccentId::Neutral;
+    legacy.accent_intensity = 0.0;
+    const ThemePalette legacy_palette = make_palette(ThemeId::AzyDarkGlass, legacy, true);
+    CHECK_INT(neutral_palette.surface_bezel.r, legacy_palette.surface_bezel.r);
+    CHECK_INT(neutral_palette.surface_border.a, legacy_palette.surface_border.a);
+    CHECK_INT(neutral_palette.surface_veil.b, legacy_palette.surface_veil.b);
+
+    // The overlay carries a hint of the accent, never enough to look like a filter:
+    // a few points more blue than the charcoal's own deliberate blue tint, and far
+    // below anything that would read as "a blue window".
+    const int lit_tint = lit.surface_veil.b - lit.surface_veil.r;
+    const int neutral_tint = neutral_palette.surface_veil.b - neutral_palette.surface_veil.r;
+    CHECK(neutral_tint > 0);       // the base charcoal is blue-tinted by design
+    CHECK(neutral_tint <= 4);
+    CHECK(lit_tint >= neutral_tint);
+    CHECK(lit_tint <= 12);
+
+    // Glow raises the edge alpha only when it is asked for; zero by default.
+    CHECK_NEAR(lit.glow, 0.0, 1e-9);
+    Appearance glowing = appearance;
+    glowing.glow_intensity = 1.0;
+    const ThemePalette glow = make_palette(ThemeId::AzyDarkGlass, glowing, true);
+    CHECK(glow.surface_bezel.a > lit.surface_bezel.a);
+    CHECK(glow.surface_border.a > lit.surface_border.a);
+
+    // Presets: the four are distinct, Balanced is the default look, and the two
+    // cheap ones switch Performance mode on.
+    const PresetValues ultra = preset_values(PresetId::Ultra);
+    const PresetValues balanced = preset_values(PresetId::Balanced);
+    const PresetValues perf = preset_values(PresetId::Performance);
+    const PresetValues low = preset_values(PresetId::LowPower);
+    CHECK(ultra.glass_intensity > balanced.glass_intensity);
+    CHECK(ultra.overlay_intensity > balanced.overlay_intensity);
+    CHECK(ultra.glow_intensity > 0.0);            // Ultra is the only preset with glow
+    CHECK(balanced.glow_intensity == 0.0);
+    CHECK(balanced.animations == false);          // static by default, always
+    CHECK(!balanced.performance_mode);
+    CHECK(perf.performance_mode);
+    CHECK(low.performance_mode);
+    CHECK(perf.corner_radius_dip == 0);           // no rounding when it is about cost
+    CHECK(low.overlay_intensity < balanced.overlay_intensity);
+    Appearance defaults;                          // the shipped defaults ARE Balanced
+    CHECK_NEAR(balanced.glass_intensity, defaults.glass_intensity, 1e-9);
+    CHECK_NEAR(balanced.border_intensity, defaults.border_intensity, 1e-9);
+    CHECK_NEAR(balanced.darkness, defaults.darkness, 1e-9);
+    CHECK(balanced.corner_radius_dip == defaults.corner_radius_dip);
+    CHECK_NEAR(balanced.overlay_intensity, defaults.overlay_intensity, 1e-9);
+    CHECK(balanced.overlay == defaults.overlay);
+
+    // Applying a preset lands exactly on that preset, and moving one slider after
+    // that reports Custom instead of claiming the preset is still in effect.
+    Settings settings;
+    CHECK(settings.current_preset() == PresetId::Balanced);  // defaults are Balanced
+    settings.apply_preset(PresetId::Ultra);
+    CHECK(settings.current_preset() == PresetId::Ultra);
+    CHECK(settings.appearance.animations);
+    CHECK(settings.appearance.theme == ThemeId::AzyDarkGlass);  // a preset is not a theme
+    settings.apply_preset(PresetId::LowPower);
+    CHECK(settings.current_preset() == PresetId::LowPower);
+    CHECK(settings.performance_mode);
+    settings.appearance.border_intensity = 0.99;
+    CHECK(settings.current_preset() == PresetId::Custom);
+    // ...and Custom applied by hand means "go back to the baseline".
+    settings.apply_preset(PresetId::Custom);
+    CHECK(settings.current_preset() == PresetId::Balanced);
+
+    // Preset keys round-trip through the INI.
+    PresetId preset = PresetId::Custom;
+    CHECK(preset_from_key("low_power", preset));
+    CHECK(preset == PresetId::LowPower);
+    CHECK(preset_from_key("default", preset));
+    CHECK(preset == PresetId::Balanced);
+    CHECK(!preset_from_key("ultra-max", preset));
+}
+
 void test_settings() {
     group("settings INI round-trip");
 
@@ -447,6 +563,10 @@ void test_settings() {
     s.appearance.darkness = 0.8;
     s.appearance.overlay = false;
     s.appearance.overlay_intensity = 0.15;
+    s.appearance.accent = AccentId::Violet;
+    s.appearance.accent_intensity = 0.6;
+    s.appearance.glow_intensity = 0.25;
+    s.appearance.animations = true;
     s.performance_mode = true;
     s.suspend_when_minimized = false;
     s.suspend_when_inactive = true;
@@ -473,6 +593,10 @@ void test_settings() {
     CHECK_NEAR(loaded.appearance.darkness, 0.8, 1e-6);
     CHECK(!loaded.appearance.overlay);
     CHECK_NEAR(loaded.appearance.overlay_intensity, 0.15, 1e-6);
+    CHECK(loaded.appearance.accent == AccentId::Violet);
+    CHECK_NEAR(loaded.appearance.accent_intensity, 0.6, 1e-6);
+    CHECK_NEAR(loaded.appearance.glow_intensity, 0.25, 1e-6);
+    CHECK(loaded.appearance.animations);
     CHECK(loaded.performance_mode);
     CHECK(!loaded.suspend_when_minimized);
     CHECK(loaded.suspend_when_inactive);
@@ -769,6 +893,7 @@ int main() {
     test_theme();
     test_dpi_geometry();
     test_settings();
+    test_design_tokens();
     test_failure_tracker();
     test_strings();
     test_layout_safety();

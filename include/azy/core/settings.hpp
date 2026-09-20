@@ -61,6 +61,13 @@ struct Settings {
     // Clamps every value into its supported range. Always called after load.
     void clamp();
 
+    // Applies one of the four quality presets (spec §40) over the appearance and
+    // the performance switch. Balanced is the shipped default look.
+    void apply_preset(PresetId preset);
+    // Which preset the current values correspond to, or `Custom` when the user has
+    // moved something since. Used by the settings UI so the combo never lies.
+    PresetId current_preset() const;
+
     // "key,key2" list of features the user disabled in Advanced.
     bool feature_disabled(const std::string& key) const;
     void set_feature_disabled(const std::string& key, bool disabled);

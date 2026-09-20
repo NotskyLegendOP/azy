@@ -1,5 +1,6 @@
 #include "azy/core/settings.hpp"
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdio>
 #include <string>
@@ -81,8 +82,47 @@ void Settings::clamp() {
     appearance.darkness = std::max(0.0, std::min(1.0, appearance.darkness));
     appearance.overlay_intensity = std::max(0.0, std::min(1.0, appearance.overlay_intensity));
     appearance.corner_radius_dip = std::max(0, std::min(16, appearance.corner_radius_dip));
+    appearance.accent_intensity = std::max(0.0, std::min(1.0, appearance.accent_intensity));
+    appearance.glow_intensity = std::max(0.0, std::min(1.0, appearance.glow_intensity));
     if (schema < 1) schema = 1;
     if (failure_count < 0) failure_count = 0;
+}
+
+void Settings::apply_preset(PresetId preset) {
+    const PresetValues v = preset_values(preset);
+    appearance.glass_intensity = v.glass_intensity;
+    appearance.border_intensity = v.border_intensity;
+    appearance.corner_radius_dip = v.corner_radius_dip;
+    appearance.shadow_intensity = v.shadow_intensity;
+    appearance.darkness = v.darkness;
+    appearance.overlay = v.overlay;
+    appearance.overlay_intensity = v.overlay_intensity;
+    appearance.accent_intensity = v.accent_intensity;
+    appearance.glow_intensity = v.glow_intensity;
+    appearance.animations = v.animations;
+    performance_mode = v.performance_mode;
+    // The theme itself is a look, not a quality level: switching presets must never
+    // silently turn the skin off or back on.
+    clamp();
+}
+
+PresetId Settings::current_preset() const {
+    // Only the four real presets can match; `Custom` is the answer when none does.
+    for (PresetId preset : {PresetId::Ultra, PresetId::Balanced, PresetId::Performance, PresetId::LowPower}) {
+        const PresetValues v = preset_values(preset);
+        const bool same = std::abs(appearance.glass_intensity - v.glass_intensity) < 0.005 &&
+                          std::abs(appearance.border_intensity - v.border_intensity) < 0.005 &&
+                          appearance.corner_radius_dip == v.corner_radius_dip &&
+                          std::abs(appearance.shadow_intensity - v.shadow_intensity) < 0.005 &&
+                          std::abs(appearance.darkness - v.darkness) < 0.005 &&
+                          appearance.overlay == v.overlay &&
+                          std::abs(appearance.overlay_intensity - v.overlay_intensity) < 0.005 &&
+                          std::abs(appearance.accent_intensity - v.accent_intensity) < 0.005 &&
+                          std::abs(appearance.glow_intensity - v.glow_intensity) < 0.005 &&
+                          appearance.animations == v.animations && performance_mode == v.performance_mode;
+        if (same) return preset;
+    }
+    return PresetId::Custom;
 }
 
 bool Settings::feature_disabled(const std::string& key) const {
@@ -129,7 +169,12 @@ std::string Settings::to_ini() const {
     out += "shadow_intensity=" + fmt_double(appearance.shadow_intensity) + "\n";
     out += "darkness=" + fmt_double(appearance.darkness) + "\n";
     out += "overlay=" + bool_str(appearance.overlay) + "\n";
-    out += "overlay_intensity=" + fmt_double(appearance.overlay_intensity) + "\n\n";
+    out += "overlay_intensity=" + fmt_double(appearance.overlay_intensity) + "\n";
+    out += std::string("accent=") + accent_key(appearance.accent) + "\n";
+    out += "accent_intensity=" + fmt_double(appearance.accent_intensity) + "\n";
+    out += "glow_intensity=" + fmt_double(appearance.glow_intensity) + "\n";
+    out += "animations=" + bool_str(appearance.animations) + "\n";
+    out += std::string("preset=") + preset_key(current_preset()) + "\n\n";
 
     out += "[performance]\n";
     out += "performance_mode=" + bool_str(performance_mode) + "\n";
@@ -154,7 +199,8 @@ std::string Settings::to_ini() const {
     static const char* kKnown[] = {
         "enabled", "start_with_windows", "apply_automatically", "theme", "glass_intensity",
         "border_intensity", "corner_radius", "shadow_intensity", "darkness", "overlay",
-        "overlay_intensity", "performance_mode",
+        "overlay_intensity", "accent", "accent_intensity", "glow_intensity", "animations", "preset",
+        "performance_mode",
         "suspend_while_minimized", "suspend_while_inactive", "experimental", "safe_mode",
         "safe_mode_reason", "failures", "failure_window_start", "failure_last", "failure_tripped",
         "last_premiere_version", "schema"};
@@ -210,6 +256,26 @@ Settings Settings::from_ini(const std::string& text, std::vector<std::string>* w
             if (parse_bool(value, v)) s.appearance.overlay = v;
         } else if (key == "overlay_intensity") {
             s.appearance.overlay_intensity = read_double(value, s.appearance.overlay_intensity);
+        } else if (key == "accent") {
+            AccentId accent = AccentId::BlueViolet;
+            if (accent_from_key(value, accent)) {
+                s.appearance.accent = accent;
+            } else if (warnings) {
+                warnings->push_back("unknown accent '" + value + "'; using blue-violet");
+            }
+        } else if (key == "accent_intensity") {
+            s.appearance.accent_intensity = read_double(value, s.appearance.accent_intensity);
+        } else if (key == "glow_intensity") {
+            s.appearance.glow_intensity = read_double(value, s.appearance.glow_intensity);
+        } else if (key == "animations") {
+            bool v = false;
+            if (parse_bool(value, v)) s.appearance.animations = v;
+        } else if (key == "preset") {
+            // Written for information (and so a preset can be reproduced by hand);
+            // the individual keys above are always the authoritative values, which
+            // is what keeps a hand-edited file predictable.
+            PresetId preset = PresetId::Balanced;
+            if (preset_from_key(value, preset)) s.extra["preset"] = preset_key(preset);
         } else if (key == "performance_mode") {
             bool v = false;
             if (parse_bool(value, v)) s.performance_mode = v;

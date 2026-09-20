@@ -68,6 +68,11 @@ schema=1
 | `darkness` | 0–1 | `0.50` | Position on the charcoal ramp between "lifted" (46,47,51) and "deep" (11,11,13). Never pure black at either end |
 | `overlay` | bool | `1` | Cover the **whole** window with one translucent charcoal layer (the overlay), instead of decorating only its edge. Off = the ring alone |
 | `overlay_intensity` | 0–1 | `0.45` | How strong that layer is: alpha 5% → 60%, and the edge falloff deepens with it (10 px with the overlay off, ~40 px at the default, ~72 px at 100%). 0 is identical to `overlay=0` |
+| `accent` | `blue_violet` \| `blue` \| `violet` \| `neutral` | `blue_violet` | The hue of the lit 1px edge and of the whisper of colour in the overlay. `neutral` is the pre-1.2 look: a white hairline and untouched charcoal |
+| `accent_intensity` | 0–1 | `0.35` | How much of that hue reaches the pixels. 0 is identical to `accent=neutral` |
+| `glow_intensity` | 0–1 | `0` | Soft glow on the accent edge. Raises the edge alpha only - it never widens the band. Off by default: this is the one setting that looks cheap if overdone |
+| `animations` | bool | `0` | Fades Azy's **own** layers on state changes (80–120 ms). Premiere's widgets cannot be animated from outside a process at all, so this can never affect them. Off by default |
+| `preset` | `ultra` \| `balanced` \| `performance` \| `low_power` \| `custom` | derived | Written for information and for reproducing a look by hand; the individual keys above always win when they disagree. `custom` means the values match none of the four |
 
 ### `[performance]`
 

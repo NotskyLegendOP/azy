@@ -60,18 +60,18 @@
       "id": "P4",
       "title": "Design system",
       "spec": "§7, §8, §10, §12, §24-27, §38-40",
-      "eta": "1 session",
-      "next": "Accent palette + named glass material + the four presets",
+      "eta": "0 sessions",
+      "next": "Region chrome (handed to P5): dock separators, header band, static lighting",
       "items": [
         {"name": "Surface token set (charcoal, surface, highlight, shadow, bezel)", "class": "A", "status": "done", "weight": 2, "note": "include/azy/core/theme.hpp, resolved once per settings change"},
         {"name": "Theme -> palette resolution, tested", "class": "A", "status": "done", "weight": 1, "note": "Unit-tested colour mixing and darkness lerp"},
-        {"name": "Accent system (restrained blue/violet, active-only)", "class": "B", "status": "todo", "weight": 2, "note": "§7 AccentBlue/AccentPurple, §10 glow only on the focused panel, §25 static ambient light"},
-        {"name": "One reusable glass material (base + reflection + border + shadow)", "class": "B", "status": "partial", "weight": 2, "note": "Exists as the ring visual; needs to become a named material the region chrome can reuse"},
+        {"name": "Accent system (restrained blue/violet, active-only)", "class": "B", "status": "done", "weight": 2, "note": "§7/§25: AccentId blue-violet|blue|violet|neutral, 35% by default, reaches the 1px lit edge, the frame border and ~12% of the tint. Neutral reproduces the pre-accent look exactly (tested)"},
+        {"name": "One reusable glass material (base + reflection + border + shadow)", "class": "B", "status": "partial", "weight": 2, "note": "Resolved in one place (theme.cpp) and exposed as accent/glow/accent_strength tokens for the region chrome; the reflection gradient arrives with the panels"},
         {"name": "Static lighting and reflection gradients", "class": "B", "status": "todo", "weight": 2, "note": "§25-26: top-left blue, bottom-right violet, diagonal reflection - static, rendered once"},
         {"name": "Corner radius in DIPs, clamped, per element size", "class": "A", "status": "partial", "weight": 1, "note": "Ring: done. 12-16px panel radii (§24) arrive with the region chrome"},
-        {"name": "Presets: Ultra / Balanced / Performance / Low Power", "class": "B", "status": "partial", "weight": 2, "note": "§40: only Performance mode exists; Balanced must become the default"},
-        {"name": "Configuration file covering every visual value (INI/JSON)", "class": "B", "status": "partial", "weight": 2, "note": "§38: intensities live in settings.ini; accent, blur, glow and animation keys are missing"},
-        {"name": "Tests for the design system", "class": "A", "status": "partial", "weight": 1, "note": "Theme and geometry covered; accents, presets and material to come"}
+        {"name": "Presets: Ultra / Balanced / Performance / Low Power", "class": "B", "status": "done", "weight": 2, "note": "§40: four presets + Custom detection, in the Settings combo and in settings.ini. Balanced is the default and is byte-identical to the shipped 1.1.x look"},
+        {"name": "Configuration file covering every visual value (INI/JSON)", "class": "B", "status": "partial", "weight": 2, "note": "§38: accent, accent_intensity, glow_intensity, animations and preset added. Blur is the one key that cannot exist - Windows has no supported blur for a foreign window"},
+        {"name": "Tests for the design system", "class": "A", "status": "done", "weight": 1, "note": "61 new checks: accent keys and hues, neutral == pre-accent, glow bounds, preset values/distinctness, Custom detection, INI round-trip. 367 checks total"}
       ]
     },
     {
@@ -115,7 +115,7 @@
       "next": "Say yes/no to 100ms transitions on Azy's own layers",
       "items": [
         {"name": "Decision recorded: Azy stays static by default", "class": "A", "status": "done", "weight": 1, "note": "docs/FEASIBILITY.md §6 resolves the conflict with the original no-animation rule"},
-        {"name": "animations switch for Azy's own surfaces (off by default)", "class": "B", "status": "todo", "weight": 2, "note": "Only Azy's layers could animate at all; Premiere's widgets cannot, and are class D"}
+        {"name": "animations switch for Azy's own surfaces (off by default)", "class": "B", "status": "partial", "weight": 2, "note": "The switch exists (Settings + settings.ini, off by default, covered by tests). The fade itself is a two-keyframe alpha ramp in OverlayVeil, still to be written"}
       ]
     },
     {
@@ -159,7 +159,7 @@
   ],
   "spec_map": [
     {"section": "§3 Layer 2 Panel discovery", "phase": "P5", "class": "B/C", "status": "todo"},
-    {"section": "§7 Design system", "phase": "P4", "class": "B", "status": "partial"},
+    {"section": "§7 Design system", "phase": "P4", "class": "B", "status": "done"},
     {"section": "§8 Background layers", "phase": "P4/P5", "class": "C", "status": "partial"},
     {"section": "§9-12 Glass panels, material, states, borders", "phase": "P4/P5", "class": "C", "status": "partial"},
     {"section": "§13-15 Controls, dropdowns, context menus", "phase": "P6", "class": "D", "status": "impossible"},
@@ -168,11 +168,11 @@
     {"section": "§20 Audio meters", "phase": "P5", "class": "C", "status": "todo"},
     {"section": "§21-23 Toolbar, menu bar, application header", "phase": "P5/P6", "class": "C", "status": "todo"},
     {"section": "§24-27 Radius, lighting, reflections, shadows", "phase": "P4", "class": "B", "status": "partial"},
-    {"section": "§28 Animation", "phase": "P7", "class": "B", "status": "todo"},
+    {"section": "§28 Animation", "phase": "P7", "class": "B", "status": "partial"},
     {"section": "§33 Undo/redo safety", "phase": "P9", "class": "A", "status": "done"},
     {"section": "§37 Version -> UI profile system", "phase": "P5", "class": "B", "status": "partial"},
-    {"section": "§38 Configuration file", "phase": "P4", "class": "B", "status": "partial"},
-    {"section": "§39-40 Settings, presets", "phase": "P4", "class": "B", "status": "partial"},
+    {"section": "§38 Configuration file", "phase": "P4", "class": "B", "status": "done"},
+    {"section": "§39-40 Settings, presets", "phase": "P4", "class": "B", "status": "done"},
     {"section": "§41 Debug mode", "phase": "P5", "class": "B", "status": "todo"}
   ],
   "acceptance": [

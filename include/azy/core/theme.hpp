@@ -21,6 +21,56 @@ enum class ThemeId {
     Original = 2,      // Azy stays out of the way entirely
 };
 
+// The accent: the single hue Azy uses for illuminated borders and the whisper of
+// colour in the tint. Restraint is the point - it is a 1px hairline and a few
+// percent of colour in a gradient, never a glow around a control. `Neutral` is the
+// pre-1.2 look (a white hairline and untouched charcoal), so the accent can be
+// turned off as well as tuned.
+enum class AccentId {
+    BlueViolet = 0,  // default: blue-violet, matching the reference's lighting
+    Blue = 1,
+    Violet = 2,
+    Neutral = 3,     // no hue: the exact 1.1.x appearance
+};
+
+const char* accent_name(AccentId accent);
+const char* accent_key(AccentId accent);              // stable INI identifier
+bool accent_from_key(const std::string& key, AccentId& out);
+Rgba accent_color(AccentId accent);                   // full-strength hue
+
+// One of the four quality presets (spec §40). Balanced is the default and matches
+// the shipped look exactly, so switching presets is never a surprise: Ultra adds
+// depth, Performance and Low Power take it away.
+enum class PresetId {
+    Ultra = 0,
+    Balanced = 1,
+    Performance = 2,
+    LowPower = 3,
+    Custom = 4,  // not a preset: the values no longer match any of the four
+};
+
+const char* preset_name(PresetId preset);
+const char* preset_key(PresetId preset);              // stable INI identifier
+bool preset_from_key(const std::string& key, PresetId& out);
+
+// Everything a preset sets. Kept as data (not code) so the settings UI, the INI
+// and the tests all read the same table.
+struct PresetValues {
+    double glass_intensity = 0.55;
+    double border_intensity = 0.60;
+    int corner_radius_dip = 8;
+    double shadow_intensity = 0.40;
+    double darkness = 0.50;
+    bool overlay = true;
+    double overlay_intensity = 0.45;
+    double accent_intensity = 0.35;
+    double glow_intensity = 0.0;
+    bool performance_mode = false;
+    bool animations = false;
+};
+
+PresetValues preset_values(PresetId preset);
+
 // User-tunable appearance knobs (0..1 unless noted). Defaults are deliberately
 // conservative: the result should read as "premium dark glass", not RGB gaming.
 struct Appearance {
@@ -34,6 +84,19 @@ struct Appearance {
     // (the "skin everything" look), plus a proportionally wider edge falloff.
     bool overlay = true;             // on by default: it is what makes the skin read
     double overlay_intensity = 0.45; // how opaque that sheet is, 0 = invisible
+
+    // The accent, applied to the hairline/bezel and - faintly - to the overlay, so
+    // the whole treatment reads as one material. `accent_intensity` is how much of
+    // the hue reaches the pixels; 0 is identical to `AccentId::Neutral`.
+    AccentId accent = AccentId::BlueViolet;
+    double accent_intensity = 0.35;
+    // Optional soft glow around the accent hairline (spec §10, §25). Off by
+    // default: it is the one setting here that can look cheap if overdone.
+    double glow_intensity = 0.0;
+    // Spec §28. Azy's own layers are static; this only ever applied to them (the
+    // widgets inside Premiere cannot be animated from outside at all), and the
+    // original brief asked for no animation, so it ships off.
+    bool animations = false;
 };
 
 // Everything the renderers need, resolved once per settings change.
@@ -60,6 +123,13 @@ struct ThemePalette {
     Rgba surface_veil;
     int corner_radius_dip = 0;   // 0 = square
     bool shadow_enabled = false; // disabled in performance mode
+
+    // The resolved accent material, exposed for the region work: `accent` is the
+    // hue at full strength, `accent_strength` how much of it is in use (already
+    // zeroed for `Neutral`), `glow` the requested glow (0 = none).
+    Rgba accent;
+    double accent_strength = 0.0;
+    double glow = 0.0;
 };
 
 // Builds the palette for a theme. `dark_frame_supported` tells the palette

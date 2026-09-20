@@ -4,6 +4,48 @@ All notable changes to Azy Skin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] — 2026-09-20
+
+The design system arrived: one accent, four presets, and two settings that were
+missing from the configuration file.
+
+### Added
+
+* **An accent colour** (Settings → Appearance → *Accent*): blue-violet by default,
+  with blue, violet and *Neutral* as the alternatives. It is used the way the
+  reference uses it - as light, not as paint: a 1px lit edge, the window frame
+  border, and about a tenth of the hue inside the overlay so the tint belongs to
+  the same material as the edge. *Neutral* reproduces the previous look exactly
+  (a white hairline and untouched charcoal), and the strength slider goes to zero,
+  so the accent can be switched off as well as tuned.
+* **Accent glow** (*Glow intensity*): raises the alpha of that lit edge. It never
+  widens the band - at 100% it is still an edge rather than a halo. Off by default,
+  because it is the one setting here that looks cheap when overdone.
+* **The four quality presets** (spec §40): *Ultra*, *Balanced* (the recommended
+  default and byte-identical to the 1.1.x look), *Performance* and *Low power*.
+  One combo sets glass, border, radius, shadow, darkness, overlay strength, accent,
+  glow, animations and Performance mode together. The combo reports *Custom* as
+  soon as any single slider no longer matches, so it never claims a preset that is
+  not in effect.
+* **`animations`** (Settings → Appearance, off by default): a short fade for Azy's
+  *own* layers. Premiere's interface cannot be animated from an outside process at
+  all, so this can only ever affect Azy's ring and overlay - which is why the
+  default is off and why the earlier "no animation" rule still holds.
+* New `settings.ini` keys: `accent`, `accent_intensity`, `glow_intensity`,
+  `animations`, `preset` (written for information; the individual keys always win).
+
+### Fixed
+
+* `theme.cpp` resolves the accent once, so the hairline, the frame border and the
+  overlay tint cannot drift apart when one of them is changed.
+
+### Notes
+
+* No behaviour changes for anyone who does nothing: the defaults *are* Balanced.
+* 61 new portable-core checks (367 total) cover the accent keys and hues, the
+  promise that *Neutral* equals the pre-accent look, glow bounds, preset values and
+  their distinctness, *Custom* detection and the new INI round-trip.
+
 ## [1.1.1] — 2026-09-20
 
 The fix for "I don't see anything": the two ways Azy could be running perfectly while

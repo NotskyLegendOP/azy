@@ -27,7 +27,142 @@ constexpr Rgba kHighlight = {255, 255, 255, 255};
 constexpr Rgba kShadow = {0, 0, 0, 255};
 constexpr Rgba kText = {228, 229, 233, 255};
 
+// The accent hues. Every one of them is a *light* colour: the accent is only ever
+// used as a thin illuminated edge, so what matters is that it reads as a highlight
+// against the charcoal, not that it is saturated. None of these is neon.
+constexpr Rgba kAccentBlueViolet = {124, 141, 255, 255};
+constexpr Rgba kAccentBlue = {88, 150, 255, 255};
+constexpr Rgba kAccentViolet = {170, 126, 255, 255};
+constexpr Rgba kAccentNeutral = {255, 255, 255, 255};  // = the pre-accent hairline
+
 }  // namespace
+
+const char* accent_name(AccentId accent) {
+    switch (accent) {
+        case AccentId::BlueViolet: return "Blue-violet";
+        case AccentId::Blue: return "Blue";
+        case AccentId::Violet: return "Violet";
+        case AccentId::Neutral: return "Neutral";
+    }
+    return "Blue-violet";
+}
+
+const char* accent_key(AccentId accent) {
+    switch (accent) {
+        case AccentId::BlueViolet: return "blue_violet";
+        case AccentId::Blue: return "blue";
+        case AccentId::Violet: return "violet";
+        case AccentId::Neutral: return "neutral";
+    }
+    return "blue_violet";
+}
+
+bool accent_from_key(const std::string& key, AccentId& out) {
+    const std::string k = to_lower(trim(key));
+    if (k == "blue_violet" || k == "blueviolet") { out = AccentId::BlueViolet; return true; }
+    if (k == "blue") { out = AccentId::Blue; return true; }
+    if (k == "violet" || k == "purple") { out = AccentId::Violet; return true; }
+    // Both the explicit key and the empty value mean "no hue".
+    if (k == "neutral" || k == "none" || k == "off" || k.empty()) { out = AccentId::Neutral; return true; }
+    return false;
+}
+
+Rgba accent_color(AccentId accent) {
+    switch (accent) {
+        case AccentId::BlueViolet: return kAccentBlueViolet;
+        case AccentId::Blue: return kAccentBlue;
+        case AccentId::Violet: return kAccentViolet;
+        case AccentId::Neutral: return kAccentNeutral;
+    }
+    return kAccentBlueViolet;
+}
+
+const char* preset_name(PresetId preset) {
+    switch (preset) {
+        case PresetId::Ultra: return "Ultra";
+        case PresetId::Balanced: return "Balanced";
+        case PresetId::Performance: return "Performance";
+        case PresetId::LowPower: return "Low power";
+        case PresetId::Custom: return "Custom";
+    }
+    return "Balanced";
+}
+
+const char* preset_key(PresetId preset) {
+    switch (preset) {
+        case PresetId::Ultra: return "ultra";
+        case PresetId::Balanced: return "balanced";
+        case PresetId::Performance: return "performance";
+        case PresetId::LowPower: return "low_power";
+        case PresetId::Custom: return "custom";
+    }
+    return "balanced";
+}
+
+bool preset_from_key(const std::string& key, PresetId& out) {
+    const std::string k = to_lower(trim(key));
+    if (k == "ultra") { out = PresetId::Ultra; return true; }
+    if (k == "balanced" || k == "default") { out = PresetId::Balanced; return true; }
+    if (k == "performance" || k == "perf") { out = PresetId::Performance; return true; }
+    if (k == "low_power" || k == "lowpower" || k == "low-power") { out = PresetId::LowPower; return true; }
+    if (k == "custom") { out = PresetId::Custom; return true; }
+    return false;
+}
+
+PresetValues preset_values(PresetId preset) {
+    // Balanced is exactly the shipped default look (1.1.x values plus the new
+    // accent at its restrained default), so it is the one preset that changes
+    // nothing for an existing user.
+    PresetValues v;
+    switch (preset) {
+        case PresetId::Ultra:
+            v.glass_intensity = 0.85;
+            v.border_intensity = 0.80;
+            v.corner_radius_dip = 12;
+            v.shadow_intensity = 0.60;
+            v.darkness = 0.58;
+            v.overlay = true;
+            v.overlay_intensity = 0.58;
+            v.accent_intensity = 0.50;
+            v.glow_intensity = 0.35;
+            v.performance_mode = false;
+            v.animations = true;
+            break;
+        case PresetId::Balanced:
+        case PresetId::Custom:  // "Custom" applied means "back to the baseline values"
+            break;
+        case PresetId::Performance:
+            // Fewer effects, no rounding, no shadow: the ring is at its cheapest
+            // and the overlay stays, because that is what makes the skin read.
+            v.glass_intensity = 0.35;
+            v.border_intensity = 0.45;
+            v.corner_radius_dip = 0;
+            v.shadow_intensity = 0.20;
+            v.darkness = 0.50;
+            v.overlay = true;
+            v.overlay_intensity = 0.45;
+            v.accent_intensity = 0.30;
+            v.glow_intensity = 0.0;
+            v.performance_mode = true;
+            v.animations = false;
+            break;
+        case PresetId::LowPower:
+            // The floor: a hairline, a light tint and nothing else.
+            v.glass_intensity = 0.20;
+            v.border_intensity = 0.30;
+            v.corner_radius_dip = 0;
+            v.shadow_intensity = 0.0;
+            v.darkness = 0.50;
+            v.overlay = true;
+            v.overlay_intensity = 0.30;
+            v.accent_intensity = 0.20;
+            v.glow_intensity = 0.0;
+            v.performance_mode = true;
+            v.animations = false;
+            break;
+    }
+    return v;
+}
 
 Rgba mix_color(Rgba a, Rgba b, double t) {
     const double k = clamp01(t);
@@ -96,6 +231,17 @@ ThemePalette make_palette(ThemeId theme, const Appearance& appearance, bool dark
     const Rgba base = lerp_darkness(kCharcoalLifted, kCharcoalDeep, darkness);
     const Rgba surface = lerp_darkness(kSurfaceLifted, kSurfaceDeep, darkness);
 
+    // The accent is resolved once here. `Neutral` (and a strength of zero) has to
+    // reproduce the pre-accent look exactly, which it does because every use below
+    // mixes towards a white hairline with the same weights.
+    const Rgba accent_hue = accent_color(appearance.accent);
+    const double accent_strength =
+        appearance.accent == AccentId::Neutral ? 0.0 : clamp01(appearance.accent_intensity);
+    const double glow = clamp01(appearance.glow_intensity);
+    p.accent = accent_hue;
+    p.accent_strength = accent_strength;
+    p.glow = glow;
+
     // Opaque themes never use translucency; that is the whole point of Azy Dark
     // (and of Original, which is fully transparent).
     const bool glassy = theme == ThemeId::AzyDarkGlass;
@@ -127,8 +273,13 @@ ThemePalette make_palette(ThemeId theme, const Appearance& appearance, bool dark
     // A purely *dark* edge treatment is invisible over Premiere's own near-black
     // panels, which is why the bezel is lighter than the surface rather than
     // darker.
-    p.surface_bezel = with_alpha(mix_color(kHighlight, base, 0.70), 0.05 + 0.12 * border);
-    p.surface_border = with_alpha(mix_color(kHighlight, surface, 0.35), 0.04 + 0.09 * border);
+    // The accent reaches the two edge colours and nothing else: the 1px bezel and
+    // the frame border. A glow (off by default) only raises their alpha - it never
+    // widens the band, so a rested eye reads it as a lit edge rather than a halo.
+    const Rgba lit = mix_color(kHighlight, accent_hue, accent_strength);
+    const double lit_alpha = 1.0 + 0.55 * glow;
+    p.surface_bezel = with_alpha(mix_color(lit, base, 0.70), (0.05 + 0.12 * border) * lit_alpha);
+    p.surface_border = with_alpha(mix_color(lit, surface, 0.35), (0.04 + 0.09 * border) * lit_alpha);
     p.surface_highlight = with_alpha(kHighlight, 0.02 + 0.05 * border);
     p.surface_shadow = with_alpha(kShadow, 0.10 + 0.22 * shadow);
     p.shadow_enabled = shadow > 0.001;
@@ -139,7 +290,10 @@ ThemePalette make_palette(ThemeId theme, const Appearance& appearance, bool dark
     // being a hard edge: 0 disables it completely, anything above starts visible.
     if (appearance.overlay && appearance.overlay_intensity > 0.001) {
         const double strength = clamp01(appearance.overlay_intensity);
-        const Rgba veil_color = lerp_darkness(Rgba{22, 23, 26, 255}, kCharcoalDeep, darkness);
+        Rgba veil_color = lerp_darkness(Rgba{22, 23, 26, 255}, kCharcoalDeep, darkness);
+        // A whisper of the accent in the sheet: enough that the tint belongs to the
+        // same material as the lit edge, far too little to read as "a blue window".
+        veil_color = mix_color(veil_color, accent_hue, 0.12 * accent_strength);
         p.surface_veil = with_alpha(veil_color, 0.05 + 0.55 * strength);
     } else {
         p.surface_veil = with_alpha(kShadow, 0.0);
@@ -150,7 +304,8 @@ ThemePalette make_palette(ThemeId theme, const Appearance& appearance, bool dark
     p.apply_frame_colors = visible && dark_frame_supported;
     p.frame_caption = mix_color(base, surface, 0.35);
     p.frame_caption.a = 255;
-    p.frame_border = with_alpha(mix_color(kHighlight, base, 0.55), 0.06 + 0.10 * border);
+    p.frame_border = with_alpha(mix_color(mix_color(kHighlight, accent_hue, accent_strength * 0.6), base, 0.55),
+                                0.06 + 0.10 * border);
     p.frame_text = kText;
     return p;
 }

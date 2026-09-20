@@ -41,6 +41,11 @@ enum ControlId : int {
     kShadowLabel,
     kDarkness,
     kDarknessLabel,
+    kPresetCombo,
+    kAccentCombo,
+    kGlow,
+    kGlowLabel,
+    kAnimationsCheck,
     kOverlayCheck,
     kOverlay,
     kOverlayLabel,
@@ -244,6 +249,24 @@ void SettingsWindow::layout(int dpi) {
     // --- Appearance --------------------------------------------------------
     label(kSectionAppearance, kMargin, y, width, 16, 0, L"APPEARANCE", font_small_);
     y += 18;
+    // Quality preset first: it is the one control that changes several sliders at
+    // once, so it belongs above them.
+    label(-1, kMargin, y, kLabelWidth, kRowHeight, SS_CENTERIMAGE, L"&Preset", font_);
+    {
+        HWND combo = CreateWindowExW(0, L"COMBOBOX", L"",
+                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST,
+                                     px(kMargin + kLabelWidth), px(y), px(200), px(200), hwnd_,
+                                     id_of(kPresetCombo), nullptr, nullptr);
+        if (combo != nullptr) {
+            if (font_ != nullptr) SendMessageW(combo, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
+            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Ultra"));
+            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Balanced (recommended)"));
+            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Performance"));
+            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Low power"));
+            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Custom"));
+        }
+    }
+    y += kRowHeight + 4;
     label(-1, kMargin, y, kLabelWidth, kRowHeight, SS_CENTERIMAGE, L"&Theme", font_);
     {
         HWND combo = CreateWindowExW(0, L"COMBOBOX", L"",
@@ -255,6 +278,21 @@ void SettingsWindow::layout(int dpi) {
             SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Azy Dark Glass"));
             SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Azy Dark"));
             SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Original"));
+        }
+    }
+    y += kRowHeight + 4;
+    label(-1, kMargin, y, kLabelWidth, kRowHeight, SS_CENTERIMAGE, L"&Accent", font_);
+    {
+        HWND combo = CreateWindowExW(0, L"COMBOBOX", L"",
+                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST,
+                                     px(kMargin + kLabelWidth), px(y), px(200), px(200), hwnd_,
+                                     id_of(kAccentCombo), nullptr, nullptr);
+        if (combo != nullptr) {
+            if (font_ != nullptr) SendMessageW(combo, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
+            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Blue-violet"));
+            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Blue"));
+            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Violet"));
+            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Neutral"));
         }
     }
     y += kRowHeight + 4;
@@ -277,6 +315,7 @@ void SettingsWindow::layout(int dpi) {
         {kShadow, kShadowLabel, L"&Shadow intensity", 100},
         {kDarkness, kDarknessLabel, L"Overall dar&kness", 100},
         {kOverlay, kOverlayLabel, L"&Overlay strength", 100},
+        {kGlow, kGlowLabel, L"Accent &glow", 100},
     };
     const int slider_width = 150;
     for (const SliderRow& row : rows) {
@@ -296,6 +335,11 @@ void SettingsWindow::layout(int dpi) {
         y += kRowHeight + 2;
     }
     y += kSectionGap;
+
+    // Spec §28 in one checkbox. Azy's own layers are static, and the brief asked
+    // for no animation, so this is off and stays off unless it is switched on.
+    checkbox(kAnimationsCheck, y, width, L"Fade Azy's own layers when the skin &animates (80-120 ms)");
+    y += kRowHeight + kSectionGap;
 
     // --- Performance -------------------------------------------------------
     label(kSectionPerformance, kMargin, y, width, 16, 0, L"PERFORMANCE", font_small_);
@@ -358,6 +402,26 @@ void SettingsWindow::sync_controls() {
     check(kSuspendInactive, settings_.suspend_when_inactive);
     check(kExperimental, settings_.experimental);
     check(kOverlayCheck, settings_.appearance.overlay);
+    check(kAnimationsCheck, settings_.appearance.animations);
+
+    if (HWND combo = GetDlgItem(hwnd_, kPresetCombo)) {
+        // Custom is index 4 and is only ever shown when the values really are the
+        // user's own: the combo must never claim a preset that is not in effect.
+        const PresetId preset = settings_.current_preset();
+        const int index = preset == PresetId::Ultra         ? 0
+                          : preset == PresetId::Balanced    ? 1
+                          : preset == PresetId::Performance ? 2
+                          : preset == PresetId::LowPower    ? 3
+                                                            : 4;
+        SendMessageW(combo, CB_SETCURSEL, index, 0);
+    }
+    if (HWND combo = GetDlgItem(hwnd_, kAccentCombo)) {
+        const int index = settings_.appearance.accent == AccentId::Blue   ? 1
+                          : settings_.appearance.accent == AccentId::Violet ? 2
+                          : settings_.appearance.accent == AccentId::Neutral ? 3
+                                                                            : 0;
+        SendMessageW(combo, CB_SETCURSEL, index, 0);
+    }
 
     if (HWND combo = GetDlgItem(hwnd_, kThemeCombo)) {
         const int index = settings_.appearance.theme == ThemeId::AzyDark      ? 1
@@ -372,6 +436,7 @@ void SettingsWindow::sync_controls() {
     slider(kShadow, static_cast<int>(settings_.appearance.shadow_intensity * 100.0 + 0.5));
     slider(kDarkness, static_cast<int>(settings_.appearance.darkness * 100.0 + 0.5));
     slider(kOverlay, static_cast<int>(settings_.appearance.overlay_intensity * 100.0 + 0.5));
+    slider(kGlow, static_cast<int>(settings_.appearance.glow_intensity * 100.0 + 0.5));
 
     // The strength only means anything while the overlay is on.
     if (HWND control = GetDlgItem(hwnd_, kOverlay)) {
@@ -397,6 +462,7 @@ void SettingsWindow::update_slider_labels() {
     set(kShadowLabel, format_percent(settings_.appearance.shadow_intensity));
     set(kDarknessLabel, format_percent(settings_.appearance.darkness));
     set(kOverlayLabel, format_percent(settings_.appearance.overlay_intensity));
+    set(kGlowLabel, format_percent(settings_.appearance.glow_intensity));
 }
 
 void SettingsWindow::update_status(const Status& status, bool skin_enabled, bool suspended) {
@@ -522,7 +588,7 @@ LRESULT SettingsWindow::handle(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
                                    control_id == kSectionAdvanced || control_id == kGlassLabel ||
                                    control_id == kBorderLabel || control_id == kRadiusLabel ||
                                    control_id == kShadowLabel || control_id == kDarknessLabel ||
-                                   control_id == kOverlayLabel;
+                                   control_id == kOverlayLabel || control_id == kGlowLabel;
             SetTextColor(dc, secondary ? kDimTextColor : kTextColor);
             SetBkColor(dc, kBackgroundColor);
             return reinterpret_cast<LRESULT>(background_);
@@ -547,6 +613,7 @@ LRESULT SettingsWindow::handle(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
                 case kShadow: settings_.appearance.shadow_intensity = value / 100.0; break;
                 case kDarkness: settings_.appearance.darkness = value / 100.0; break;
                 case kOverlay: settings_.appearance.overlay_intensity = value / 100.0; break;
+                case kGlow: settings_.appearance.glow_intensity = value / 100.0; break;
                 default: return 0;
             }
             update_slider_labels();
@@ -593,6 +660,39 @@ LRESULT SettingsWindow::handle(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
                     return 0;
                 case kSuspendInactive:
                     settings_.suspend_when_inactive =
+                        SendMessageW(GetDlgItem(hwnd_, id), BM_GETCHECK, 0, 0) == BST_CHECKED;
+                    push_settings();
+                    return 0;
+                case kPresetCombo:
+                    if (notification == CBN_SELCHANGE) {
+                        const int index = static_cast<int>(SendMessageW(GetDlgItem(hwnd_, id), CB_GETCURSEL, 0, 0));
+                        // "Custom" is a state, not a preset: selecting it changes
+                        // nothing (there is no way back to values that were never
+                        // recorded), so it is simply left alone.
+                        const PresetId preset = index == 0   ? PresetId::Ultra
+                                                : index == 1 ? PresetId::Balanced
+                                                : index == 2 ? PresetId::Performance
+                                                : index == 3 ? PresetId::LowPower
+                                                             : PresetId::Custom;
+                        if (preset != PresetId::Custom) {
+                            settings_.apply_preset(preset);
+                            sync_controls();
+                            push_settings();
+                        }
+                    }
+                    return 0;
+                case kAccentCombo:
+                    if (notification == CBN_SELCHANGE) {
+                        const int index = static_cast<int>(SendMessageW(GetDlgItem(hwnd_, id), CB_GETCURSEL, 0, 0));
+                        settings_.appearance.accent = index == 1   ? AccentId::Blue
+                                                      : index == 2 ? AccentId::Violet
+                                                      : index == 3 ? AccentId::Neutral
+                                                                   : AccentId::BlueViolet;
+                        push_settings();
+                    }
+                    return 0;
+                case kAnimationsCheck:
+                    settings_.appearance.animations =
                         SendMessageW(GetDlgItem(hwnd_, id), BM_GETCHECK, 0, 0) == BST_CHECKED;
                     push_settings();
                     return 0;
