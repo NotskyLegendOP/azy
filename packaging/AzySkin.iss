@@ -57,7 +57,9 @@ ArchitecturesInstallIn64BitMode=x64
 #endif
 MinVersion=10.0.17763
 LicenseFile=..\LICENSE
-InfoBeforeFile=packaging\info-before.txt
+; Relative to this script's own directory (not the repository root), which is
+; how Inno resolves it - hence no packaging\ prefix.
+InfoBeforeFile=info-before.txt
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
