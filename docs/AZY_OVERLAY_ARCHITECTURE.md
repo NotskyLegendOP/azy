@@ -283,7 +283,12 @@ Design rules, all of them implemented:
   kill the timer, join the capture worker and release every GPU object; the device
   itself is released with the overlay. Nothing is left running after "Exit" or
   after Premiere closes.
-* **Budget:** the executable grew from 559,616 to 613,888 bytes (61.4% of the 1 MB
+* **The window-sized allocations do not survive being hidden.** Hiding the duplicate
+  (skin off, suspended, minimized, Premiere gone) releases the staging texture and
+  shrinks the swap chain to 1x1, so an idle Azy holds the device and the compiled
+  shaders - the small things that make turning the skin back on instant - and not two
+  full-screen surfaces. Everything is resized back on the next show.
+* **Budget:** the executable grew from 559,616 to 614,912 bytes (61.4% of the 1 MB
   budget) — VERIFIED by `tools/inspect-pe.py`. No CPU or GPU percentage is claimed
   anywhere: none has been measured on a real machine, and the brief forbids numbers
   that were not measured.
@@ -312,7 +317,7 @@ user is not looking.
 | Newest captured frame's age | the worker stamps every frame it copies | measured |
 | Render pacing (idle/active) and the pass-through/panel counts | the overlay's own stats | measured |
 | Overlay state (`on screen`, note, supported on this host) | the engine's overlay report | measured |
-| GPU resources | the *sizes* of the swap chain buffers and the capture texture | reported as an inventory only — no VRAM figure is claimed, because the API exposes no counter for it |
+| GPU resources | the *sizes* of the swap chain buffers and the capture texture | reported as an inventory only — no VRAM figure is claimed, because the API exposes no counter for it. The line names the buffers as "while shown", since a hidden duplicate holds neither them nor the staging texture |
 | Process CPU | `GetProcessTimes` deltas between two diagnostics reads | measured, as a percentage of one core |
 | Capture latency | — | **not reported.** Windows Graphics Capture gives no trustworthy per-frame timestamp in this code path, so the nearest honest figure is the newest frame's age |
 

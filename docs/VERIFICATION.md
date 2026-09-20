@@ -30,7 +30,7 @@ python3 tools/check-overlay.py
 ```
 
 Latest results: **649 checks, 0 failures**; **`verify.sh` 7/7 green**; Windows
-artefact `AzySkin.exe` **613,888 bytes** (61.4 % of the 1 MB budget), Release, x64,
+artefact `AzySkin.exe` **614,912 bytes** (61.4 % of the 1 MB budget), Release, x64,
 zero warnings from `src/` + `include/`.
 
 ---

@@ -813,6 +813,24 @@ void GlossOverlay::hide() {
     KillTimer(window_, kRenderTimerId);
     timer_ms_ = 0;
     dirty_ = true;
+
+    // Nothing is drawn while hidden, so the two window-sized allocations go back to
+    // the driver: the staging texture and the swap chain's buffers. The device and
+    // the compiled shaders stay, because rebuilding those is what would make turning
+    // the skin back on slow - and this is the difference between "the skin is off"
+    // and "the skin is off but still holding a screenshot-sized surface".
+    if (shared_.context != nullptr) {
+        std::lock_guard<std::mutex> lock(shared_.context_mutex);
+        shared_.context->OMSetRenderTargets(0, nullptr, nullptr);
+        release(target_view_);
+        release(stage_view_);
+        release(stage_);
+        stage_width_ = 0;
+        stage_height_ = 0;
+        // A 1x1 buffer holds nothing and is resized back the moment the duplicate is
+        // shown again (`update_window` -> `resize_swap_chain`).
+        if (swap_chain_ != nullptr) swap_chain_->ResizeBuffers(2, 1, 1, DXGI_FORMAT_UNKNOWN, 0);
+    }
 }
 
 }  // namespace win

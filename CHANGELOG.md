@@ -41,6 +41,10 @@ checklist that closes the rest is `docs/AZY_OVERLAY_TEST_PLAN.md`.
   something; 5/24 in performance mode). The frame pool is rebuilt *after* the frame
   in hand has been copied and released, so a resize can never invalidate a texture
   being read. The render timer is removed entirely while the duplicate is hidden.
+* **Nothing window-sized survives a hide.** Suspending the skin, minimizing Premiere or
+  turning the skin off releases the staging texture and shrinks the swap chain to 1×1:
+  an idle Azy keeps the device and the compiled shaders (so switching back on is
+  instant) but not two full-screen surfaces.
 * **Failure containment.** Every overlay failure ends with the ring and the veil
   still doing their job. An unsupported host is reported once and never retried;
   other failures are retried with backoff and then given up on for the session.

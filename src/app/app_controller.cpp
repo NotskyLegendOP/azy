@@ -965,8 +965,8 @@ std::vector<std::string> AppController::diagnostics_lines() const {
                                                    : "stopped"));
         lines.push_back(str_format("  rendering: %llu presents | %d pass-through regions | %d panel hairlines | "
                                    "%u fps (%s) | uv %.3f,%.3f-%.3f,%.3f | capture size matches window: %s | "
-                                   "swap chain 2 x %dx%d BGRA8 premultiplied, capture texture %dx%d (sizes only, "
-                                   "no VRAM number is claimed)",
+                                   "swap chain 2 x %dx%d BGRA8 premultiplied while shown, released while hidden, "
+                                   "capture texture %dx%d (sizes only, no VRAM number is claimed)",
                                    ostats.presents, ostats.pass_regions, ostats.panel_lines, ostats.paced_fps,
                                    ostats.active ? "active" : "idle", ostats.uv[0], ostats.uv[1], ostats.uv[2],
                                    ostats.uv[3], ostats.capture_size_agrees ? "yes" : "no", ostats.width,
