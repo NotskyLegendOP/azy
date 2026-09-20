@@ -23,7 +23,7 @@ of the way.
 | **Is** | A dark charcoal + subtle glass treatment applied through documented Windows window composition |
 | **Is not** | A UXP / CEP / ExtendScript extension, a Premiere API consumer, or a plugin of any kind |
 | **Is not** | Process injection, memory patching, file patching, resource replacement, or hooking of Premiere's internals |
-| **Is not** | An alternative UI, a replacement timeline, a second toolbar, or a screen-covering overlay |
+| **Is not** | An alternative UI, a replacement timeline, a second toolbar, or a screen-covering overlay. The whole-window overlay is one solid constant-alpha layer over *Premiere's own window* — no bitmap, no per-pixel surface, nothing that covers the desktop |
 | **Never** | Takes focus, eats a click, a key, a scroll, a drag, or a shortcut |
 | **Never** | Animates anything — no transitions, no glow, no particles, no FPS-dependent work |
 
@@ -115,10 +115,16 @@ The status area of the settings window reports what Azy is actually doing, on th
 machine it is doing it on — including the version that is running:
 
 ```
-Azy Skin 1.0.2 - window 'Premiere Pro' 1920x1040 at (0,0) | maximized | screen (0,0)-(1920,1080) | 100%
+Azy Skin 1.1.0 - window 'Premiere Pro' 1920x1040 at (0,0) | maximized | screen (0,0)-(1920,1080) | 100%
 Ring 12px at (0,0)-(1920,1040) | brightest pixel 199/255 | in front of Premiere: yes
+Overlay: 30% tint over the whole window
 ```
 
+0. **Press *Check visibility*** (next to *Open log file*). Azy hides its
+   layers for a single frame, reads the same pixels back from the desktop, and
+   tells you what actually changed — the difference between "every Windows call
+   returned success" and "you can see it". Copy the text with Ctrl+C if you report
+   a problem.
 1. **Check the version on the first line** — it is the build you installed.
 2. `Ring: not on screen - ...` names the reason (nothing attached yet, the strips
    could not be placed in front of Premiere, an empty bitmap).
