@@ -693,7 +693,8 @@ void AppController::update_settings_window_status() {
                                       ". Only basic enhancements are used."
                                 : std::string();
     status.surface_presents = engine_.surface_presents();
-    settings_window_.update_status(status, store_.settings().enabled, suspended_manual_ || performance_.suspended());
+    settings_window_.refresh(store_.settings(), status, store_.settings().enabled,
+                             suspended_manual_ || performance_.suspended());
 }
 
 void AppController::open_log_file() const {

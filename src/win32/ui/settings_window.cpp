@@ -20,6 +20,10 @@ enum ControlId : int {
     kStatusText = 100,
     kPremiereText,
     kTreatmentText,
+    kSectionSkin,
+    kSectionAppearance,
+    kSectionPerformance,
+    kSectionAdvanced,
     kEnableSkin,
     kStartWithWindows,
     kApplyAutomatically,
@@ -128,10 +132,10 @@ void SettingsWindow::set_dark_theme() {
     // If a control does not honour it, it simply keeps its default look; nothing
     // here can affect Premiere.
     SetWindowTheme(hwnd_, L"DarkMode_Explorer", nullptr);
-    const int controls[] = {kEnableSkin,        kStartWithWindows, kApplyAutomatically, kThemeCombo,
-                            kGlass,             kBorder,           kRadius,             kShadow,
-                            kDarkness,          kPerformanceMode,  kSuspendMinimized,   kSuspendInactive,
-                            kExperimental,      kReenableButton,   kResetButton,        kOpenLogButton,
+    const int controls[] = {kEnableSkin,     kStartWithWindows,  kApplyAutomatically, kThemeCombo,
+                            kGlass,          kBorder,            kRadius,         kShadow,
+                            kDarkness,       kPerformanceMode,   kSuspendMinimized, kSuspendInactive,
+                            kExperimental,   kReenableButton,    kResetButton,    kOpenLogButton,
                             kCloseButton};
     for (int id : controls) {
         if (HWND control = GetDlgItem(hwnd_, id)) {
@@ -162,59 +166,83 @@ void SettingsWindow::rebuild_controls() {
 }
 
 void SettingsWindow::layout(int dpi) {
-    auto px = [dpi](int dip) { return dip_to_px(dip, dpi); };
-    auto place = [&](int id, int x_dip, int y_dip, int w_dip, int h_dip, DWORD style, const wchar_t* text) -> HWND {
-        HWND control = CreateWindowExW(0, L"STATIC", text, WS_CHILD | WS_VISIBLE | style, px(x_dip), px(y_dip),
-                                       px(w_dip), px(h_dip), hwnd_,
-                                       reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), nullptr, nullptr);
-        if (control != nullptr && font_ != nullptr) SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
+    const auto px = [dpi](int dip) { return dip_to_px(dip, dpi); };
+    // Decorative labels get child id 0 rather than -1: some shell paths treat
+    // (UINT)-1 as a special value.
+    const auto id_of = [](int id) {
+        return id > 0 ? reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)) : static_cast<HMENU>(nullptr);
+    };
+
+    // Every control is created explicitly with the class it needs: STATIC for
+    // text, BUTTON for check boxes and push buttons, TRACKBAR/COMBOBOX for the
+    // inputs. (A check box created as a STATIC would look like text and never send
+    // a BN_CLICKED - the kind of bug that only shows up on a real desktop.)
+    const auto label = [&](int id, int x_dip, int y_dip, int w_dip, int h_dip, DWORD extra_style,
+                           const wchar_t* text, HFONT font) -> HWND {
+        HWND control = CreateWindowExW(0, L"STATIC", text, WS_CHILD | WS_VISIBLE | SS_LEFT | extra_style,
+                                       px(x_dip), px(y_dip), px(w_dip), px(h_dip), hwnd_, id_of(id), nullptr,
+                                       nullptr);
+        if (control != nullptr && font != nullptr) {
+            SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE);
+        }
+        return control;
+    };
+    const auto checkbox = [&](int id, int y_dip, int w_dip, const wchar_t* text) -> HWND {
+        HWND control = CreateWindowExW(0, L"BUTTON", text,
+                                       WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, px(kMargin), px(y_dip),
+                                       px(w_dip), px(kRowHeight), hwnd_, id_of(id), nullptr, nullptr);
+        if (control != nullptr && font_ != nullptr) {
+            SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
+        }
+        return control;
+    };
+    const auto push_button = [&](int id, int x_dip, int y_dip, int w_dip, const wchar_t* text) -> HWND {
+        HWND control = CreateWindowExW(0, L"BUTTON", text, WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+                                       px(x_dip), px(y_dip), px(w_dip), px(26), hwnd_, id_of(id), nullptr,
+                                       nullptr);
+        if (control != nullptr && font_ != nullptr) {
+            SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
+        }
         return control;
     };
 
     const int width = kWindowWidth - kMargin * 2;
     int y = kMargin;
 
-    // --- header ------------------------------------------------------------
-    place(kStatusText, kMargin, y, width, kRowHeight, SS_LEFT, L"Azy Skin");
-    if (HWND control = GetDlgItem(hwnd_, kStatusText)) {
-        SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(font_bold_), TRUE);
-    }
+    // --- status ------------------------------------------------------------
+    label(kStatusText, kMargin, y, width, kRowHeight, 0, L"Azy Skin", font_bold_);
     y += kRowHeight;
-    place(kPremiereText, kMargin, y, width, kRowHeight - 4, SS_LEFT | SS_ENDELLIPSIS, L"Premiere Pro: not running");
-    if (HWND control = GetDlgItem(hwnd_, kPremiereText)) {
-        SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(font_small_), TRUE);
-    }
+    label(kPremiereText, kMargin, y, width, kRowHeight - 4, SS_ENDELLIPSIS, L"Premiere Pro: not running",
+          font_small_);
     y += kRowHeight - 4;
-    place(kTreatmentText, kMargin, y, width, kRowHeight - 4, SS_LEFT | SS_ENDELLIPSIS, L"");
-    if (HWND control = GetDlgItem(hwnd_, kTreatmentText)) {
-        SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(font_small_), TRUE);
-    }
+    label(kTreatmentText, kMargin, y, width, kRowHeight - 4, SS_ENDELLIPSIS, L"", font_small_);
     y += kRowHeight + kSectionGap;
 
     // --- Skin --------------------------------------------------------------
-    place(-1, kMargin, y, width, 16, SS_LEFT, L"SKIN");
+    label(kSectionSkin, kMargin, y, width, 16, 0, L"SKIN", font_small_);
     y += 18;
-    place(kEnableSkin, kMargin, y, width, kRowHeight, BS_AUTOCHECKBOX | WS_TABSTOP, L"&Enable skin");
+    checkbox(kEnableSkin, y, width, L"&Enable skin");
     y += kRowHeight;
-    place(kStartWithWindows, kMargin, y, width, kRowHeight, BS_AUTOCHECKBOX | WS_TABSTOP,
-          L"Start with &Windows");
+    checkbox(kStartWithWindows, y, width, L"Start with &Windows");
     y += kRowHeight;
-    place(kApplyAutomatically, kMargin, y, width, kRowHeight, BS_AUTOCHECKBOX | WS_TABSTOP,
-          L"Apply automatically to Premiere Pro");
+    checkbox(kApplyAutomatically, y, width, L"Apply automatically to Premiere Pro");
     y += kRowHeight + kSectionGap;
 
     // --- Appearance --------------------------------------------------------
-    place(-1, kMargin, y, width, 16, SS_LEFT, L"APPEARANCE");
+    label(kSectionAppearance, kMargin, y, width, 16, 0, L"APPEARANCE", font_small_);
     y += 18;
-    place(-1, kMargin, y, kLabelWidth, kRowHeight, SS_LEFT, L"&Theme");
-    HWND combo = CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST,
-                                 px(kMargin + kLabelWidth), px(y), px(200), px(200), hwnd_,
-                                 reinterpret_cast<HMENU>(static_cast<INT_PTR>(kThemeCombo)), nullptr, nullptr);
-    if (combo) {
-        if (font_) SendMessageW(combo, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
-        SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Azy Dark Glass"));
-        SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Azy Dark"));
-        SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Original"));
+    label(-1, kMargin, y, kLabelWidth, kRowHeight, SS_CENTERIMAGE, L"&Theme", font_);
+    {
+        HWND combo = CreateWindowExW(0, L"COMBOBOX", L"",
+                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST,
+                                     px(kMargin + kLabelWidth), px(y), px(200), px(200), hwnd_,
+                                     id_of(kThemeCombo), nullptr, nullptr);
+        if (combo != nullptr) {
+            if (font_ != nullptr) SendMessageW(combo, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
+            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Azy Dark Glass"));
+            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Azy Dark"));
+            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Original"));
+        }
     }
     y += kRowHeight + 4;
 
@@ -233,61 +261,47 @@ void SettingsWindow::layout(int dpi) {
     };
     const int slider_width = 150;
     for (const SliderRow& row : rows) {
-        place(-1, kMargin, y, kLabelWidth, kRowHeight, SS_LEFT, row.text);
+        label(-1, kMargin, y, kLabelWidth, kRowHeight, SS_CENTERIMAGE, row.text, font_);
         HWND slider = CreateWindowExW(0, TRACKBAR_CLASSW, L"",
                                       WS_CHILD | WS_VISIBLE | WS_TABSTOP | TBS_HORZ | TBS_NOTICKS,
-                                      px(kMargin + kLabelWidth), px(y),
-                                      px(slider_width), px(kRowHeight), hwnd_,
-                                      reinterpret_cast<HMENU>(static_cast<INT_PTR>(row.slider_id)), nullptr, nullptr);
-        if (slider) {
+                                      px(kMargin + kLabelWidth), px(y), px(slider_width), px(kRowHeight), hwnd_,
+                                      id_of(row.slider_id), nullptr, nullptr);
+        if (slider != nullptr) {
             SendMessageW(slider, TBM_SETRANGE, TRUE, MAKELPARAM(0, row.maximum));
             SendMessageW(slider, TBM_SETPAGESIZE, 0, 5);
-            if (font_) SendMessageW(slider, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
+            SendMessageW(slider, TBM_SETLINESIZE, 0, 1);
+            if (font_ != nullptr) SendMessageW(slider, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
         }
-        place(row.label_id, kMargin + kLabelWidth + slider_width + 8, y, kValueWidth, kRowHeight,
-              SS_LEFT | SS_CENTERIMAGE, L"0%");
+        label(row.label_id, kMargin + kLabelWidth + slider_width + 8, y, kValueWidth, kRowHeight, SS_CENTERIMAGE,
+              L"0%", font_);
         y += kRowHeight + 2;
     }
     y += kSectionGap;
 
     // --- Performance -------------------------------------------------------
-    place(-1, kMargin, y, width, 16, SS_LEFT, L"PERFORMANCE");
+    label(kSectionPerformance, kMargin, y, width, 16, 0, L"PERFORMANCE", font_small_);
     y += 18;
-    place(kPerformanceMode, kMargin, y, width, kRowHeight, BS_AUTOCHECKBOX | WS_TABSTOP,
-          L"&Performance mode (static colors, minimal monitoring)");
+    checkbox(kPerformanceMode, y, width, L"&Performance mode (static colors, minimal monitoring)");
     y += kRowHeight;
-    place(kSuspendMinimized, kMargin, y, width, kRowHeight, BS_AUTOCHECKBOX | WS_TABSTOP,
-          L"Suspend while Premiere is minimized");
+    checkbox(kSuspendMinimized, y, width, L"Suspend while Premiere is minimized");
     y += kRowHeight;
-    place(kSuspendInactive, kMargin, y, width, kRowHeight, BS_AUTOCHECKBOX | WS_TABSTOP,
-          L"Suspend while Premiere is inactive");
+    checkbox(kSuspendInactive, y, width, L"Suspend while Premiere is inactive");
     y += kRowHeight + kSectionGap;
 
     // --- Advanced ----------------------------------------------------------
-    place(-1, kMargin, y, width, 16, SS_LEFT, L"ADVANCED");
+    label(kSectionAdvanced, kMargin, y, width, 16, 0, L"ADVANCED", font_small_);
     y += 18;
-    place(kExperimental, kMargin, y, width, kRowHeight, BS_AUTOCHECKBOX | WS_TABSTOP,
-          L"Enable &experimental visual features");
+    checkbox(kExperimental, y, width, L"Enable &experimental visual features");
     y += kRowHeight;
-    place(kSafeModeText, kMargin, y, width, kRowHeight * 2, SS_LEFT, L"");
-    if (HWND control = GetDlgItem(hwnd_, kSafeModeText)) {
-        SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(font_small_), TRUE);
-    }
+    label(kSafeModeText, kMargin, y, width, kRowHeight * 2, SS_WORDELLIPSIS, L"", font_small_);
     y += kRowHeight * 2;
 
-    auto button = [&](int id, int x_dip, int y_dip, int w_dip, const wchar_t* text) {
-        HWND control = CreateWindowExW(0, L"BUTTON", text, WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
-                                       px(x_dip), px(y_dip), px(w_dip), px(26), hwnd_,
-                                       reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), nullptr, nullptr);
-        if (control && font_) SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
-        return control;
-    };
-    button(kReenableButton, kMargin, y, 150, L"Re-enable features");
-    button(kResetButton, kMargin + 158, y, 110, L"Reset config");
+    push_button(kReenableButton, kMargin, y, 150, L"Re-enable features");
+    push_button(kResetButton, kMargin + 158, y, 110, L"Reset config");
 
     const int bottom_y = y + 34;
-    button(kOpenLogButton, kMargin, bottom_y, 110, L"Open log file");
-    button(kCloseButton, kWindowWidth - kMargin - 90, bottom_y, 90, L"Close");
+    push_button(kOpenLogButton, kMargin, bottom_y, 110, L"Open log file");
+    push_button(kCloseButton, kWindowWidth - kMargin - 90, bottom_y, 90, L"Close");
 
     set_dark_theme();
     sync_controls();
@@ -401,6 +415,17 @@ void SettingsWindow::show(const Settings& settings, const Status& status) {
     SetForegroundWindow(hwnd_);
 }
 
+void SettingsWindow::refresh(const Settings& settings, const Status& status, bool skin_enabled, bool suspended) {
+    // Never touch a hidden window (its controls may not exist yet) and never bring
+    // it to the foreground: Premiere keeps focus.
+    if (hwnd_ == nullptr || !IsWindowVisible(hwnd_)) return;
+    settings_ = settings;
+    status_ = status;
+    skin_enabled_ = skin_enabled;
+    suspended_ = suspended;
+    sync_controls();
+}
+
 void SettingsWindow::hide() {
     if (hwnd_ != nullptr) ShowWindow(hwnd_, SW_HIDE);
 }
@@ -448,7 +473,11 @@ LRESULT SettingsWindow::handle(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
             HDC dc = reinterpret_cast<HDC>(wparam);
             const int control_id = GetDlgCtrlID(reinterpret_cast<HWND>(lparam));
             const bool secondary = control_id == kPremiereText || control_id == kTreatmentText ||
-                                   control_id == kSafeModeText;
+                                   control_id == kSafeModeText || control_id == kSectionSkin ||
+                                   control_id == kSectionAppearance || control_id == kSectionPerformance ||
+                                   control_id == kSectionAdvanced || control_id == kGlassLabel ||
+                                   control_id == kBorderLabel || control_id == kRadiusLabel ||
+                                   control_id == kShadowLabel || control_id == kDarknessLabel;
             SetTextColor(dc, secondary ? kDimTextColor : kTextColor);
             SetBkColor(dc, kBackgroundColor);
             return reinterpret_cast<LRESULT>(background_);

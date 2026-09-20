@@ -165,12 +165,22 @@ void TrayIcon::show_menu(const POINT* anchor) {
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kExit, L"E&xit");
 
-    // Required so the popup menu closes when the user clicks elsewhere, and so
-    // Azy's own message window keeps receiving messages (no modal loop of ours).
+    // A popup menu needs its owner to be the foreground window, otherwise it does
+    // not close when the user clicks elsewhere. Azy's window is WS_EX_NOACTIVATE
+    // (it can never really take focus), so the previous foreground window is
+    // remembered and restored the moment the menu closes: Premiere keeps the
+    // focus it had.
+    HWND previous_foreground = GetForegroundWindow();
     SetForegroundWindow(owner_);
+
     const UINT command = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY, cursor.x, cursor.y, 0,
                                         owner_, nullptr);
     DestroyMenu(menu);
+
+    if (previous_foreground != nullptr && IsWindow(previous_foreground) &&
+        previous_foreground != GetForegroundWindow()) {
+        SetForegroundWindow(previous_foreground);
+    }
 
     if (command != 0) handle_message(static_cast<WPARAM>(command), 0);
 }
@@ -178,37 +188,49 @@ void TrayIcon::show_menu(const POINT* anchor) {
 void TrayIcon::handle_message(WPARAM wparam, LPARAM lparam) {
     // Two notification layouts are possible:
     //   * modern (NOTIFYICON_VERSION_4, which Azy asks for):
-    //       LOWORD(wparam) = message, HIWORD(wparam) = icon id, lParam = anchor
-    //   * legacy: wparam = icon id, LOWORD(lParam) = message
+    //       LOWORD(wparam) = notification code, HIWORD(wparam) = icon id,
+    //       lParam = anchor point (HIWORD/LOWORD = y/x)
+    //   * legacy: wparam = icon id, LOWORD(lParam) = notification code
     UINT event = 0;
-    UINT icon_id = 1;
     POINT anchor{};
     bool have_anchor = false;
     if (version4_) {
         event = LOWORD(wparam);
-        icon_id = HIWORD(wparam);
+        const UINT icon_id = HIWORD(wparam);
         anchor.x = GET_X_LPARAM(lparam);
         anchor.y = GET_Y_LPARAM(lparam);
         have_anchor = true;
+        if (icon_id != 1) return;
     } else {
-        icon_id = static_cast<UINT>(wparam);
+        const UINT icon_id = static_cast<UINT>(wparam);
+        if (icon_id != 1) return;
         event = LOWORD(lparam);
     }
 
-    if (icon_id != 1 && !version4_) {
-        // Not an event from our icon; nothing else is posted to this window's
-        // callback message.
-        return;
-    }
+    auto toggle = [this]() {
+        const unsigned long long now = GetTickCount64();
+        if (now - last_toggle_tick_ < 120) return;  // duplicate delivery of one click
+        last_toggle_tick_ = now;
+        if (callbacks_.on_toggle_skin) callbacks_.on_toggle_skin(!state_.skin_enabled);
+    };
 
     switch (event) {
-        case WM_LBUTTONUP:
+        // In protocol v4 a left click arrives as NIN_SELECT; the legacy messages
+        // are not sent (and are ignored here when they are, so nothing toggles
+        // twice).
         case NIN_SELECT:
-            // A single left click is the fastest ON/OFF the user has.
-            if (callbacks_.on_toggle_skin) callbacks_.on_toggle_skin(!state_.skin_enabled);
+        case WM_LBUTTONUP:
+            toggle();
             return;
         case WM_LBUTTONDBLCLK:
-            if (callbacks_.on_settings) callbacks_.on_settings();
+        case NIN_KEYSELECT:
+            // Double click (or a keyboard selection): open Settings. The tray menu
+            // remains the primary route.
+            if (event == WM_LBUTTONDBLCLK && callbacks_.on_settings) {
+                callbacks_.on_settings();
+            } else {
+                show_menu(have_anchor ? &anchor : nullptr);
+            }
             return;
         case WM_RBUTTONUP:
         case WM_CONTEXTMENU:
@@ -219,9 +241,6 @@ void TrayIcon::handle_message(WPARAM wparam, LPARAM lparam) {
             return;
         case NIN_BALLOONUSERCLICK:
             if (callbacks_.on_settings) callbacks_.on_settings();
-            return;
-        case NIN_KEYSELECT:
-            show_menu(nullptr);
             return;
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN:

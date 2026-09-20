@@ -21,7 +21,6 @@ public:
         std::function<void(const Settings&)> on_change;  // live apply
         std::function<void()> on_reset;                  // "Reset configuration"
         std::function<void()> on_open_log;               // "Open log file"
-        std::function<void(bool)> on_reenable_experimental;
         std::function<void()> on_hidden;
     };
 
@@ -42,6 +41,11 @@ public:
     void show(const Settings& settings, const Status& status);
     void hide();
     bool visible() const;
+
+    // Refreshes an already-open window (live status text + control states) without
+    // showing, activating or stealing focus - used when the tray menu or a
+    // hand-edited settings.ini changes something while the window is open.
+    void refresh(const Settings& settings, const Status& status, bool skin_enabled, bool suspended);
     HWND hwnd() const { return hwnd_; }
 
     // Updates the read-only parts (status lines) without touching user edits.

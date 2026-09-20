@@ -66,6 +66,11 @@ private:
     NOTIFYICONDATAW data_{};
     bool added_ = false;
     bool version4_ = false;  // NOTIFYICON_VERSION_4 accepted by the shell
+    // A single physical click can reach us more than once (NIN_SELECT plus the
+    // legacy mouse message on some shells). The toggle is debounced so a click
+    // always means exactly one ON/OFF, while deliberate rapid toggling still
+    // works.
+    unsigned long long last_toggle_tick_ = 0;
 };
 
 }  // namespace win

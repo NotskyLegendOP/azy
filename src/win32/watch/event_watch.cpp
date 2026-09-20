@@ -127,13 +127,10 @@ void EventWatch::handle(DWORD event, HWND hwnd, LONG /*id_object*/, DWORD event_
     if (paused_.load()) return;
     if (!relevant(event, hwnd, event_thread)) return;
 
-    // Wake the application exactly once per batch of events.
-    if (notify_) {
-        bool expected = false;
-        if (notify_pending_.compare_exchange_strong(expected, true)) {
-            notify_();
-        }
-    }
+    // Wake the application. The callback coalesces (it only posts a message when
+    // one is not already pending), so this is a cheap function call, not a
+    // message storm.
+    if (notify_) notify_();
 
     switch (event) {
         case kEventSystemMoveSizeStart:

@@ -117,22 +117,19 @@ void PremiereDetector::rescan(double now) {
     }
 
     if (tracking_live) {
-        if (!IsWindow(window_) || is_window_cloaked(window_)) {
-            const HWND new_window = current_window_for(record_.pid);
-            if (new_window != window_) {
-                window_ = new_window;
-                log_info("Premiere main window changed (0x%p)", reinterpret_cast<void*>(window_));
-                publish(EventKind::Changed, window_);
-                return;
-            }
-        }
-        // Nothing structural changed; the window tracker handles geometry.
-        if (window_ == nullptr) {
-            const HWND new_window = current_window_for(record_.pid);
-            if (new_window != nullptr) {
-                window_ = new_window;
-                publish(EventKind::Changed, window_);
-            }
+        // The window we already have still exists: keep it. This deliberately does
+        // not re-resolve on "not visible right now", because a minimized (or
+        // hidden) Premiere must stay attached - suspending is the performance
+        // manager's job, and dropping the target here would flash the frame back
+        // to its original colour on every minimize/restore cycle.
+        if (window_ != nullptr && IsWindow(window_)) return;
+
+        window_ = nullptr;
+        const HWND new_window = current_window_for(record_.pid);
+        if (new_window != nullptr) {
+            window_ = new_window;
+            log_info("Premiere main window changed (0x%p)", reinterpret_cast<void*>(window_));
+            publish(EventKind::Changed, window_);
         }
         return;
     }

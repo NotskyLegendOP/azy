@@ -59,10 +59,10 @@ public:
     void set_debug_logging(bool enabled) { debug_logging_.store(enabled); }
 
     // Immediate reaction without doing work inside a WinEvent callback: the
-    // application supplies a function that posts itself a message. Delivery is
-    // coalesced, so a burst of 200 window events produces at most one wake-up.
+    // application supplies a function that posts itself a message. Coalescing is
+    // deliberately left to that function (AppController::post_sync keeps a single
+    // pending flag), so a burst of 200 events still produces exactly one wake-up.
     void set_notify(std::function<void()> notify) { notify_ = std::move(notify); }
-    void acknowledge_notify() { notify_pending_.store(false); }
 
     // Used when a modal move/size loop ended without its end notification.
     void clear_move_size_loop() { move_size_loop_.store(0); }
@@ -87,7 +87,6 @@ private:
     std::atomic<bool> foreground_dirty_{false};
     std::atomic<int> move_size_loop_{0};
     std::atomic<unsigned long long> event_count_{0};
-    std::atomic<bool> notify_pending_{false};
     std::function<void()> notify_;  // set once, before events can arrive
 };
 

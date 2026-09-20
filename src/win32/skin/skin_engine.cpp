@@ -26,6 +26,16 @@ int ring_radius_px(const SkinRequest& request, bool frame_rounded) {
     return dip_to_px(dip, request.target.dpi);
 }
 
+// Smallest window Azy's four-strip ring is meaningful on. Below this the ring
+// would be almost entirely window (typical for the tiny helper windows Premiere
+// creates internally), so the surface is skipped - silently, because it is not a
+// failure, just a window that is too small to decorate.
+bool window_large_enough_for_ring(const Rect& frame, int band_px, int radius_px) {
+    const int thickness = std::max(band_px + 2, radius_px + 1);
+    const int required = thickness * 2 + 2;
+    return frame.width() >= required && frame.height() >= required;
+}
+
 // Band thickness of the composition surface, in physical pixels: how far the
 // edge treatment reaches into the window. Bounded so a small floating window
 // cannot be swallowed by its own decoration, and kept thin in performance mode,
@@ -193,6 +203,19 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
         changed = true;
     }
 
+    if (surface_requested && !window_large_enough_for_ring(key.surface_rect, key.band_px, key.radius_px)) {
+        // Too small to decorate: hide the ring and leave the frame treatment in
+        // place. Not counted as a failure.
+        if (surface_.visible()) surface_.hide();
+        state_out.surface_visible = false;
+        if (changed || has_key_) {
+            last_key_ = key;
+            last_key_.surface = false;
+            has_key_ = true;
+        }
+        return changed;
+    }
+
     if (surface_requested && surface_changed) {
         RingVisual visual;
         // The ring is described in frame coordinates; CompositionSurface splits it
@@ -232,7 +255,10 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
 
     if (changed) {
         last_key_ = key;
-        last_key_.surface = surface_requested;
+        // Only record the surface as "done" when it is actually on screen: if it
+        // failed, the next apply retries instead of silently giving up until
+        // something else changes.
+        last_key_.surface = state_out.surface_visible && surface_requested;
         has_key_ = true;
         ++state_out.applies;
     }
