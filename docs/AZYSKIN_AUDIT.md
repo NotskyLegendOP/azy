@@ -31,12 +31,12 @@ techniques are genuinely absent. The pure logic (theme maths, DPI geometry, pane
 map, settings round-trip, failure tracking, version compatibility) is covered by
 578 native checks that pass. The build is warning-clean from Azy's own sources.
 
-**What the audit found.** Eight defects, of which six are real code defects —
-five in the Windows layer, which has never been executed and is therefore exactly
-where defects accumulate, and one in the settings UI. The other two are
-documentation/tooling accuracy. They were found by reading the code against the
-Windows API contract and by cross-checking every settings control against its
-consumers; none was found by a test, and none was found by compiling. The most serious is the debug overlay, which drew screen
+**What the audit found.** Nine fixes, of which seven are code defects — five in
+the Windows layer, which has never been executed and is therefore exactly where
+defects accumulate, one in the settings UI and one in the logger. The remaining
+two are documentation and tooling accuracy. They were found by reading the code
+against the Windows API contract and by cross-checking every settings control
+against its consumers; none was found by a test, and none was found by compiling. The most serious is the debug overlay, which drew screen
 coordinates inside a window positioned in client coordinates: the whole panel map
 was offset by the window's screen position and would have appeared in the wrong
 place (or off-screen) on every machine whose window was not near the origin. The
@@ -199,7 +199,7 @@ would need exactly the repaint loop the brief forbids. Recorded in
 
 ### Fixed during this audit — the complete list
 
-Rows 1–6 are the six code defects (four P1, one P2, one P3); rows 7–9 are
+Rows 1–7 are the code defects — four P1, one P2, two P3; rows 8–9 are
 documentation and tooling accuracy.
 
 | # | File(s) | Class | Defect | Fix |
@@ -209,7 +209,7 @@ documentation and tooling accuracy.
 | 3 | `app_controller.cpp` | P1 | Z-order re-asserted on every sync (idle CPU churn) | Gated on `foreground_dirty \|\| changed` |
 | 4 | `skin_engine.cpp` | P2 | Detach/suspend left a stale `panels_` map behind | Map cleared in the suspend/remove path |
 | 5 | `debug_overlay.{hpp,cpp}`, `skin_engine.cpp` | P3 | Stock GUI font at fixed 16 px spacing — blurry and cramped at 150–200 % | Segoe UI 12 DIP ClearType font, created per DPI, released on destroy; `present()` takes the DPI |
-| 6 | `settings_window.cpp` | P2 | Inert "Animations" switch (P1-4 above) | Kept, documented, disabled and relabelled |
+| 6 | `settings_window.cpp` | P1 | Inert "Animations" switch (P1-4 above) | Kept, documented, disabled and relabelled |
 | 7 | `src/core/log.cpp` | P3 | Level field was a bare `INFO ` with a trailing space | Bracketed fixed-width `[INFO ]` / `[WARN ]` / `[ERROR]` / `[DEBUG]`, so the log is greppable for levels; columns still align |
 | 8 | `tools/preview_render.py` | P3 | The design-preview tool's hand-transcribed palette was indistinguishable from generated ground truth | Docstring now states it is a transcription, that nothing verifies it against `theme.cpp`, and how to regenerate the images |
 | 9 | `README.md`, `docs/BUILDING.md`, `docs/PERFORMANCE.md`, `docs/TECHNIQUES.md`, `tools/inspect-pe.py` | P3 | Four documents quoted "~440 KB" for an executable that is 560,128 bytes, and the idle-timer description ("read a few atomics, return") understated what a tick actually does | Sizes corrected to the real number; timer description replaced with what the code does; a 1 MB size budget added to the release-artifact inspection so the number cannot drift again |
@@ -302,7 +302,8 @@ glows, no motion) — recorded here so it is not re-litigated:
 
 - Removed the per-sync z-order walk (defect 3). This was the one real idle-cost
   defect: up to ~1000 `GetWindow` calls per second driven by unrelated events.
-  After the fix, an idle Azy does nothing at all until an event arrives.
+  After the fix, an idle Azy does nothing but one cheap comparison per second
+  until an event arrives.
 - Removed the stale panel-map rebuild that happened on every detach (defect 4);
   the map is now built once per geometry/workspace change.
 - The debug overlay's font is created once per DPI instead of assumed, and
@@ -321,9 +322,11 @@ glows, no motion) — recorded here so it is not re-litigated:
   theme changes, then reused.
 - The only pixel reads in the product are ~40 `GetPixel` probes inside the
   user-triggered visibility check (§4, item 9).
-- No polling of any kind: process changes arrive over WMI events, window changes
-  over `SetWinEventHook`, and the `DWM`/`DwmFlush` calls happen only during the
-  diagnostic.
+- No polling in the sense the brief forbids (nothing is re-read on a fast clock):
+  process changes arrive over WMI events, window changes over `SetWinEventHook`,
+  and the `DwmFlush` calls happen only during the diagnostic. Nothing enumerates,
+  queries or draws on the 1 Hz safety-net tick unless an event has changed the
+  answer.
 
 **Not measurable here:** the 0–1 % idle / <2 % monitoring / <100 MB targets. The
 code has no mechanism that could plausibly consume more (one 1 Hz timer that
@@ -376,7 +379,7 @@ Condensed; the per-feature table with evidence is
 
 | Area | Verified | Compiled only | Unverified |
 | --- | --- | --- | --- |
-| Build, versioning, release assets | ✅ `verify.sh` 1/2/4/5/6, CI run `35517903596` | | |
+| Build, versioning, release assets | ✅ `verify.sh` 1/2/4/5/6 (6/6 green), CI run `35521355164` for v1.2.2 | | |
 | Pure logic (theme, DPI, panel map, settings, failure tracking, compat) | ✅ 578 checks, 0 failures | | |
 | Detection, monitoring, tracking | | ✅ | |
 | Ring / veil / DWM frame rendering | | ✅ | |
@@ -396,7 +399,11 @@ screenshots, and cannot substitute for one.
 
 ## 10. Final readiness
 
-**READY FOR RUNTIME TESTING** — the code is clean, the forbidden techniques are
-absent, the tested logic passes, and every defect that could be found without
-running the program has been found and fixed; nothing here has yet been observed
-working on Windows next to Premiere Pro, so no higher state is honest.
+**READY FOR RUNTIME TESTING**
+
+The code is clean, the forbidden techniques are absent, the tested logic passes,
+and every defect that could be found without running the program has been found
+and fixed. What stops this from being a higher state is not code quality — it is
+that nothing here has ever been observed working on Windows next to Premiere Pro,
+and the most recent observation the user gave (round 3: the skin was not in front
+of Premiere) has never been re-tested. One run, with debug mode on, settles it.

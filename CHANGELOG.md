@@ -7,8 +7,8 @@ All notable changes to Azy Skin are documented here. The format follows
 ## [1.2.2] — 2026-09-20
 
 A complete implementation audit, and the defects it found. Nothing was added to
-the feature set; six real defects were fixed, three documents were made accurate,
-and two leftover scratch scripts were removed from `tools/`.
+the feature set; seven defects in code were fixed, three documents were made
+accurate, and two leftover scratch scripts were removed from `tools/`.
 
 ### Fixed
 
