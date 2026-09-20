@@ -283,7 +283,7 @@ Design rules, all of them implemented:
   kill the timer, join the capture worker and release every GPU object; the device
   itself is released with the overlay. Nothing is left running after "Exit" or
   after Premiere closes.
-* **Budget:** the executable grew from 559,616 to 614,400 bytes (61.4% of the 1 MB
+* **Budget:** the executable grew from 559,616 to 613,888 bytes (61.4% of the 1 MB
   budget) — VERIFIED by `tools/inspect-pe.py`. No CPU or GPU percentage is claimed
   anywhere: none has been measured on a real machine, and the brief forbids numbers
   that were not measured.

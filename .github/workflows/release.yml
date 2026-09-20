@@ -116,27 +116,41 @@ jobs:
           | ``AzySkin-$version-x64-portable.zip`` | The executable plus the documentation, unpack anywhere and run |
           | ``AzySkin-$version-source.zip`` | The full source tree at this version |
 
-          **What it does:** a dark frame treatment, a whole-window overlay (one
-          translucent charcoal layer over everything Premiere draws) and a four-strip
-          ring (1px hairline, 1px raised bezel, soft inner falloff). No plugin, no
-          injection, no patching, nothing written into an Adobe directory, and no
-          animation of any kind. The overlay strength is a slider in Settings - 0%
-          leaves only the edge treatment.
+          **What it does:** it mirrors Premiere's own window. Azy captures the window on the
+          GPU (Windows Graphics Capture - never the desktop, never another application),
+          draws the picture back through a small shader - dark charcoal, a little glass,
+          1px separators between the panels, a 1px lighter frame, rounded corners - and
+          shows it in a click-through window placed directly above Premiere. The Program
+          and Source Monitors are passed through untouched, so footage is never darkened.
 
-          **If you cannot see it:** the skin is designed to be quiet, so it is worth
-          pressing *Settings > Check visibility* once. Azy hides its layers for a
-          single frame, reads the same pixels back from the desktop and tells you what
-          actually changed - the difference between "every Windows call returned
-          success" and "you can see it". The same window shows which build is
-          running, where the ring was drawn, how bright its strongest pixel is and
-          whether it sits in front of Premiere. It also offers *Restart as
-          Administrator*, which is the one situation Azy cannot work around: Windows
-          never lets a normal process draw above an elevated one.
+          Premiere stays the application in every sense: it keeps the mouse, the keyboard,
+          the focus, the menus, the timeline, the playback and every plugin. Azy decides
+          only what the pixels look like. No plugin, no injection, no patching, nothing
+          written into an Adobe directory, no animation, and no screenshot loop (frames
+          never touch the CPU, the disk or a file).
 
-          Requires 64-bit Windows 10 1809 or newer. The executables are unsigned.
+          On a machine where the GPU path cannot run, the earlier thin ring (1px hairline,
+          1px raised bezel, soft inner falloff) plus a translucent sheet carry the skin
+          instead - that path is unchanged from 1.2.x.
 
-          See ``README.md`` in the source archive for the full description and
-          ``docs/TESTING.md`` for the manual test matrix.
+          **Status of this build:** the static layers have been shipped and reviewed since
+          1.0. The duplicate window is new in 1.3.0 and has not been run against a real
+          Premiere on a real machine yet - it is "implemented, runtime unverified". If it
+          does not appear, nothing breaks and the static layers are already doing their
+          job. ``docs/AZY_OVERLAY_ARCHITECTURE.md`` and ``docs/AZY_OVERLAY_TEST_PLAN.md`` in
+          the source archive explain the design, every open risk, and how to close them in
+          one session.
+
+          **If you cannot see it:** press *Settings > Check visibility*. It reports each
+          layer separately - the duplicate window (structurally: it has no bitmap to read
+          back), the translucent sheet and the ring - and the log carries the same
+          information. It also offers *Restart as Administrator*, which is the one
+          situation Azy cannot work around: Windows never lets a normal process draw above
+          an elevated one.
+
+          Requires 64-bit Windows 10 1809 or newer (the duplicate window needs the
+          free-threaded capture frame pool from that build, and d3dcompiler_47.dll, which
+          ships with Windows). The executables are unsigned.
           "@
           $notes | Set-Content -Path release-notes.md -Encoding utf8
 

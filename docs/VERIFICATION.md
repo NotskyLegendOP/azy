@@ -30,7 +30,7 @@ python3 tools/check-overlay.py
 ```
 
 Latest results: **649 checks, 0 failures**; **`verify.sh` 7/7 green**; Windows
-artefact `AzySkin.exe` **614,400 bytes** (61.4 % of the 1 MB budget), Release, x64,
+artefact `AzySkin.exe` **613,888 bytes** (61.4 % of the 1 MB budget), Release, x64,
 zero warnings from `src/` + `include/`.
 
 ---
@@ -44,7 +44,8 @@ zero warnings from `src/` + `include/`.
 | Include hygiene (every header self-sufficient) | VERIFIED | `verify.sh` step 1, catches transitive-include use |
 | Version agrees across every file (exe, RC, manifest, ISS, README, docs) | VERIFIED | `verify.sh` step 2 + `tools/check-version.py` |
 | Shipped exe is a GUI binary with the expected imports | VERIFIED | `verify.sh` step 5 (inspection of the produced PE) |
-| Release assets exist and are public for a tagged version | VERIFIED | GitHub Actions run `35517903596` (v1.2.1): `AzySkin-1.2.1-setup.exe` 2,501,365 B, `-x64-portable.zip` 241,142 B, `-source.zip` 323,838 B; `gh release view v1.2.1` → `isDraft:false` |
+| Release assets exist and are public for a tagged version | VERIFIED | v1.3.0, GitHub Actions run `35526240388`: `AzySkin-1.3.0-setup.exe` 2,572,877 B, `-x64-portable.zip` 349,162 B, `-source.zip` 462,389 B; `gh release view v1.3.0` → `isDraft:false`, `isPrerelease:false` |
+| The MSVC job that builds those assets runs on every push | VERIFIED | `build` workflow, run `35526005507`: `core unit tests`, `windows build (MSVC)`, `installer` and `windows cross-compile` all green |
 | Installer *script* is correct (paths, tasks, registry, uninstall) | COMPILED | Reviewed line by line; built successfully by the CI Inno job |
 | Installer runs, installs, starts, uninstalls cleanly | UNVERIFIED | No Windows machine; Inno Setup cannot run here. Nobody has clicked through Setup. |
 | Portable zip runs from a folder | UNVERIFIED | Never executed |

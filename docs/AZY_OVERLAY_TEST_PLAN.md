@@ -232,7 +232,7 @@ is not evidence, and the column says so.
 5. Windows cross-compile: the complete application compiles and links with the GUI
    subsystem, including the new capture, compositor and shader modules.
 6. Executable inspection: PE32+, x64, GUI subsystem, version/icon/manifest
-   resources present, 614,400 bytes (61.4 % of the 1 MB budget).
+   resources present, 613,888 bytes (61.4 % of the 1 MB budget).
 7. The progress board is in sync with `docs/progress.json`.
 
 **UNVERIFIED — needs the real machine:** everything in §1, §2 and §3 above. In
