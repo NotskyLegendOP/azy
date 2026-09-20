@@ -196,6 +196,10 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
             state_out.surface_visible = false;
         }
         has_key_ = false;
+        // Nothing is attached, so the map describes a window that is no longer
+        // tracked: leaving it in place would hand the region work rectangles for a
+        // window that is gone.
+        panels_.clear();
         if (had_frame || had_surface) {
             log_info("skin removed (%s)", suspend_reason_name(request.suspend));
         }
@@ -322,7 +326,16 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
     // a ratio layout applied to the client rectangle at this DPI. A mistake here
     // costs a missing region, never a broken layout, which is why a panel that
     // does not fit is marked unusable instead of being driven to a negative size.
-    const Rect client = Rect::from_size(0, 0, key.surface_rect.width(), key.surface_rect.height());
+    // The model describes the *client* area, not the frame: Premiere's panels are
+    // inside the client area, and using the frame would put the menu bar band over
+    // the title bar. Asking Windows for the real client rectangle keeps this exact
+    // at every window state (the relationship between frame and client changes with
+    // the caption, the border and the DPI).
+    Rect client_screen;
+    if (!window_client_rect(request.target.hwnd, client_screen)) {
+        client_screen = key.surface_rect;
+    }
+    const Rect client = Rect::from_size(0, 0, client_screen.width(), client_screen.height());
     const std::vector<PanelRect> panels = build_panel_map(client, request.target.dpi, request.workspace);
     const bool map_changed =
         panels.size() != panels_.size() ||
@@ -332,7 +345,7 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
                     });
     if (map_changed) {
         panels_ = panels;
-        client_origin_ = key.surface_rect;
+        client_origin_ = client_screen;
         // One line per layout change (never per timer tick): the model's own view of
         // the window, which is what a bug report needs to be actionable.
         log_info("panel map (%s workspace, %dx%d client, %u dpi):\n%s",
@@ -376,7 +389,8 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
         std::string debug_error;
         const bool shown = debug_.present(request.target.hwnd,
                                           state_out.surface_visible ? surface_.hwnd() : nullptr,
-                                          key.surface_rect, on_screen, facts, &debug_error);
+                                          key.surface_rect, request.target.dpi, on_screen, facts,
+                                          &debug_error);
         if (!shown && debug_.visible()) debug_.hide();
         if (!shown && !debug_error.empty()) {
             // Reported once per change, never per tick: a debug aid must not become

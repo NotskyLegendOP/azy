@@ -622,11 +622,17 @@ void AppController::sync(const char* reason_name) {
     // --- 4c. Keep Azy's surfaces in front of Premiere ----------------------
     // Activating Premiere puts it at the top of the window band, above Azy's strips
     // and overlay - which are ordinary windows - so the skin would silently vanish
-    // behind the very window it decorates. A bounded z-order walk, and a SetWindowPos
-    // only when the order is really wrong, so this costs a few GetWindow calls per
-    // sync (events, plus the low-frequency settle timer) and nothing at all while the
-    // order is already correct.
-    engine_.reassert_stacking();
+    // behind the very window it decorates. A z-order walk and, only when the order is
+    // really wrong, one SetWindowPos per surface.
+    //
+    // When it runs: the z-order of two windows can only change because something was
+    // raised, and the case that matters is Premiere coming to the foreground - so
+    // this is gated on the foreground changing, or on an apply having just moved
+    // Azy's own windows. The settle timer alone (once a second, forever) must not
+    // walk the desktop window list for a condition that cannot have changed.
+    if (foreground_dirty || changed) {
+        engine_.reassert_stacking();
+    }
 
     // --- 4b. Say something when the ring cannot be seen -------------------
     // A utility whose entire purpose is to be visible must not fail silently.

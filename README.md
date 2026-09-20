@@ -19,7 +19,7 @@ of the way.
 
 | | |
 |---|---|
-| **Is** | A ~440 KB native C++/Win32 application, event-driven, no dependencies, no installer requirements, no Adobe integration |
+| **Is** | A ~550 KB native C++/Win32 application, event-driven, no dependencies, no installer requirements, no Adobe integration |
 | **Is** | A dark charcoal + subtle glass treatment applied through documented Windows window composition |
 | **Is not** | A UXP / CEP / ExtendScript extension, a Premiere API consumer, or a plugin of any kind |
 | **Is not** | Process injection, memory patching, file patching, resource replacement, or hooking of Premiere's internals |
@@ -116,7 +116,7 @@ The status area of the settings window reports what Azy is actually doing, on th
 machine it is doing it on — including the version that is running:
 
 ```
-Azy Skin 1.2.1 - window 'Premiere Pro' 1920x1040 at (0,0) | maximized | screen (0,0)-(1920,1080) | 100%
+Azy Skin 1.2.2 - window 'Premiere Pro' 1920x1040 at (0,0) | maximized | screen (0,0)-(1920,1080) | 100%
 Ring 12px at (0,0)-(1920,1040) | brightest pixel 199/255 | in front of Premiere: yes
 Overlay: 30% tint over the whole window
 ```
@@ -186,9 +186,10 @@ outline.
 
 Azy Skin is built around *not* doing work:
 
-* **Idle with Premiere open: 0% CPU.** No polling loop, no timers driving work,
-  no rendering. The default 1-second timer is a safety net whose normal path is
-  "read a few atomics, return".
+* **Idle with Premiere open: 0% CPU.** No polling loop, no rendering, no work
+  driven by a clock. The 1-second timer is only a safety net for a notification
+  Windows failed to deliver; its normal path builds the visual key, compares it
+  against the last one and returns without drawing anything.
 * **Nothing happens without an event.** Window moves, resizes, minimise,
   foreground changes, DPI changes, display changes, Premiere start/stop — all
   arrive as Windows notifications. A static window produces no DWM calls, no
@@ -247,7 +248,7 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 Packaging: `powershell -File scripts\package.ps1` (needs Inno Setup 6) produces
-`dist\AzySkin-1.2.1-setup.exe`.
+`dist\AzySkin-1.2.2-setup.exe`.
 
 Full instructions, including what the cross build can and cannot verify:
 [`docs/BUILDING.md`](docs/BUILDING.md).

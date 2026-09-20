@@ -202,10 +202,15 @@ void SettingsWindow::layout(int dpi) {
         }
         return control;
     };
-    const auto checkbox = [&](int id, int y_dip, int w_dip, const wchar_t* text) -> HWND {
+    // `enabled` is for the one row that exists but cannot do anything yet: a
+    // control that looks clickable and silently does nothing is worse than one
+    // that says so, so it is created disabled and reads as unavailable.
+    const auto checkbox = [&](int id, int y_dip, int w_dip, const wchar_t* text,
+                              bool enabled = true) -> HWND {
         HWND control = CreateWindowExW(0, L"BUTTON", text,
-                                       WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, px(kMargin), px(y_dip),
-                                       px(w_dip), px(kRowHeight), hwnd_, id_of(id), nullptr, nullptr);
+                                       WS_CHILD | WS_VISIBLE | (enabled ? WS_TABSTOP : WS_DISABLED) | BS_AUTOCHECKBOX,
+                                       px(kMargin), px(y_dip), px(w_dip), px(kRowHeight), hwnd_, id_of(id), nullptr,
+                                       nullptr);
         if (control != nullptr && font_ != nullptr) {
             SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
         }
@@ -338,9 +343,14 @@ void SettingsWindow::layout(int dpi) {
     }
     y += kSectionGap;
 
-    // Spec §28 in one checkbox. Azy's own layers are static, and the brief asked
-    // for no animation, so this is off and stays off unless it is switched on.
-    checkbox(kAnimationsCheck, y, width, L"Fade Azy's own layers when the skin &animates (80-120 ms)");
+    // Spec §28 in one checkbox - and the one row that is honest about being
+    // inactive. Azy's layers are static by design (the brief asked for no
+    // animation and nothing outside Premiere could animate its widgets anyway),
+    // so there is no code path behind this switch. The key is still stored and
+    // round-tripped so an existing configuration is never rewritten, and the
+    // control is disabled rather than hidden so the setting can be found, not
+    // guessed at. See docs/KNOWN_LIMITATIONS.md.
+    checkbox(kAnimationsCheck, y, width, L"Fade Azy's own layers (not available - Azy is static)", false);
     y += kRowHeight + kSectionGap;
 
     // --- Performance -------------------------------------------------------

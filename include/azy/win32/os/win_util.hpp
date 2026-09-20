@@ -124,6 +124,11 @@ std::wstring window_text(HWND hwnd);
 // GetWindowRect otherwise). This is the rectangle the user actually sees, and
 // therefore the one Azy's composition surface must match.
 bool visible_frame_rect(HWND hwnd, RECT& out);
+// The window's client area in *screen* coordinates. Premiere's panels live inside
+// the client area, so this - not the frame - is what the panel model is built for;
+// using the frame would place the menu bar band over the title bar and shift every
+// panel below it down by the caption height.
+bool window_client_rect(HWND hwnd, Rect& out);
 Rect to_rect(const RECT& r);
 RECT to_native(const Rect& r);
 

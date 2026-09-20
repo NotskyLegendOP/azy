@@ -34,14 +34,16 @@ std::string vformat(const char* fmt, va_list args) {
 
 }  // namespace
 
+// Bracketed and fixed width, so a log can be grepped for `[WARN]`/`[ERROR]` and
+// the columns still line up in a monospaced viewer.
 const char* log_level_name(LogLevel level) {
     switch (level) {
-        case LogLevel::Debug: return "DEBUG";
-        case LogLevel::Info: return "INFO ";
-        case LogLevel::Warn: return "WARN ";
-        case LogLevel::Error: return "ERROR";
+        case LogLevel::Debug: return "[DEBUG]";
+        case LogLevel::Info: return "[INFO ]";
+        case LogLevel::Warn: return "[WARN ]";
+        case LogLevel::Error: return "[ERROR]";
     }
-    return "INFO ";
+    return "[INFO ]";
 }
 
 Logger& Logger::instance() {

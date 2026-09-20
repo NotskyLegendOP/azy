@@ -124,6 +124,14 @@ def main(argv: list[str]) -> int:
         return 1
 
     print(f"{path} ({len(data):,} bytes)")
+    # A budget, not a target: the brief asks for something light, and the docs
+    # quote the size, so a number that drifts silently is a documentation bug. It
+    # also catches the one thing that would blow the budget instantly - pulling in
+    # a UI framework or a static runtime.
+    budget = 1_000_000
+    over_budget = len(data) > budget
+    print(f"  size budget        {budget:,} bytes "
+          f"({'OK' if not over_budget else 'EXCEEDED'}, {100.0 * len(data) / budget:.1f}% used)")
     print(f"  machine            0x{pe.machine:04x} ({'x64' if pe.machine == 0x8664 else 'other'})")
     print(f"  magic              0x{pe.magic:04x} ({'PE32+' if pe.magic == 0x20B else 'PE32'})")
     print(f"  subsystem          {pe.subsystem} ({SUBSYSTEMS.get(pe.subsystem, '?')})")
@@ -132,7 +140,7 @@ def main(argv: list[str]) -> int:
     resources = pe.resources()
     if not resources:
         print("  resources          none (the application falls back to its runtime DPI call)")
-        return 0
+        return 1 if over_budget else 0
 
     print(f"  resources          {len(resources)}")
     manifest_ok = False
@@ -149,7 +157,7 @@ def main(argv: list[str]) -> int:
     if not manifest_ok:
         print("  !! the application manifest is missing or does not declare DPI awareness and comctl32 v6")
         return 1
-    return 0
+    return 1 if over_budget else 0
 
 
 if __name__ == "__main__":

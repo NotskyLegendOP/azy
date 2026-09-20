@@ -150,6 +150,16 @@ bool visible_frame_rect(HWND hwnd, RECT& out) {
     return GetWindowRect(hwnd, &out) != FALSE;
 }
 
+bool window_client_rect(HWND hwnd, Rect& out) {
+    RECT client{};
+    if (hwnd == nullptr || !GetClientRect(hwnd, &client)) return false;
+    POINT top_left{client.left, client.top};
+    POINT bottom_right{client.right, client.bottom};
+    if (!ClientToScreen(hwnd, &top_left) || !ClientToScreen(hwnd, &bottom_right)) return false;
+    out = Rect{top_left.x, top_left.y, bottom_right.x, bottom_right.y};
+    return !out.empty();
+}
+
 Rect to_rect(const RECT& r) { return Rect{r.left, r.top, r.right, r.bottom}; }
 RECT to_native(const Rect& r) {
     RECT out{};

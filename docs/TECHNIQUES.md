@@ -253,7 +253,7 @@ window also covers the video monitors, which is why the strength is a slider
 | **Stamping a custom bitmap over Premiere's title bar via `WM_NCPAINT`** | Requires participating in Premiere's non-client painting → cross-process painting into another application's DC. Rejected. |
 | **`WS_EX_NOREDIRECTIONBITMAP` + DirectComposition per-panel surfaces** | Per-panel surfaces would need one layered window per Premiere panel, tracking internal docking geometry through undocumented hierarchy — the exact "chase Premiere's internal layout" trap the brief warns about. Reserved for a future optional module, never a default. |
 | **Continuous timers / animation / screen capture loops** | Forbidden by the performance requirements. Everything Azy does is event-driven, and the single timer is a 1s safety net whose normal path does nothing. |
-| **Electron / Chromium / QML / any UI framework** | 50–200 MB of RAM and a rendering process to draw one ring. Rejected in favour of ~440 KB of Win32 + one cached bitmap. |
+| **Electron / Chromium / QML / any UI framework** | 50–200 MB of RAM and a rendering process to draw one ring. Rejected in favour of ~550 KB of Win32 + one cached bitmap. |
 | **Installing a service or driver** | Not needed for a per-user visual utility; a service would raise the privilege surface, complicate uninstall and (if elevated) interfere with observing a normal user's processes. |
 
 ## The fallback ladder (how Azy degrades)

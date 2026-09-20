@@ -4,6 +4,66 @@ All notable changes to Azy Skin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] — 2026-09-20
+
+A complete implementation audit, and the defects it found. Nothing was added to
+the feature set; six real defects were fixed, three documents were made accurate,
+and two leftover scratch scripts were removed from `tools/`.
+
+### Fixed
+
+* **The debug overlay drew screen coordinates inside its own window.** Panel
+  rectangles are in screen space, but the overlay's window sits at the frame
+  origin, so every rectangle was displaced by the window position - on a maximised
+  window by the caption height, and on a window that was not near the origin the
+  whole overlay landed outside its own client area. It now records the frame
+  origin when it is presented and converts at paint time.
+* **The panel map was built from the window rectangle instead of the client
+  area.** `GetWindowRect` includes the caption and the invisible resize border, so
+  the menu-bar band was drawn across the caption and every region below it was
+  shifted down by 30+ px (more at high DPI). A new
+  `win_util::window_client_rect()` (documented, DPI-correct) now supplies the
+  client area, and the frame origin and client origin are tracked separately.
+* **The z-order was re-asserted on every sync.** Stacking can only change with the
+  foreground, but the call ran on each window event - up to roughly a thousand
+  `GetWindow` calls per second during editing, for a condition that could not have
+  changed. It is now gated on `foreground_dirty || changed`.
+* **A stale panel map survived detaching from a window.** It is now cleared on the
+  suspend/remove path, so region work can never receive rectangles for a window
+  that is gone.
+* **The debug overlay used the stock GUI font at a fixed 16 px line spacing**,
+  which is blurry and cramped at 150-200 %. It now creates a Segoe UI 12 DIP
+  ClearType font for the window's DPI, spaces its rows in DIPs, and releases the
+  font with the window.
+* **The Animations switch did nothing.** It was stored, validated and shown, but
+  no code path read it. The setting and its INI key are kept (an existing
+  configuration is never rewritten) and the control is now disabled and labelled
+  "not available - Azy is static", so the window states the truth instead of
+  promising motion. See `docs/KNOWN_LIMITATIONS.md`.
+* **Log level fields are bracketed and fixed width** (`[INFO ]`, `[WARN ]`,
+  `[ERROR]`, `[DEBUG]`), so a log can be grepped for a level; the columns still
+  line up.
+
+### Changed
+
+* Documentation accuracy: four files quoted "~440 KB" for an executable that is
+  560,128 bytes, and `docs/PERFORMANCE.md` described the idle timer's work as
+  "a few atomics". Both now say what is true, and the release-artifact inspection
+  enforces a 1 MB size budget so the number cannot drift again.
+* `tools/preview_render.py` states in its docstring that its palette is
+  transcribed from `theme.cpp` by hand and that no check compares the two; the
+  shipped images are welcome-page illustrations, not screenshots.
+* Removed `tools/.tmp_ver.py` and `tools/.tmp_patch_settings.py`, one-shot scripts
+  that should never have been committed.
+
+### Added
+
+* `docs/AZYSKIN_AUDIT.md`, `docs/VERIFICATION.md` and
+  `docs/KNOWN_LIMITATIONS.md`: the audit, a per-feature statement of what is
+  verified versus only compiled versus unverified, and the product's honest
+  limits. The audit's readiness verdict is **READY FOR RUNTIME TESTING** -
+  nothing in this build has been observed running on Windows next to Premiere Pro.
+
 ## [1.2.1] — 2026-09-20
 
 Debug mode and the panel map: the first half of Phase 5, and the tool that makes

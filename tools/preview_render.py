@@ -7,6 +7,17 @@ Windows machine. It composites the ring over a mock dark "Premiere-like" UI.
 
 This is a design preview, not a screenshot: GDI+ anti-aliasing is approximated
 with an analytic coverage function, which is what GDI+ does for these shapes.
+The palette is transcribed from src/core/theme.cpp by hand - it is not parsed
+from the C++ - so an image produced here only ever shows what the *default*
+theme would look like as ring geometry. It says nothing about a live window.
+
+Regenerate the shipped images with:
+
+    python3 tools/preview_render.py docs/images
+
+They are welcome-page illustrations. Nothing in the application reads them and
+no automated check compares them against the C++ palette; treat a mismatch
+between an image and theme.cpp as a stale image, not as a bug in the renderer.
 """
 
 import struct

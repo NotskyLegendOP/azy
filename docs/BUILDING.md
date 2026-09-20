@@ -33,7 +33,7 @@ cmake --build build --config Release --parallel
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-Output: `build\Release\AzySkin.exe` (~440 KB, GUI subsystem, DPI-aware,
+Output: `build\Release\AzySkin.exe` (~550 KB - 560,128 bytes at the time of writing - GUI subsystem, DPI-aware,
 manifest + icon + version info embedded).
 
 ### Build options
@@ -94,7 +94,7 @@ powershell -ExecutionPolicy Bypass -File scripts\package.ps1
 # requires Inno Setup 6 (choco install innosetup)
 ```
 
-Produces `dist\AzySkin-1.2.1-setup.exe` from `packaging\AzySkin.iss`.
+Produces `dist\AzySkin-1.2.2-setup.exe` from `packaging\AzySkin.iss`.
 
 Installer properties that matter:
 

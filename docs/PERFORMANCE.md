@@ -40,8 +40,10 @@ animation frame, no screen capture and no idle callback.
 
 The safety-net timer exists for one purpose: to recover from a notification
 Windows did not deliver (a lost `MOVESIZE_END`, a window destroyed while the
-event queue was saturated). Its normal cost is a handful of atomic loads — no
-syscalls, no enumeration, no drawing. Raising it to 5 seconds changes nothing
+event queue was saturated). Its normal cost is a settings read, one palette
+build, a `VisualKey` comparison (which decides that nothing changed) and one
+short status string — no enumeration, no window-list walk, no drawing, and no
+`SetTimer` call, because the interval only changes when the decision changes. Raising it to 5 seconds changes nothing
 observable except how quickly such an edge case is noticed; it is not a polling
 frequency in the usual sense.
 
@@ -74,7 +76,7 @@ frequency in the usual sense.
 
 | Component | Cost |
 |---|---|
-| Executable on disk | ~440 KB (Release, x64) |
+| Executable on disk | ~550 KB (Release, x64; 560,128 bytes at the time of writing) |
 | Private working set | ~6–10 MB (Win32 + GDI+ + C++ runtime, no framework) |
 | Surface bitmaps | the ring is four thin strips, not a window-sized layer: 2 × width × thickness + 2 × (height − 2 × thickness) × thickness pixels × 4 bytes. 1080p at 100% DPI: 12px strips, 279 KB. 1080p at 125%: 348 KB. 4K at 200%: 1.0 MB. A single window-sized ARGB layer would be 33 MB at 4K |
 | GDI+/DWM resources | 4 DIB sections, 4 memory DCs, 4 layered windows, 1 tray icon — all released when Premiere exits |
