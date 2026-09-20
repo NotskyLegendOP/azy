@@ -1,0 +1,189 @@
+{
+  "product": "Azy Skin",
+  "spec": "Azy Skin for Adobe Premiere Pro - Complete Implementation Specification",
+  "shipped": "1.1.1",
+  "note": "Single source of truth for docs/progress.html and docs/PROGRESS.md. Edit the items, run tools/progress.py, commit all three. status: done | partial | todo | blocked | impossible. class: A (done/possible), B (possible, planned), C (approximation only), D (not possible - forbidden techniques, excluded from the totals).",
+  "packaging": {
+    "title": "Packaging & distribution",
+    "status": "done",
+    "note": "Installer, portable zip and source zip built by CI on every tag and attached to the GitHub release; local copies in release/."
+  },
+  "phases": [
+    {
+      "id": "P1",
+      "title": "Research & feasibility",
+      "spec": "§2, §44 Phase 1",
+      "eta": "1 session",
+      "next": "Correct the panel model against one debug screenshot from your machine",
+      "items": [
+        {"name": "Main window, child windows, panel hierarchy documented", "class": "A", "status": "done", "weight": 1, "note": "docs/FEASIBILITY.md §1: docked panels are pixels, not windows"},
+        {"name": "Accessibility / UI Automation coverage assessed", "class": "A", "status": "done", "weight": 1, "note": "Partial and version-dependent: used as an optional rectangle source, never as the foundation"},
+        {"name": "Region-by-region verdict (which parts can be modified)", "class": "A", "status": "done", "weight": 2, "note": "Classes A-D for every one of the 19 inspection targets"},
+        {"name": "Safe composition techniques chosen and judged", "class": "A", "status": "done", "weight": 2, "note": "docs/TECHNIQUES.md: six safety tests per API, full rejected list"},
+        {"name": "Input behaviour designed (click-through, no hooks)", "class": "A", "status": "done", "weight": 1, "note": "WS_EX_TRANSPARENT + WS_EX_NOACTIVATE, no keyboard/mouse hooks anywhere"},
+        {"name": "Live confirmation on a real Premiere build", "class": "C", "status": "partial", "weight": 2, "note": "Design verified; the acceptance rows still need one run on your machine"}
+      ]
+    },
+    {
+      "id": "P2",
+      "title": "Window tracking",
+      "spec": "§3 Layer 1, §30-32, §44 Phase 2",
+      "eta": "done",
+      "next": "Fold workspace identification into the panel model (Phase 5)",
+      "items": [
+        {"name": "Process start / termination detection", "class": "A", "status": "done", "weight": 1, "note": "Event-driven (WMI where available, scan as fallback); no high-frequency polling"},
+        {"name": "Window create / destroy / foreground changes", "class": "A", "status": "done", "weight": 1, "note": "WinEvent hooks on the tracked window"},
+        {"name": "Move / resize / maximize / minimize / fullscreen", "class": "A", "status": "done", "weight": 1, "note": "Includes the maximized overhang fix and the work-area rule"},
+        {"name": "DPI detection and rescaling at 100-200%", "class": "A", "status": "done", "weight": 1, "note": "Per-monitor DPI aware v2, values in DIPs, converted at draw time"},
+        {"name": "Multi-monitor following, never assuming the primary", "class": "A", "status": "done", "weight": 1, "note": "Monitor from the window rect, work area per monitor"},
+        {"name": "Single instance, per-user session, hand-over on upgrade", "class": "A", "status": "done", "weight": 1, "note": "1.1.1: installing over a running build now takes over instead of exiting silently"},
+        {"name": "Workspace identification (Editing / Color / Audio / Effects / Graphics)", "class": "B", "status": "partial", "weight": 2, "note": "Profile default today; published panel names when Adobe exposes them"},
+        {"name": "Suspend on minimize / inactivity, resume on restore", "class": "A", "status": "done", "weight": 1, "note": "Performance manager with settled/suspended/perf intervals"}
+      ]
+    },
+    {
+      "id": "P3",
+      "title": "Rendering prototype",
+      "spec": "§4, §5, §44 Phase 3",
+      "eta": "1 session",
+      "next": "One region prototype: header band plus a 1px dock separator",
+      "items": [
+        {"name": "Click-through layered surface", "class": "A", "status": "done", "weight": 2, "note": "Four ring strips via UpdateLayeredWindow(ULW_ALPHA)"},
+        {"name": "Whole-window constant-alpha layer", "class": "B", "status": "done", "weight": 3, "note": "One solid colour per window, no bitmap; the cheapest possible answer to §5"},
+        {"name": "Prove it is on screen, not just that calls succeeded", "class": "A", "status": "done", "weight": 2, "note": "Check visibility samples the desktop twice and compares"},
+        {"name": "Z-order re-assertion above Premiere", "class": "A", "status": "done", "weight": 3, "note": "1.1.1: the fix for 'in front of Premiere: no'"},
+        {"name": "Region prototype (one panel band, one hairline)", "class": "B", "status": "todo", "weight": 3, "note": "Proves the panel-map geometry before anything is built on it"},
+        {"name": "Efficiency harness (CPU/GPU/RAM over 30 minutes)", "class": "A", "status": "partial", "weight": 2, "note": "Budget documented and measured by hand; no scripted capture yet"}
+      ]
+    },
+    {
+      "id": "P4",
+      "title": "Design system",
+      "spec": "§7, §8, §10, §12, §24-27, §38-40",
+      "eta": "1 session",
+      "next": "Accent palette + named glass material + the four presets",
+      "items": [
+        {"name": "Surface token set (charcoal, surface, highlight, shadow, bezel)", "class": "A", "status": "done", "weight": 2, "note": "include/azy/core/theme.hpp, resolved once per settings change"},
+        {"name": "Theme -> palette resolution, tested", "class": "A", "status": "done", "weight": 1, "note": "Unit-tested colour mixing and darkness lerp"},
+        {"name": "Accent system (restrained blue/violet, active-only)", "class": "B", "status": "todo", "weight": 2, "note": "§7 AccentBlue/AccentPurple, §10 glow only on the focused panel, §25 static ambient light"},
+        {"name": "One reusable glass material (base + reflection + border + shadow)", "class": "B", "status": "partial", "weight": 2, "note": "Exists as the ring visual; needs to become a named material the region chrome can reuse"},
+        {"name": "Static lighting and reflection gradients", "class": "B", "status": "todo", "weight": 2, "note": "§25-26: top-left blue, bottom-right violet, diagonal reflection - static, rendered once"},
+        {"name": "Corner radius in DIPs, clamped, per element size", "class": "A", "status": "partial", "weight": 1, "note": "Ring: done. 12-16px panel radii (§24) arrive with the region chrome"},
+        {"name": "Presets: Ultra / Balanced / Performance / Low Power", "class": "B", "status": "partial", "weight": 2, "note": "§40: only Performance mode exists; Balanced must become the default"},
+        {"name": "Configuration file covering every visual value (INI/JSON)", "class": "B", "status": "partial", "weight": 2, "note": "§38: intensities live in settings.ini; accent, blur, glow and animation keys are missing"},
+        {"name": "Tests for the design system", "class": "A", "status": "partial", "weight": 1, "note": "Theme and geometry covered; accents, presets and material to come"}
+      ]
+    },
+    {
+      "id": "P5",
+      "title": "Major panels",
+      "spec": "§8-§23, §44 Phase 5",
+      "eta": "2-3 sessions",
+      "next": "Panel map for the Editing workspace, drawn in debug mode first",
+      "items": [
+        {"name": "Workspace-wide edge treatment (hairline + bezel + falloff)", "class": "A", "status": "done", "weight": 2, "note": "The ring, at every DPI and window state"},
+        {"name": "Whole-window tint (the 'skinned' read)", "class": "B", "status": "done", "weight": 3, "note": "45% default, strength slider, off switch"},
+        {"name": "Panel map: measured + published + modelled rectangles", "class": "B", "status": "todo", "weight": 4, "note": "The foundation for every class-C row below it"},
+        {"name": "Dock separators: 1px hairlines where panels meet", "class": "C", "status": "todo", "weight": 3, "note": "§9-§12: gives panels measurable depth and separation without touching Premiere's widgets"},
+        {"name": "Application header band (§23)", "class": "C", "status": "todo", "weight": 2, "note": "Static top highlight + darkened header strip"},
+        {"name": "Timeline band, selected-track accent line (§16)", "class": "C", "status": "todo", "weight": 3, "note": "Clips and playhead stay Premiere's: per-clip styling is class D"},
+        {"name": "Monitor / Project / Effect Controls bands (§17-19)", "class": "C", "status": "todo", "weight": 3, "note": "Video pixels are never touched; only the frame around them"},
+        {"name": "Audio meter region (§20, static only)", "class": "C", "status": "todo", "weight": 1, "note": "Container treatment only, so a moving meter never costs frames"},
+        {"name": "Workspace profiles (Editing / Color / Audio / Effects / Graphics)", "class": "B", "status": "todo", "weight": 3, "note": "§32, §37: ratios per workspace, config not code"},
+        {"name": "Resize/DPI re-layout straight from ratios", "class": "B", "status": "todo", "weight": 2, "note": "Settled once per resize, never per frame"}
+      ]
+    },
+    {
+      "id": "P6",
+      "title": "Secondary UI",
+      "spec": "§14, §15, §21, §22, §44 Phase 6",
+      "eta": "1 session",
+      "next": "Undocked panels and dialogs - real windows, so real treatments",
+      "items": [
+        {"name": "Undocked (floating) panels: dark frame + ring", "class": "B", "status": "todo", "weight": 3, "note": "They are top-level windows, so the Level-1 treatment applies exactly as it does to the main window"},
+        {"name": "Dialogs: dark title bar + subtle border", "class": "B", "status": "todo", "weight": 2, "note": "DWM attributes on the dialog HWND; reversible, non-client only"},
+        {"name": "Azy's own settings window and tray", "class": "A", "status": "done", "weight": 2, "note": "Dark, minimal, live-applying"},
+        {"name": "Premiere's own menus, dropdowns, tooltips", "class": "D", "status": "impossible", "weight": 0, "note": "Windows popup menus are drawn by the system for Premiere's process; there is no external theming hook"},
+        {"name": "Premiere's own buttons, sliders, checkboxes, tabs", "class": "D", "status": "impossible", "weight": 0, "note": "Not native controls and not separate windows: unreachable without injection"}
+      ]
+    },
+    {
+      "id": "P7",
+      "title": "Animation",
+      "spec": "§28, §44 Phase 7",
+      "eta": "0-1 session, decision first",
+      "next": "Say yes/no to 100ms transitions on Azy's own layers",
+      "items": [
+        {"name": "Decision recorded: Azy stays static by default", "class": "A", "status": "done", "weight": 1, "note": "docs/FEASIBILITY.md §6 resolves the conflict with the original no-animation rule"},
+        {"name": "animations switch for Azy's own surfaces (off by default)", "class": "B", "status": "todo", "weight": 2, "note": "Only Azy's layers could animate at all; Premiere's widgets cannot, and are class D"}
+      ]
+    },
+    {
+      "id": "P8",
+      "title": "Performance",
+      "spec": "§29, §44 Phase 8, §45",
+      "eta": "1 session",
+      "next": "Scripted 30-minute idle capture so the budget is a number, not a promise",
+      "items": [
+        {"name": "Event-driven updates, no 1ms polling loops", "class": "A", "status": "done", "weight": 3, "note": "WinEvents, shell notifications, and timers armed only while unsettled"},
+        {"name": "Performance mode (bezel + hairline only)", "class": "A", "status": "done", "weight": 2, "note": "Default on low-end machines; keeps the overlay, drops backdrop, rounding and shadow"},
+        {"name": "Idle / suspended / perf scheduling", "class": "A", "status": "done", "weight": 2, "note": "Timer intervals follow what the engine needs, not the other way round"},
+        {"name": "No full-screen repaints; one key per surface", "class": "A", "status": "done", "weight": 2, "note": "Repaint only when geometry, colour or style changes"},
+        {"name": "Measured budget on the target machine (30 min)", "class": "A", "status": "partial", "weight": 3, "note": "Targets documented (<1% idle, <2% monitoring, <100 MB); needs a capture from your machine"},
+        {"name": "Throttled resize, debounced detection", "class": "A", "status": "done", "weight": 2, "note": "Work happens once the window settles, not per WM_SIZE"}
+      ]
+    },
+    {
+      "id": "P9",
+      "title": "Compatibility & acceptance",
+      "spec": "§33-37, §44 Phase 9, §45, §46",
+      "eta": "1 session + your test run",
+      "next": "Live acceptance pass on 1080p/1440p/4K, dual monitor, 100-200%",
+      "items": [
+        {"name": "Version profiles with a conservative fallback", "class": "A", "status": "done", "weight": 2, "note": "2024/2025/2026 full, unknown = reduced, never a crash"},
+        {"name": "Safe Mode after repeated failures", "class": "A", "status": "done", "weight": 2, "note": "Basic enhancements only, experimental features re-enabled by hand"},
+        {"name": "Crash isolation both ways", "class": "A", "status": "done", "weight": 2, "note": "Premiere never depends on Azy; Azy never touches Premiere's state"},
+        {"name": "Unplaceable region ignored, logged, never fatal", "class": "A", "status": "partial", "weight": 2, "note": "Rule written; becomes real work once the panel map exists"},
+        {"name": "Live acceptance run (playback, scrub, export, import, save, dock/undock)", "class": "C", "status": "todo", "weight": 4, "note": "Needs Premiere: the rows are written down in docs/TESTING.md §2-§9"},
+        {"name": "Visual quality compared against the reference image (§46)", "class": "C", "status": "todo", "weight": 3, "note": "The reference image did not arrive with the specification - attach it and the palette is read from it"},
+        {"name": "Undo/redo safety: no project state touched (§33)", "class": "A", "status": "done", "weight": 1, "note": "True by construction: Azy never opens a project or sends Premiere an edit command"}
+      ]
+    }
+  ],
+  "out_of_scope": [
+    {"spec": "§16 Selected/unselected clip styling, playhead styling", "why": "Clips and the playhead are painted by Premiere inside one window. Recolouring them means hooking its renderer - the definition of what this project does not do. Closest alternative: the timeline band, its separators and an accent line for the selected track."},
+    {"spec": "§14-15 Dropdown and context menus as glass cards", "why": "Those popups belong to Premiere's process and are themed by Windows. No supported external theming exists. They stay exactly as they are."},
+    {"spec": "§13 Buttons, §19 sliders/checkboxes/keyframes, §18 search field, §21 toolbar icons", "why": "Premiere's own drawing, with no HWND behind them. Alternative: region chrome around them (separators, bands, accents), which is what class C delivers."},
+    {"spec": "§9-10 Background blur behind panels", "why": "Windows can blur only a process's own window. Blurring Premiere's pixels requires constant screen capture and reprojection - explicitly ruled out. Alternative: static gradients that read as depth."},
+    {"spec": "§11 Panel hover/active/focus states on Premiere's panels", "why": "Premiere's panels never tell an outside process that the pointer is over them. Alternative: focus-aware treatment of the tracked window as a whole (active window vs. inactive), which is measurable."}
+  ],
+  "spec_map": [
+    {"section": "§3 Layer 2 Panel discovery", "phase": "P5", "class": "B/C", "status": "todo"},
+    {"section": "§7 Design system", "phase": "P4", "class": "B", "status": "partial"},
+    {"section": "§8 Background layers", "phase": "P4/P5", "class": "C", "status": "partial"},
+    {"section": "§9-12 Glass panels, material, states, borders", "phase": "P4/P5", "class": "C", "status": "partial"},
+    {"section": "§13-15 Controls, dropdowns, context menus", "phase": "P6", "class": "D", "status": "impossible"},
+    {"section": "§16 Timeline", "phase": "P5", "class": "C", "status": "todo"},
+    {"section": "§17-19 Monitors, Project, Effect Controls", "phase": "P5", "class": "C", "status": "todo"},
+    {"section": "§20 Audio meters", "phase": "P5", "class": "C", "status": "todo"},
+    {"section": "§21-23 Toolbar, menu bar, application header", "phase": "P5/P6", "class": "C", "status": "todo"},
+    {"section": "§24-27 Radius, lighting, reflections, shadows", "phase": "P4", "class": "B", "status": "partial"},
+    {"section": "§28 Animation", "phase": "P7", "class": "B", "status": "todo"},
+    {"section": "§33 Undo/redo safety", "phase": "P9", "class": "A", "status": "done"},
+    {"section": "§37 Version -> UI profile system", "phase": "P5", "class": "B", "status": "partial"},
+    {"section": "§38 Configuration file", "phase": "P4", "class": "B", "status": "partial"},
+    {"section": "§39-40 Settings, presets", "phase": "P4", "class": "B", "status": "partial"},
+    {"section": "§41 Debug mode", "phase": "P5", "class": "B", "status": "todo"}
+  ],
+  "acceptance": [
+    {"area": "Premiere", "row": "Opens / closes normally", "status": "done", "note": "Never a dependency: Azy attaches to a running process and detaches on exit"},
+    {"area": "Premiere", "row": "Plays / scrubs normally", "status": "user", "note": "No hooks in the render path; needs one confirmation run"},
+    {"area": "Premiere", "row": "Exports / imports / saves normally", "status": "user", "note": "Azy never opens, reads or writes a project"},
+    {"area": "Input", "row": "Mouse, keyboard, shortcuts, dragging, timeline interaction", "status": "done", "note": "Click-through by construction; no input hooks of any kind"},
+    {"area": "UI", "row": "No drift, no flicker, no black rectangles, no input-blocking areas", "status": "partial", "note": "Probe + z-order guard; the region chrome still has to earn this"},
+    {"area": "UI", "row": "Panels align correctly", "status": "todo", "note": "Arrives with the panel map"},
+    {"area": "Performance", "row": "No continuous redraw, no playback FPS loss, no timeline latency", "status": "partial", "note": "Event-driven and static; measurement script still to come"},
+    {"area": "Scaling", "row": "100 / 125 / 150 / 175 / 200%", "status": "user", "note": "DIP-based values and per-monitor DPI v2; one pass on real hardware to confirm"},
+    {"area": "Displays", "row": "1080p / 1440p / 4K / dual monitor", "status": "user", "note": "Geometry is monitor-relative and tested in unit tests; live pass pending"}
+  ]
+}

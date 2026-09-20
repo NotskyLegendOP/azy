@@ -8,6 +8,7 @@
 #      whole Win32 layer still compiles and links, with the GUI subsystem set)
 #   5. inspect the resulting executable: PE type, GUI subsystem, and the embedded
 #      manifest/icon/version resources
+#   6. check that the generated progress board still matches docs/progress.json
 #
 #   ./scripts/verify.sh
 #
@@ -17,26 +18,30 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-echo "== 1/5 include hygiene =="
+echo "== 1/6 include hygiene =="
 python3 "$root/tools/check-includes.py"
 
 echo
-echo "== 2/5 version strings =="
+echo "== 2/6 version strings =="
 python3 "$root/tools/check-version.py"
 
 echo
-echo "== 3/5 core unit tests (native) =="
+echo "== 3/6 core unit tests (native) =="
 cmake -S "$root" -B "$root/build-tests" -DAZY_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug > /dev/null
 cmake --build "$root/build-tests" --parallel > /dev/null
 ctest --test-dir "$root/build-tests" --output-on-failure
 
 echo
-echo "== 4/5 Windows cross-compile =="
+echo "== 4/6 Windows cross-compile =="
 "$root/scripts/build-windows.sh" "$root/build-zig"
 
 echo
-echo "== 5/5 inspect the executable =="
+echo "== 5/6 inspect the executable =="
 python3 "$root/tools/inspect-pe.py" "$root/build-zig/AzySkin.exe"
+
+echo
+echo "== 6/6 progress board in sync =="
+python3 "$root/tools/progress.py" --check
 
 echo
 echo "All checks passed."
