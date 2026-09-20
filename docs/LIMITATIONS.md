@@ -111,3 +111,21 @@ rendering are all exactly what Adobe shipped.
    plain language, and waits to be re-enabled manually.
 
 The most invasive thing Azy does in response to difficulty is *less*.
+
+## If Azy is force-killed (Task Manager, a crash)
+
+Premiere is unaffected: it keeps running, keeps focus, and never noticed Azy. Two
+details are worth knowing:
+
+* **No ghost surface.** The composition strips belong to Azy's process, so Windows
+  destroys them with it. Nothing translucent is left floating over the desktop.
+* **The frame treatment stays until Premiere restarts.** DWM attributes live on the
+  *window*, not in Azy: a dark title bar and an extended frame remain dark after a
+  forced kill. That is not damage - the window still behaves exactly as before, and
+  the next Azy start (or a Premiere restart) resets it. It is the honest cost of
+  using only documented, non-invasive window attributes, and the same reason Azy
+  never leaves hooks or patched code behind.
+
+Everything else is per-session state: the tray icon, the timers and the WinEvent
+hooks all die with the process, so a killed Azy uses no CPU, no GPU and no memory,
+and cannot block Premiere from starting again.
