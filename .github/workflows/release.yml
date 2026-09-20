@@ -128,12 +128,19 @@ jobs:
           "@
           $notes | Set-Content -Path release-notes.md -Encoding utf8
 
-          # Only create the tag/release if it is not there yet; otherwise just attach
-          # the freshly built assets to the existing one.
+          # Attach to an existing release/tag when there is one; otherwise create it.
+          # (--target only matters when the tag does not exist yet: pushing the tag
+          # first is what makes a tag-triggered run land on the right commit.)
           gh release view $tag --repo "${{ github.repository }}" *> $null
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag out/* --clobber --repo "${{ github.repository }}"
-          } else {
-            gh release create $tag out/* --title "Azy Skin $version" --notes-file release-notes.md `
-              --target "${{ github.sha }}" @flags --repo "${{ github.repository }}"
+            exit $LASTEXITCODE
           }
+
+          git rev-parse --verify --quiet "refs/tags/$tag" *> $null
+          $tag_exists = ($LASTEXITCODE -eq 0)
+          $create = @("release", "create", $tag) + (Get-ChildItem out | ForEach-Object { $_.FullName }) +
+                    @("--title", "Azy Skin $version", "--notes-file", "release-notes.md") +
+                    @("--repo", "${{ github.repository }}") + $flags
+          if (-not $tag_exists) { $create += @("--target", "${{ github.sha }}") }
+          & gh @create
