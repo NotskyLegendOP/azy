@@ -22,6 +22,7 @@ enum ControlId : int {
     kStatusText = 100,
     kPremiereText,
     kTreatmentText,
+    kDiagnosticsText,
     kSectionSkin,
     kSectionAppearance,
     kSectionPerformance,
@@ -218,7 +219,12 @@ void SettingsWindow::layout(int dpi) {
           font_small_);
     y += kRowHeight - 4;
     label(kTreatmentText, kMargin, y, width, kRowHeight - 4, SS_ENDELLIPSIS, L"", font_small_);
-    y += kRowHeight + kSectionGap;
+    y += kRowHeight - 4;
+    // Diagnostics: the two or three facts that decide whether the ring can be
+    // seen at all. Small, read-only, and always visible - it turns a "nothing
+    // happens" report into a screenshot with the answer in it.
+    label(kDiagnosticsText, kMargin, y, width, kRowHeight * 3, SS_LEFT, L"", font_small_);
+    y += kRowHeight * 3 + kSectionGap;
 
     // --- Skin --------------------------------------------------------------
     label(kSectionSkin, kMargin, y, width, 16, 0, L"SKIN", font_small_);
@@ -397,6 +403,16 @@ void SettingsWindow::update_status(const Status& status, bool skin_enabled, bool
     const std::wstring treatment = L"Treatment: " + to_wide(status.treatment) + L"   |   " + to_wide(status.host);
     if (HWND control = GetDlgItem(hwnd_, kTreatmentText)) {
         SetWindowTextW(control, treatment.c_str());
+        InvalidateRect(control, nullptr, TRUE);
+    }
+
+    std::wstring diagnostics;
+    for (const std::string& line : status.lines) {
+        if (!diagnostics.empty()) diagnostics += L"\r\n";
+        diagnostics += to_wide(line);
+    }
+    if (HWND control = GetDlgItem(hwnd_, kDiagnosticsText)) {
+        SetWindowTextW(control, diagnostics.c_str());
         InvalidateRect(control, nullptr, TRUE);
     }
 

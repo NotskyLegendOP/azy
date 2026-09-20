@@ -48,6 +48,23 @@ private:
     HANDLE handle_ = nullptr;
 };
 
+// --- Privileges -----------------------------------------------------------
+
+// Windows integrity level of a process: 0 = untrusted, 1 = low, 2 = medium
+// (a normally launched application), 3 = high (elevated / "as administrator"),
+// 4 = system. Returns -1 when it cannot be read, which is itself meaningful: a
+// process of higher integrity than ours usually refuses to hand out its token.
+//
+// This matters because Windows does not let a window of a lower integrity
+// process be placed above a window of a higher one (UIPI). If Premiere runs
+// elevated and Azy does not, Azy's ring is composed *behind* Premiere - every
+// call succeeds and nothing is ever visible.
+int process_integrity_level(unsigned long pid);
+int own_integrity_level();
+
+// "medium", "high (administrator)", ... - for the log and the settings window.
+const char* integrity_level_name(int level);
+
 // --- Paths ----------------------------------------------------------------
 
 std::filesystem::path executable_path();

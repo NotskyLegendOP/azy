@@ -230,6 +230,11 @@ bool CompositionSurface::present(HWND below, const Rect& frame, const RingVisual
         if (!present_strip(i, anchor, frame, visual, error)) {
             // Partial rings look broken: hide everything rather than show three
             // edges out of four.
+            report_ = RingReport{};
+            report_.frame = frame;
+            report_.band_px = visual.band_px;
+            report_.radius_px = visual.radius_px;
+            report_.error = error != nullptr ? *error : std::string("strip not presented");
             hide();
             return false;
         }
@@ -248,14 +253,25 @@ bool CompositionSurface::present(HWND below, const Rect& frame, const RingVisual
         if (alpha > strongest) strongest = alpha;
     }
     const bool above = below == nullptr || !IsWindow(below) || sits_above(strips_[kTop].hwnd, below);
+    report_ = RingReport{};
+    report_.presented = true;
+    report_.frame = frame;
+    report_.thickness_px = reported.thickness_px;
+    report_.band_px = visual.band_px;
+    report_.radius_px = reported.radius_px;
+    report_.bitmap_bytes = bitmap_bytes();
+    report_.max_alpha = strongest;
+    report_.above = above;
     log_info("ring: %dx%d frame at (%d,%d), %dpx thick, band %dpx, radius %dpx, %zu KB, "
              "strongest pixel alpha %u, above Premiere: %s",
              frame.width(), frame.height(), frame.left, frame.top, reported.thickness_px, visual.band_px,
              reported.radius_px, bitmap_bytes() / 1024, static_cast<unsigned>(strongest),
              above ? "yes" : "no");
     if (!above) {
+        report_.presented = false;
+        report_.error = "the strips could not be placed above the Premiere window (z-order blocked)";
         hide();
-        if (error) *error = "the strips could not be placed above the Premiere window (z-order blocked)";
+        if (error) *error = report_.error;
         return false;
     }
 
@@ -277,6 +293,7 @@ void CompositionSurface::hide() {
         if (strip.hwnd != nullptr) ShowWindow(strip.hwnd, SW_HIDE);
     }
     visible_ = false;
+    report_.presented = false;
 }
 
 void CompositionSurface::destroy() {

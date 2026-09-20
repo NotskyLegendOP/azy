@@ -4,6 +4,37 @@ All notable changes to Azy Skin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] — 2026-09-20
+
+### Added
+
+* **The settings window now answers "is the ring actually on screen?"** Two or
+  three small diagnostic lines sit under the status:
+
+  ```
+  Window 'Premiere Pro' 1920x1040 at (0,0) | maximized | screen (0,0)-(1920,1080) | 100%
+  Ring 12px at (0,0)-(1920,1040) | brightest pixel 199/255 | in front of Premiere: yes
+  ```
+
+  The first names the window Azy attached to and the geometry it works from (a
+  wrong window or a surprising rectangle is visible at a glance), the second names
+  the rectangle the ring was drawn on, the strongest pixel the renderer produced
+  (`0` would mean an invisible bitmap) and whether the strips are in front of
+  Premiere. When a line is missing, the panel says why instead: *"Ring: not on
+  screen - …"*. A screenshot of that panel is now enough to diagnose a report.
+* Azy notices when Premiere Pro runs with administrator rights and Azy does not,
+  and says so in the log, the panel and a tray notification. Windows never lets a
+  window of a lower integrity process be drawn above a higher integrity one, so
+  the skin cannot be visible in that configuration - previously it simply looked
+  like Azy was doing nothing.
+
+### Fixed
+
+* The ring frame is now clipped to the display as well. A borderless window that
+  Windows does not report as maximized (Premiere's own fullscreen mode, for
+  example) hangs over the monitor edges just like a maximized one, and was
+  decorated off screen for the same reason.
+
 ## [1.0.1] — 2026-09-20
 
 ### Fixed

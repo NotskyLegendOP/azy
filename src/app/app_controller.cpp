@@ -353,6 +353,23 @@ void AppController::on_premiere_event(const win::PremiereDetector::Event& event)
                 engine_.revert();
                 tracker_.clear();
             }
+            // Windows never lets a window of a lower integrity process be drawn
+            // above one of a higher integrity process (UIPI). If Premiere runs
+            // elevated and Azy does not, the ring is composed behind it: every
+            // call succeeds and nothing is ever visible. Worth saying out loud.
+            if (event.pid != 0) {
+                const int premiere_level = win::process_integrity_level(event.pid);
+                const int own_level = win::own_integrity_level();
+                const bool elevated = premiere_level >= 3 && own_level >= 0 && premiere_level > own_level;
+                if (elevated && !premiere_elevated_) {
+                    log_warn("Premiere Pro is running elevated (%s) while Azy Skin is not (%s): Windows will not let "
+                             "Azy's surface be drawn above it, so the skin cannot be visible. Start Azy Skin as "
+                             "administrator as well, or run Premiere Pro normally.",
+                             win::integrity_level_name(premiere_level), win::integrity_level_name(own_level));
+                }
+                premiere_elevated_ = elevated;
+            }
+
             Settings& settings = store_.settings();
             const std::string version = product_.version_string();
             if (version != settings.last_premiere_version && version != "unknown") {
@@ -372,6 +389,8 @@ void AppController::on_premiere_event(const win::PremiereDetector::Event& event)
             watch_.set_watched_thread(0);
             watch_.clear_move_size_loop();
             manual_apply_ = false;
+            premiere_elevated_ = false;
+            ring_warning_shown_ = false;
             product_ = ProductInfo{};
             log_info("skin resources released");
             break;
@@ -530,6 +549,30 @@ void AppController::sync(const char* reason_name) {
                   detector_.stats().scans, detector_.stats().events_from_wmi);
     }
 
+    // --- 4b. Say something when the ring cannot be seen -------------------
+    // A utility whose entire purpose is to be visible must not fail silently.
+    // When everything says the ring should be on screen and it is not (the strips
+    // could not be placed in front of Premiere, the bitmap came out empty, the
+    // surface refused to present), tell the user once, with the reason, instead of
+    // leaving them to wonder.
+    const win::RingReport& ring = engine_.ring_report();
+    const bool ring_expected = request.features.edge_surface && request.suspend == win::SuspendReason::None &&
+                               request.target.valid();
+    const bool ring_attempted = engine_.surface_presents() > 0 || !ring.error.empty();
+    const bool ring_visible = ring.presented && ring.above && ring.max_alpha > 0;
+    if (ring_expected && ring_attempted && !ring_visible && !ring_warning_shown_) {
+        ring_warning_shown_ = true;
+        const std::string reason = !ring.error.empty() ? ring.error : std::string("the ring bitmap was empty");
+        log_warn("the skin is not visible: %s", reason.c_str());
+        if (tray_.exists()) {
+            tray_.notify(L"Azy Skin - skin not visible",
+                         L"Azy Skin is running, but it could not put the skin on screen: " +
+                             win::to_wide(reason) + L"  (Settings > Open log file has the details.)",
+                         NIIF_WARNING);
+        }
+    }
+    if (ring_visible) ring_warning_shown_ = false;
+
     // --- 5. Housekeeping --------------------------------------------------
     arm_timer(decision.timer_interval_ms);
     const std::string status = status_line();
@@ -665,6 +708,41 @@ std::string AppController::treatment_summary(const FeatureSet& features) const {
     return summary;
 }
 
+std::vector<std::string> AppController::diagnostics_lines() const {
+    std::vector<std::string> lines;
+    const win::SkinTarget& target = tracker_.target();
+
+    if (target.hwnd != nullptr) {
+        std::string shape = "windowed";
+        if (target.maximized) shape = "maximized";
+        else if (target.fullscreen) shape = "fullscreen";
+        lines.push_back(str_format("Window '%s' %dx%d at (%d,%d) | %s | screen (%d,%d)-(%d,%d) | %d%%",
+                                   win::to_utf8(target.window_class).c_str(), target.visible_frame.width(),
+                                   target.visible_frame.height(), target.visible_frame.left, target.visible_frame.top,
+                                   shape.c_str(), target.monitor.left, target.monitor.top, target.monitor.right,
+                                   target.monitor.bottom, static_cast<int>(target.dpi * 100u / 96u)));
+    } else {
+        lines.push_back("Window: none attached yet");
+    }
+
+    const win::RingReport& ring = engine_.ring_report();
+    if (ring.presented) {
+        lines.push_back(str_format("Ring %dpx at (%d,%d)-(%d,%d) | brightest pixel %u/255 | in front of Premiere: %s",
+                                   ring.thickness_px, ring.frame.left, ring.frame.top, ring.frame.right,
+                                   ring.frame.bottom, static_cast<unsigned>(ring.max_alpha),
+                                   ring.above ? "yes" : "no"));
+    } else if (!ring.error.empty()) {
+        lines.push_back("Ring: not on screen - " + ring.error);
+    } else {
+        lines.push_back("Ring: not drawn yet");
+    }
+
+    if (premiere_elevated_) {
+        lines.push_back("Note: Premiere runs as administrator, Azy Skin does not - Windows blocks drawing above it.");
+    }
+    return lines;
+}
+
 std::string AppController::state_summary() const {
     if (engine_.frame_applied() && engine_.surface_visible()) return "active";
     if (engine_.frame_applied()) return "partial";
@@ -712,6 +790,7 @@ void AppController::update_settings_window_status() {
     // The headline reports the engine's own state, not the configuration: a
     // window that says "active" while nothing is on screen is worse than useless.
     status.state = state_summary();
+    status.lines = diagnostics_lines();
     status.treatment = treatment_summary(effective_features(product_));
     status.safe_mode = safe_mode_;
     status.safe_mode_note = safe_mode_

@@ -85,6 +85,15 @@ inline Rect ring_frame(const Rect& visible_frame, const Rect& monitor, const Rec
                        bool maximized, bool fullscreen) {
     if (maximized && !work_area.empty()) return work_area;
     if (fullscreen && !monitor.empty()) return monitor;
+    if (!monitor.empty()) {
+        // A window whose frame sticks out over the display is not a window anyone
+        // can see the outside of: draw on the part that is really on screen. This
+        // is what covers "borderless fullscreen" windows that Windows does not
+        // report as maximized (Premiere's fullscreen mode, for one), and windows
+        // dragged half off the edge.
+        const Rect clamped = intersect_rect(visible_frame, monitor);
+        if (!clamped.empty()) return clamped;
+    }
     return visible_frame;
 }
 

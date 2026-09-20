@@ -12,6 +12,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 #include "azy/app/app_settings_store.hpp"
 #include "azy/core/failure_tracker.hpp"
@@ -86,6 +87,10 @@ private:
     // the engine really did.
     std::string state_summary() const;
     std::string premiere_summary() const;
+    // Compact, current facts about the target window and the ring, shown in the
+    // settings window: "the skin does nothing" can then be reported with a
+    // screenshot instead of a log file.
+    std::vector<std::string> diagnostics_lines() const;
     std::string treatment_summary(const FeatureSet& features) const;
 
     // Sampling interval for window geometry while the user is dragging/resizing
@@ -114,6 +119,8 @@ private:
     win::SkinState engine_state_;
     unsigned long long failures_seen_ = 0;
     bool safe_mode_ = false;
+    bool premiere_elevated_ = false;  // Premiere runs at a higher integrity level than Azy
+    bool ring_warning_shown_ = false;  // the "the ring is not on screen" notice was already shown
     bool manual_apply_ = false;      // user asked for the skin although autostart is off
     bool suspended_manual_ = false;  // tray "Suspend Skin"
     bool skin_active_last_ = false;

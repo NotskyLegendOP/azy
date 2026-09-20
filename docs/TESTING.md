@@ -43,13 +43,21 @@ The `ring:` line is the one to read when a user reports "the skin does nothing":
 | `strongest pixel alpha` | the strongest pixel the renderer produced. `0` means the bitmap came out fully transparent - a rendering fault, not a placement one |
 | `above Premiere: yes` | the strips sit in front of the Premiere window in the z-order. `no` means something is covering them (a lower-integrity process cannot be placed above a higher-integrity one), and the skin is invisible no matter how well it was rendered |
 
+The same two facts are on screen, under the status lines of the settings window, so a
+user report can carry them without a log file:
+
+```
+Window 'Premiere Pro' 1920x1040 at (0,0) | maximized | screen (0,0)-(1920,1080) | 100%
+Ring 12px at (0,0)-(1920,1040) | brightest pixel 199/255 | in front of Premiere: yes
+```
+
 ---
 
 ## 1. Startup and detection
 
 | # | Steps | Pass criteria |
 |---|---|---|
-| 1.1 | Launch `AzySkin.exe` with no Premiere running | Tray icon appears. No window, no taskbar button, no Alt+Tab entry. Log: `Azy Skin 1.0.1 starting`, `host: Windows ...`, `WinEvent observer started` |
+| 1.1 | Launch `AzySkin.exe` with no Premiere running | Tray icon appears. No window, no taskbar button, no Alt+Tab entry. Log: `Azy Skin 1.0.2 starting`, `host: Windows ...`, `WinEvent observer started` |
 | 1.2 | Now start Premiere Pro | Within ~1 s of the editor window appearing: log shows `Premiere detected: Premiere Pro 2025, version 25.6.0.58` and the skin is applied. Settings → Treatment shows `full`, and the headline says `active`. The log line `ring: ... strongest pixel alpha <n>, above Premiere: yes` appears with n > 0 |
 | 1.3 | Start Premiere **first**, then start Azy Skin | The skin appears without restarting Premiere (startup sync picks it up immediately) |
 | 1.4 | Launch Azy Skin a second time | No second instance; the existing instance's Settings window appears. Log: `another Azy Skin instance is already running` |

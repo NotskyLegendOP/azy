@@ -66,6 +66,7 @@ public:
 
     bool frame_applied() const { return composer_.is_applied(); }
     bool surface_visible() const { return surface_.visible(); }
+    const RingReport& ring_report() const { return surface_.report(); }
     HWND surface_window() const { return surface_.hwnd(); }
     const VisualKey& last_key() const { return last_key_; }
     bool has_key() const { return has_key_; }

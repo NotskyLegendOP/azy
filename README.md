@@ -54,7 +54,7 @@ Every technique and why it is safe: [`docs/TECHNIQUES.md`](docs/TECHNIQUES.md).
 
 ## Installing
 
-1. Run `AzySkin-1.0.1-setup.exe`.
+1. Run `AzySkin-1.0.2-setup.exe`.
 2. Choose whether Azy Skin should start with Windows and whether it should skin
    Premiere automatically (both recommended).
 3. Start Premiere Pro.
@@ -206,7 +206,7 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 Packaging: `powershell -File scripts\package.ps1` (needs Inno Setup 6) produces
-`dist\AzySkin-1.0.1-setup.exe`.
+`dist\AzySkin-1.0.2-setup.exe`.
 
 Full instructions, including what the cross build can and cannot verify:
 [`docs/BUILDING.md`](docs/BUILDING.md).

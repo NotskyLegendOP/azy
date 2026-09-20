@@ -670,12 +670,18 @@ void test_ring_layout() {
     const Rect overhanging = Rect::from_size(-8, -8, 1936, 1048);
     CHECK(ring_frame(overhanging, monitor, work_area, true, false) == work_area);
 
-    // A windowed Premiere keeps exactly the bounds Windows reports for it,
-    // including one that is partly dragged off the edge of the display.
+    // A windowed Premiere inside the display keeps exactly the bounds Windows
+    // reports for it.
     const Rect floating = Rect::from_size(300, 200, 900, 600);
     CHECK(ring_frame(floating, monitor, work_area, false, false) == floating);
+
+    // A window whose frame reaches past the display - a WINDOWED window dragged
+    // half off the edge, or a borderless "fullscreen" window Windows does not
+    // report as maximized - is drawn on the part that is on screen.
     const Rect half_off = Rect::from_size(-400, 100, 900, 600);
-    CHECK(ring_frame(half_off, monitor, work_area, false, false) == half_off);
+    CHECK(ring_frame(half_off, monitor, work_area, false, false) == Rect::from_size(0, 100, 500, 600));
+    const Rect borderless = Rect::from_size(-8, -8, 1936, 1096);  // == screen + borders, not IsZoomed
+    CHECK(ring_frame(borderless, monitor, work_area, false, false) == monitor);
 
     // A fullscreen window covers the whole monitor, taskbar included.
     CHECK(ring_frame(monitor, monitor, work_area, false, true) == monitor);

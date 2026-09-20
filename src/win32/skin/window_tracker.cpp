@@ -108,12 +108,13 @@ WindowTracker::RefreshResult WindowTracker::refresh(double now) {
     const bool fullscreen_raw = !minimized && !maximized && new_visible == monitor_rect;
     const Rect reported_visible = new_visible;
     new_visible = ring_frame(new_visible, monitor_rect, work_area, maximized, fullscreen_raw);
-    if (maximized && new_visible != reported_visible && !clamp_logged_) {
+    if (new_visible != reported_visible && !clamp_logged_) {
         clamp_logged_ = true;
-        log_info("ring frame: maximized window reports (%d,%d)-(%d,%d), which hangs over the display; "
-                 "drawing on the visible work area (%d,%d)-(%d,%d) instead",
+        log_info("ring frame: the window reports (%d,%d)-(%d,%d), which is not entirely on screen; drawing on the "
+                 "visible %s (%d,%d)-(%d,%d) instead",
                  reported_visible.left, reported_visible.top, reported_visible.right, reported_visible.bottom,
-                 new_visible.left, new_visible.top, new_visible.right, new_visible.bottom);
+                 maximized ? "work area" : "display area", new_visible.left, new_visible.top, new_visible.right,
+                 new_visible.bottom);
     }
 
     const bool geometry_changed = rect_changed(target_.visible_frame, new_visible, 0) ||

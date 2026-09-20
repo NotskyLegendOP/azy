@@ -29,6 +29,21 @@
 namespace azy {
 namespace win {
 
+// What the last present actually produced. Exposed so the settings window can
+// answer "is the ring on screen, and if not, why not" from the machine itself
+// instead of from a log file.
+struct RingReport {
+    bool presented = false;      // the strips are on screen right now
+    Rect frame;                  // the rectangle the ring was drawn on
+    int thickness_px = 0;        // strip thickness (band + the two 1px strokes)
+    int band_px = 0;
+    int radius_px = 0;
+    size_t bitmap_bytes = 0;
+    unsigned char max_alpha = 0; // 0 would mean an invisible bitmap
+    bool above = false;          // strips sit in front of the target window
+    std::string error;           // last failure, empty when the last present worked
+};
+
 class CompositionSurface {
 public:
     CompositionSurface() = default;
@@ -47,6 +62,7 @@ public:
     void destroy();
 
     bool visible() const { return visible_; }
+    const RingReport& report() const { return report_; }
     // Primary (top) strip: used for diagnostics and identity checks.
     HWND hwnd() const { return strips_[kTop].hwnd; }
     int strip_count() const { return kStripCount; }
@@ -73,6 +89,7 @@ private:
     bool class_registered_ = false;
     bool visible_ = false;
     unsigned long long presents_ = 0;
+    RingReport report_;
 };
 
 }  // namespace win

@@ -35,7 +35,7 @@ constexpr const wchar_t* kSingleInstanceMutex = L"AzySkin.SingleInstance.7f2a1c9
 // Overridden by the build system (see AZY_VERSION_STRING in CMakeLists.txt), so
 // the runtime banner cannot drift from the installer version.
 #ifndef AZY_VERSION_STRING
-#define AZY_VERSION_STRING "1.0.1"
+#define AZY_VERSION_STRING "1.0.2"
 #endif
 constexpr const char* kProductVersion = AZY_VERSION_STRING;
 

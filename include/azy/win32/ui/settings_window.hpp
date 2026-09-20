@@ -8,6 +8,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 #include "azy/core/settings.hpp"
 #include "azy/win32/os/win_compat.hpp"
@@ -30,6 +31,9 @@ public:
         // What the engine is really doing: "active", "partial", "idle" or the
         // reason it is suspended. Shown verbatim in the headline.
         std::string state;
+        // Up to three short diagnostic lines (target window, ring placement, and
+        // any reason the ring cannot be visible). Rendered under the status.
+        std::vector<std::string> lines;
         std::string treatment;    // "full", "reduced (...)", "safe mode"
         std::string safe_mode_note;
         bool safe_mode = false;

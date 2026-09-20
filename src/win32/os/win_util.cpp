@@ -203,6 +203,66 @@ bool cursor_in_rect(const RECT& rect) {
     return cursor.x >= rect.left && cursor.x < rect.right && cursor.y >= rect.top && cursor.y < rect.bottom;
 }
 
+namespace {
+
+// Reads a token's integrity level RID. Returns -1 when the token cannot be
+// opened or queried (a higher integrity process normally refuses both).
+int integrity_level_of_token(HANDLE token) {
+    if (token == nullptr) return -1;
+    DWORD needed = 0;
+    if (!GetTokenInformation(token, TokenIntegrityLevel, nullptr, 0, &needed) &&
+        GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
+        return -1;
+    }
+    std::vector<unsigned char> buffer(needed > 0 ? needed : sizeof(TOKEN_MANDATORY_LABEL));
+    if (!GetTokenInformation(token, TokenIntegrityLevel, buffer.data(), static_cast<DWORD>(buffer.size()),
+                             &needed)) {
+        return -1;
+    }
+    const auto* label = reinterpret_cast<const TOKEN_MANDATORY_LABEL*>(buffer.data());
+    if (label->Label.Sid == nullptr) return -1;
+    // The integrity level is the last sub-authority of the SID.
+    const DWORD count = *GetSidSubAuthorityCount(label->Label.Sid);
+    if (count == 0) return -1;
+    const DWORD rid = *GetSidSubAuthority(label->Label.Sid, count - 1);
+    if (rid < SECURITY_MANDATORY_LOW_RID) return 0;
+    if (rid < SECURITY_MANDATORY_MEDIUM_RID) return 1;
+    if (rid < SECURITY_MANDATORY_HIGH_RID) return 2;
+    if (rid < SECURITY_MANDATORY_SYSTEM_RID) return 3;
+    return 4;
+}
+
+}  // namespace
+
+int process_integrity_level(unsigned long pid) {
+    ScopedHandle process(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, static_cast<DWORD>(pid)));
+    if (!process) return -1;
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(process.get(), TOKEN_QUERY, &token)) return -1;
+    const int level = integrity_level_of_token(token);
+    CloseHandle(token);
+    return level;
+}
+
+int own_integrity_level() {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return -1;
+    const int level = integrity_level_of_token(token);
+    CloseHandle(token);
+    return level;
+}
+
+const char* integrity_level_name(int level) {
+    switch (level) {
+        case 0: return "untrusted";
+        case 1: return "low";
+        case 2: return "medium (normal user)";
+        case 3: return "high (administrator)";
+        case 4: return "system";
+        default: return "unknown";
+    }
+}
+
 MachineClass detect_machine_class() {
     MachineClass info;
     MEMORYSTATUSEX memory{};
