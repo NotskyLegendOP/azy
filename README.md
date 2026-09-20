@@ -224,6 +224,9 @@ tests/core_tests.cpp   unit tests for the portable core (no Windows needed)
 packaging/             Inno Setup script + installer text
 resources/             application manifest, icon, version resource
 tools/make_icon.py     regenerates resources/azy_skin.ico
+tools/check-includes.py  guards against include-hygiene breakage on MSVC
+tools/res_to_coff.py     turns the cross build's .res into a linkable object
+tools/inspect-pe.py      verifies the built executable and its resources
 cmake/                 cross-compile toolchain file
 scripts/               build, package and verification scripts
 docs/                  architecture, techniques, compatibility, performance, testing

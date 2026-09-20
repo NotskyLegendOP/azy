@@ -21,9 +21,10 @@ set(CMAKE_CXX_COMPILER "${_azy_wrapper}")
 set(CMAKE_C_COMPILER "${_azy_wrapper}")
 set(AZY_ZIG_TARGET "x86_64-windows-gnu" CACHE STRING "zig target triple" FORCE)
 
-# No resource compiler in this toolchain: the manifest is skipped and the
-# application falls back to its runtime DPI-awareness call.
-set(CMAKE_RC_COMPILER "" CACHE FILEPATH "" FORCE)
+# zig ships a drop-in rc.exe (`zig rc`), so the cross build compiles the same
+# manifest, icon and version resources the MSVC build compiles - which is how the
+# resource path gets exercised without a Windows machine.
+set(CMAKE_RC_COMPILER "${CMAKE_CURRENT_LIST_DIR}/../scripts/zig-rc.sh" CACHE FILEPATH "" FORCE)
 
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)

@@ -62,18 +62,28 @@ or the cross build alone:
 ./scripts/build-windows.sh   # -> build-zig/AzySkin.exe
 ```
 
-This produces a genuine PE32+ x64 GUI executable (verified in CI: machine
-`0x8664`, subsystem `2`, no console window) and is a strong smoke test that the
-whole Win32 layer compiles and links.
+This produces a genuine PE32+ x64 GUI executable, fully equivalent in content to
+the MSVC build: the same sources, the GUI subsystem, and the same metadata.
+
+`zig` ships a drop-in resource compiler (`zig rc`), which
+[`scripts/zig-rc.sh`](../scripts/zig-rc.sh) drives and then converts with
+[`tools/res_to_coff.py`](../tools/res_to_coff.py) into the COFF sections the
+linker expects. That means the manifest, the icon and the version block *are*
+embedded in the cross build as well, which is why CI can verify them:
+
+```bash
+python3 tools/inspect-pe.py build-zig/AzySkin.exe
+#   machine 0x8664 (x64), subsystem 2 (Windows GUI)
+#   resources 10: GROUP_ICON, VERSIONINFO, MANIFEST (DPI + comctl32 v6), ICON x7
+```
 
 **What the cross build does not cover:**
 
-* No resource compiler exists in that toolchain, so the build runs with
-  `-DAZY_EMBED_MANIFEST=OFF`: the manifest, icon and version resource are *not*
-  embedded, and the runtime fallbacks are what get exercised. Resource
-  compilation is covered by the MSVC job in CI instead.
 * Nothing is executed: PE files are compiled and linked, not run. Behaviour must
   be verified on Windows (see [`TESTING.md`](TESTING.md)).
+* The toolchain is MinGW-based, so the *runtime* is mingw-w64's rather than the
+  MSVC CRT. Both are self-contained; for a distribution build use MSVC
+  (`scripts/build-windows.ps1`).
 
 ---
 

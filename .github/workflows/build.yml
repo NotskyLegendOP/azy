@@ -65,6 +65,11 @@ jobs:
           assert subsystem == 2, f'expected GUI subsystem, got {subsystem}'
           print(f'ok: PE32+ x64, GUI subsystem, {len(data)//1024} KB')
           PY
+      - name: Inspect the executable's resources
+        run: |
+          python3 tools/inspect-pe.py build-zig/AzySkin.exe
+          python3 -m ziglang rc /i resources /fo /tmp/azy_skin.res resources/azy_skin.rc
+          python3 tools/check-resources.py /tmp/azy_skin.res
       - uses: actions/upload-artifact@v4
         with:
           name: AzySkin-x64-cross

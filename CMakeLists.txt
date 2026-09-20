@@ -100,9 +100,30 @@ if(WIN32)
     # Rich edit / comctl32 v6 live in the manifest; when a resource compiler is
     # available we embed it (the code also works without it, using its runtime
     # DPI-awareness fallback).
-    if(AZY_EMBED_MANIFEST AND (MSVC OR CMAKE_RC_COMPILER))
+    set(_azy_have_rc FALSE)
+    if(MSVC)
+        set(_azy_have_rc TRUE)  # rc.exe ships with the toolchain
+    elseif(CMAKE_RC_COMPILER AND EXISTS "${CMAKE_RC_COMPILER}")
+        # CMake happily records a resource compiler that is not actually
+        # installed (a `windres` that is merely on the search path, for example);
+        # embedding the resources then fails at build time, so verify it exists.
+        set(_azy_have_rc TRUE)
+    endif()
+
+    if(AZY_EMBED_MANIFEST AND _azy_have_rc)
         target_sources(AzySkin PRIVATE resources/azy_skin.rc)
         target_include_directories(AzySkin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/resources)
+        if(MSVC)
+            # The manifest comes from the resource script. Without this the linker
+            # generates a second one and cvtres fails with CVT1100 ("duplicate
+            # resource: type:MANIFEST, name:1"). One manifest: the one in
+            # resources/azy_skin.manifest.
+            target_link_options(AzySkin PRIVATE /MANIFEST:NO)
+        endif()
+    elseif(AZY_EMBED_MANIFEST)
+        message(STATUS "No usable resource compiler: the manifest, icon and version "
+                       "resources are skipped (the application falls back to its "
+                       "runtime DPI-awareness call)")
     endif()
 
     if(MINGW)
