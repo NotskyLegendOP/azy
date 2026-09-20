@@ -19,11 +19,11 @@ of the way.
 
 | | |
 |---|---|
-| **Is** | A ~550 KB native C++/Win32 application, event-driven, no dependencies, no installer requirements, no Adobe integration |
-| **Is** | A dark charcoal + subtle glass treatment applied through documented Windows window composition |
+| **Is** | A ~610 KB native C++/Win32 application, event-driven, no dependencies, no installer requirements, no Adobe integration |
+| **Is** | A dark charcoal + subtle glass treatment applied through documented Windows window composition, and a *duplicate window* that shows a skinned copy of Premiere's own pixels above it |
 | **Is not** | A UXP / CEP / ExtendScript extension, a Premiere API consumer, or a plugin of any kind |
 | **Is not** | Process injection, memory patching, file patching, resource replacement, or hooking of Premiere's internals |
-| **Is not** | An alternative UI, a replacement timeline, a second toolbar, or a screen-covering overlay. The whole-window overlay is one solid constant-alpha layer over *Premiere's own window* — no bitmap, no per-pixel surface, nothing that covers the desktop |
+| **Is not** | An alternative UI, a replacement timeline or a second toolbar. The duplicate window carries no controls at all — it is click-through, it never takes focus, and the real Premiere window underneath stays the application you are using |
 | **Never** | Takes focus, eats a click, a key, a scroll, a drag, or a shortcut |
 | **Never** | Animates anything — no transitions, no glow, no particles, no FPS-dependent work |
 
@@ -42,10 +42,12 @@ Premiere process from the Windows process list (matched on the executable
 version resource. It learns about everything else from Windows notifications:
 process creation/deletion, window creation/destruction, moves, resizes,
 minimisation, foreground changes, DPI and display changes. When something
-actually changes, it applies the theme through two mechanisms — documented DWM
-window-composition attributes on Premiere's own top-level frame, and one
-click-through, non-activating layered window that carries a 1px hairline border
-and a soft inner shadow — and then does nothing at all until the next event.
+actually changes, it applies the theme through documented Windows window
+composition: DWM attributes on Premiere's own top-level frame, a click-through ring
+and a translucent sheet as the lightweight path, and — when the host supports it —
+a **duplicate window** placed directly above Premiere that mirrors the real window
+through a GPU capture and draws it back skinned. Between events it does nothing at
+all; while the duplicate is up, its rendering follows the capture, not a clock.
 
 Detailed design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 Every technique and why it is safe: [`docs/TECHNIQUES.md`](docs/TECHNIQUES.md).
@@ -116,7 +118,7 @@ The status area of the settings window reports what Azy is actually doing, on th
 machine it is doing it on — including the version that is running:
 
 ```
-Azy Skin 1.2.3 - window 'Premiere Pro' 1920x1040 at (0,0) | maximized | screen (0,0)-(1920,1080) | 100%
+Azy Skin 1.3.0 - window 'Premiere Pro' 1920x1040 at (0,0) | maximized | screen (0,0)-(1920,1080) | 100%
 Ring 12px at (0,0)-(1920,1040) | brightest pixel 199/255 | in front of Premiere: yes
 Overlay: 30% tint over the whole window
 ```
@@ -159,13 +161,23 @@ restrained; the sliders exist for people who want to push them.
 The other two themes are **Azy Dark** (the same treatment, fully opaque — no
 translucency anywhere) and **Original** (Azy applies nothing at all).
 
-On top of that edge treatment, **the overlay covers the whole window**: one
-translucent charcoal layer over everything Premiere draws, so the application reads
-as skinned rather than outlined. It is a single window composited with a constant
-alpha — no bitmap, no per-pixel work, no animation — and it is adjustable
-(*Cover the whole window* + *Overlay strength* in Settings, 0% = edge only). Because
-it covers the video monitors as well, it is the first thing to turn down if you
-grade footage: the edge vignette frames the workspace without touching the picture.
+On top of that edge treatment comes the part that actually skins the window: the
+**duplicate window**. Azy captures Premiere's window on the GPU (Windows Graphics
+Capture — never the desktop, never another application), draws it back through a
+small shader that darkens and glazes everything except the **Program and Source
+Monitors, whose footage is passed through untouched**, adds 1px separators between
+the panels, a 1px lighter frame and ~8px rounded corners, and presents it in a
+click-through window sitting directly above Premiere. Premiere keeps every mouse
+click and every keystroke; Azy only says what the pixels look like.
+
+The earlier, cheaper layers — the 1px ring and the translucent sheet — remain as the
+fallback for hosts where the GPU path cannot run, and they stand down while the
+duplicate is on screen so nothing is drawn twice.
+
+Where the pages below say *overlay*, they mean that final window. It is adjustable
+(*Cover the whole window* + *Overlay strength*, 0% = edge only), and because the
+skin is applied around the video rather than over it, grading footage is unaffected —
+the picture regions are excluded from the shader by rectangle.
 
 ![The ring in the three treatments](docs/images/ring-preview.png)
 
@@ -194,9 +206,19 @@ Azy Skin is built around *not* doing work:
   foreground changes, DPI changes, display changes, Premiere start/stop — all
   arrive as Windows notifications. A static window produces no DWM calls, no
   repaints and no monitoring.
-* **Memory: typically 6–10 MB.** No Electron, no Chromium, no scripting engine,
-  no animation or UI framework. Just Win32, GDI+ for one ring bitmap, and the C++
-  runtime.
+* **Memory: typically 6–10 MB** for the static path. No Electron, no Chromium, no
+  scripting engine, no animation or UI framework: just Win32, GDI+ for one ring
+  bitmap and the C++ runtime. The duplicate window adds a GPU surface the size of
+  the window (a few MB of video memory) and one worker thread, and releases both
+  the moment the skin is suspended or Premiere closes.
+* **With the duplicate up, the cost follows the capture.** Frames are copied and
+  composed on the GPU (no CPU pixel work, no screenshots, no files); pacing is 10
+  frames per second while the window sits still and 30 while it is changing, and it
+  is driven by the capture itself rather than by a timer that always fires. A tick
+  with nothing to draw costs one flag read.
+* **Never measured on a real Premiere yet.** The numbers above are budgets, not
+  measurements; see [`docs/VERIFICATION.md`](docs/VERIFICATION.md) for what has
+  actually been proven.
 * **One paint per change, never per frame.** Azy's ring is four thin cached
   strips (top/bottom/left/right) handed to the compositor with
   `UpdateLayeredWindow`; they are only regenerated when the geometry, DPI or
@@ -219,7 +241,10 @@ Measured numbers and the method: [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md).
 | Property | How it is guaranteed |
 |---|---|
 | Never steals focus | Azy's surface window is created with `WS_EX_NOACTIVATE`; Azy has no focusable window at all while idle |
-| Never eats input | `WS_EX_TRANSPARENT` (hit-test pass-through) + `WS_EX_TOOLWINDOW`; verified at runtime, and the contract is re-checked on every surface creation |
+| Never eats input | `WS_EX_TRANSPARENT` (hit-test pass-through) + `WS_EX_TOOLWINDOW` on every window of Azy's, including the duplicate; verified at runtime, and the contract is re-checked on every surface creation |
+| Never takes a keystroke | No keyboard hook, no hotkey registration, nowhere in the codebase. The duplicate cannot be activated (`WS_EX_NOACTIVATE`) |
+| Never captures anything but Premiere | The capture is created for the tracked window and re-validated against its owning process id before use; the *monitor* form of the capture API appears nowhere in `src/` and `tools/check-overlay.py` fails the build if it ever does |
+| Never mirrors itself | Window capture, not screen capture: Azy's own windows cannot appear in the captured image, and the capture refuses to attach to Azy's own process |
 | Never blocks the timeline | The surface is never larger than Premiere's own visible frame, and it is hidden the instant a move/resize loop starts |
 | Never breaks on a new Premiere | Version-aware policy; unknown or newer builds get a conservative treatment instead of guessing |
 | Never retries forever | Repeated failures trip **Safe Mode**: dark frame only, no composition surfaces, with a one-line explanation and a manual way back |
@@ -248,7 +273,7 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 Packaging: `powershell -File scripts\package.ps1` (needs Inno Setup 6) produces
-`dist\AzySkin-1.2.3-setup.exe`.
+`dist\AzySkin-1.3.0-setup.exe`.
 
 Full instructions, including what the cross build can and cannot verify:
 [`docs/BUILDING.md`](docs/BUILDING.md).
@@ -280,7 +305,9 @@ docs/                  architecture, techniques, compatibility, performance, tes
 
 | Document | Contents |
 |---|---|
-| [`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md) | The whole mechanism in one page: detection, the three visual layers, click-through, stacking, teardown |
+| [`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md) | The whole mechanism in one page: detection, the visual layers, click-through, stacking, teardown |
+| [`docs/AZY_OVERLAY_ARCHITECTURE.md`](docs/AZY_OVERLAY_ARCHITECTURE.md) | The duplicate window: capture, composition, input, synchronisation, performance, error recovery, DPI, multi-monitor, limitations, and every claim's verification status |
+| [`docs/AZY_OVERLAY_TEST_PLAN.md`](docs/AZY_OVERLAY_TEST_PLAN.md) | The first-run checklist and the ten scenarios that close the overlay's open questions |
 | [`docs/AZYSKIN_AUDIT.md`](docs/AZYSKIN_AUDIT.md) | The full implementation audit: what was found, what was fixed, what remains, and the readiness verdict |
 | [`docs/ARCHITECTURE_REVIEW.md`](docs/ARCHITECTURE_REVIEW.md) | Second-pass review: is this the right architecture, what alternatives were rejected and why |
 | [`docs/DEEP_BUG_REPORT.md`](docs/DEEP_BUG_REPORT.md) | Every defect the deep review found, with root cause, impact, fix and how it was checked |

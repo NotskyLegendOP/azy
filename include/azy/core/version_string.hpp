@@ -7,7 +7,7 @@
 #pragma once
 
 #ifndef AZY_VERSION_STRING
-#define AZY_VERSION_STRING "1.2.3"
+#define AZY_VERSION_STRING "1.3.0"
 #endif
 
 namespace azy {

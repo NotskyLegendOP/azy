@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(AzySkin
-    VERSION 1.2.3
+    VERSION 1.3.0
     DESCRIPTION "Azy Skin - a lightweight visual skin for Adobe Premiere Pro"
     LANGUAGES CXX)
 
@@ -42,9 +42,11 @@ endif()
 # Portable core (no Windows dependencies - unit tested on any platform)
 # ---------------------------------------------------------------------------
 add_library(azy_core STATIC
+    src/core/capture_math.cpp
     src/core/compat.cpp
     src/core/failure_tracker.cpp
     src/core/log.cpp
+    src/core/overlay_style.cpp
     src/core/panel_map.cpp
     src/core/product.cpp
     src/core/settings.cpp
@@ -61,9 +63,13 @@ if(WIN32)
         src/app/app_controller.cpp
         src/app/app_settings_store.cpp
         src/app/main.cpp
+        src/win32/capture/d3d_shared.cpp
+        src/win32/capture/wgc_abi.cpp
+        src/win32/capture/window_capture.cpp
         src/win32/detect/premiere_detector.cpp
         src/win32/detect/premiere_probe.cpp
         src/win32/detect/process_scanner.cpp
+        src/win32/gloss/gloss_overlay.cpp
         src/win32/os/autostart.cpp
         src/win32/os/file_watcher.cpp
         src/win32/os/win_api.cpp
@@ -84,7 +90,25 @@ if(WIN32)
         src/win32/ui/tray.cpp
         src/win32/watch/event_watch.cpp)
 
-    target_include_directories(AzySkin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_include_directories(AzySkin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src
+                                               ${CMAKE_CURRENT_BINARY_DIR}/generated)
+
+    # The composition shader is a real .hlsl file that is embedded at configure
+    # time, so the executable stays self-contained (no shader file to find next to
+    # the .exe) while the shader is still editable as a shader. The dependency
+    # makes cmake re-run when it changes.
+    set(AZY_GLOSS_HLSL "${CMAKE_CURRENT_SOURCE_DIR}/resources/shaders/gloss.hlsl")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${AZY_GLOSS_HLSL}")
+    if(EXISTS "${AZY_GLOSS_HLSL}")
+        file(READ "${AZY_GLOSS_HLSL}" AZY_GLOSS_SOURCE)
+        file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generated/azy_gloss_shader.hpp"
+"// Generated from resources/shaders/gloss.hlsl by CMake - do not edit.
+#pragma once
+namespace azy { namespace win { inline constexpr const char* kGlossShaderSource = R\"AZYHLSL(${AZY_GLOSS_SOURCE})AZYHLSL\"; } }
+")
+    else()
+        message(FATAL_ERROR "resources/shaders/gloss.hlsl is missing")
+    endif()
     # One source of truth for the version: the installer, the executable's
     # version resource and the runtime banner all follow project(... VERSION).
     target_compile_definitions(AzySkin PRIVATE AZY_VERSION_STRING="${PROJECT_VERSION}")
@@ -98,7 +122,9 @@ if(WIN32)
         ole32 oleaut32 # COM/WMI (optional process notifications)
         shlwapi      # path helpers
         user32       # window management, hooks, DPI
-        uxtheme      # dark theming of Azy's own settings window
+        uxtheme       # dark theming of Azy's own settings window
+        # The duplicate window. Documented, long-stable Windows libraries only:
+        d3d11 dcomp dxgi  # GPU capture stage and the compositor hand-off
         version      # VERSIONINFO of the Premiere executable (read-only)
         wbemuuid     # WMI CLSIDs for the optional process observer
         shell32)     # tray icon, shell integration

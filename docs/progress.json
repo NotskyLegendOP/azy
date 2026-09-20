@@ -1,7 +1,7 @@
 {
   "product": "Azy Skin",
   "spec": "Azy Skin for Adobe Premiere Pro - Complete Implementation Specification",
-  "shipped": "1.2.3",
+  "shipped": "1.3.0",
   "note": "Single source of truth for docs/progress.html and docs/PROGRESS.md. Edit the items, run tools/progress.py, commit all three. status: done | partial | todo | blocked | impossible. class: A (done/possible), B (possible, planned), C (approximation only), D (not possible - forbidden techniques, excluded from the totals).",
   "packaging": {
     "title": "Packaging & distribution",
@@ -168,9 +168,9 @@
         {
           "name": "Region prototype (one panel band, one hairline)",
           "class": "B",
-          "status": "partial",
+          "status": "done",
           "weight": 3,
-          "note": "The map itself is in and drawn by debug mode; the first real region chrome (separators + header band) is next"
+          "note": "Superseded by the duplicate window (round 8): per-region treatment now happens in the composition shader, with the monitors passed through and the panel hairlines drawn from the panel model"
         },
         {
           "name": "Efficiency harness (CPU/GPU/RAM over 30 minutes)",
@@ -495,7 +495,7 @@
           "class": "C",
           "status": "todo",
           "weight": 4,
-          "note": "Needs Premiere: the rows are written down in docs/TESTING.md §2-§9"
+          "note": "Needs Premiere: the rows are written down in docs/TESTING.md §2-§9 | Round 8 adds the overlay first-run checklist and the ten scenarios (docs/AZY_OVERLAY_TEST_PLAN.md) to this run"
         },
         {
           "name": "Visual quality compared against the reference image (§46)",
@@ -515,6 +515,106 @@
           "name": "Implementation audit + per-feature verification status published (AZYSKIN_AUDIT.md, VERIFICATION.md, KNOWN_LIMITATIONS.md)",
           "class": "A",
           "status": "done"
+        }
+      ]
+    },
+    {
+      "id": "P10",
+      "title": "Duplicate window overlay (round-8 architecture)",
+      "spec": "§34, §43 and the round-8 brief",
+      "eta": "delivered in v1.3.0",
+      "next": "Verify it against a real Premiere run: docs/AZY_OVERLAY_TEST_PLAN.md §1",
+      "items": [
+        {
+          "name": "Feasibility decision on the capture and composition APIs (§34)",
+          "class": "A",
+          "status": "done",
+          "weight": 3,
+          "note": "Windows Graphics Capture + D3D11 + DirectComposition chosen; Desktop Duplication, DWM thumbnails, GDI and injection rejected with reasons (AZY_OVERLAY_ARCHITECTURE.md §1.3)"
+        },
+        {
+          "name": "GPU window capture with a hand-declared WinRT ABI",
+          "class": "A",
+          "status": "done",
+          "weight": 4,
+          "note": "Free-threaded frame pool, cursor capture disabled, window-only (never a monitor), owning process validated before use"
+        },
+        {
+          "name": "Composition: DirectComposition swap chain + the gloss shader",
+          "class": "A",
+          "status": "done",
+          "weight": 4,
+          "note": "Premultiplied alpha, one full-screen triangle, compiled at run time from an embedded HLSL source (SM 5.0, then 4.0)"
+        },
+        {
+          "name": "Program and Source Monitor pass-through: the footage is never darkened",
+          "class": "A",
+          "status": "done",
+          "weight": 3,
+          "note": "Rectangles come from the panel model; the shader feathers the boundary. Accuracy on a real workspace still needs one screenshot"
+        },
+        {
+          "name": "Panel separators, 1px lighter bezel, rounded corners in the duplicate",
+          "class": "A",
+          "status": "done",
+          "weight": 3,
+          "note": "Hairlines around the modelled panels (never across the picture regions), radius 8dip by default, clamped so it cannot become a pill"
+        },
+        {
+          "name": "Geometry sync: move, resize, maximize, restore, minimize, DPI, multi-monitor",
+          "class": "A",
+          "status": "done",
+          "weight": 3,
+          "note": "Visible frame intersected with the work area when maximized; swap chain resized in place, renderer never rebuilt for a resize"
+        },
+        {
+          "name": "Click-through at window level and never steal focus",
+          "class": "B",
+          "status": "done",
+          "weight": 3,
+          "note": "WS_EX_TRANSPARENT + WS_EX_NOACTIVATE + WS_EX_TOOLWINDOW, HTTRANSPARENT, MA_NOACTIVATE; no keyboard hook anywhere"
+        },
+        {
+          "name": "Smart pacing: idle low, editing event-driven, playback high",
+          "class": "A",
+          "status": "done",
+          "weight": 3,
+          "note": "Pacing is driven by the capture itself (frames arriving = the window is changing): 10 fps idle, 30 fps active, timer removed while hidden"
+        },
+        {
+          "name": "Recursion guard: never capture a monitor, never mirror Azy itself",
+          "class": "A",
+          "status": "done",
+          "weight": 3,
+          "note": "Window-scoped capture only; CreateForMonitor is banned by tools/check-overlay.py and the own-process guard is asserted by the same check"
+        },
+        {
+          "name": "Overlay debug fields (handles, rectangles, counters, states)",
+          "class": "A",
+          "status": "done",
+          "weight": 2,
+          "note": "Shown in debug mode and in the settings diagnostics. Capture latency and GPU memory are not measurable with this API and are not invented"
+        },
+        {
+          "name": "Failure containment: the duplicate may never be the reason the skin disappears",
+          "class": "A",
+          "status": "done",
+          "weight": 3,
+          "note": "Unsupported host = one warning and no retry storm; other failures retried with backoff; the ring and veil stay in charge throughout"
+        },
+        {
+          "name": "AZY_OVERLAY_ARCHITECTURE.md and AZY_OVERLAY_TEST_PLAN.md",
+          "class": "A",
+          "status": "done",
+          "weight": 2,
+          "note": "11 sections plus the error-recovery matrix, the ten-scenario simulation and the first-run checklist"
+        },
+        {
+          "name": "Verify the mirror on a real Premiere run (first-run checklist + ten scenarios)",
+          "class": "A",
+          "status": "todo",
+          "weight": 4,
+          "note": "User-blocked: needs Windows + Premiere. Until then every overlay claim stays IMPLEMENTED - RUNTIME UNVERIFIED"
         }
       ]
     }

@@ -3,7 +3,7 @@
 Everything Azy Skin cannot do, does not do yet, or has not been proven to do.
 Nothing in this file is a bug report — the bugs found by the audit are in
 [`AZYSKIN_AUDIT.md`](AZYSKIN_AUDIT.md). This is the honest boundary of the
-product as shipped in **v1.2.3**.
+product as shipped in **v1.3.0**.
 
 Legend: **Permanent** = a consequence of the "no injection, no Adobe APIs, no
 project changes" rule. **Open** = planned or possible later. **Unverified** =
@@ -79,6 +79,20 @@ Azy's layers are drawn once per geometry change and are static. The checkbox is
 created disabled and labelled "not available — Azy is static" so the UI does not
 promise motion it will not deliver. The key is kept so that existing
 configuration files are never rewritten or rejected.
+
+## 4b. The duplicate window — what it does not do
+
+| Not done | Why |
+| --- | --- |
+| Restyling Premiere's widgets through the mirror | The mirror is pixels. Geometry inside the window is Premiere's. |
+| Keeping perfectly in step during fast motion | One capture frame plus one present is spent before the duplicate shows anything, so a drag or a scrub is a frame or two behind. Static UI is unaffected. |
+| Promising that the capture's pixel size equals the window's rectangle | Nothing in the API documents it. When they differ the mismatch is reported instead of being hidden (debug row `size agrees`). |
+| Showing anything before the first frame arrives | The duplicate appears only once it has content, so the ring and the sheet stay visible for the first moment instead of flashing an empty window. |
+| Working without `d3dcompiler_47.dll` | The composition shader is compiled at start-up from the embedded source. Every Windows 10 1809+ machine ships the DLL; where it is missing, the duplicate is not created and the static layers are used. |
+| Working on a Windows build without the free-threaded capture frame pool | Reported once as unsupported; the static layers carry the skin. No retry storm, no Safe Mode. |
+| Guaranteeing the 1px hairlines land on Premiere's real boundaries | The panel model is a ratio layout (see §3). A wrong hairline is the worst case, never a broken window. |
+| Removing the Windows capture border where the OS refuses | Where the OS allows it, it is switched off; where it does not, Azy's window sits over it. |
+| Finishing the mirror when Premiere runs elevated and Azy does not | UIPI, unchanged from earlier versions: place above an elevated window is refused, Azy reports `partial`, and the tray offers a restart as administrator. |
 
 ## 5. Runtime behaviour has never been observed
 

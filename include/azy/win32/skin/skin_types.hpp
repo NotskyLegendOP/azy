@@ -82,6 +82,10 @@ struct SkinRequest {
     SuspendReason suspend = SuspendReason::NoWindow;
     FeatureSet features;
     ThemePalette palette;
+    // The raw sliders, for the parts of the look that are not expressible as a
+    // palette (the duplicate window's sheen, grain and vignette). The palette
+    // stays authoritative for colours.
+    Appearance appearance;
     bool performance_mode = false;
     bool experimental = false;
 
@@ -95,9 +99,15 @@ struct SkinRequest {
 
 // What the engine actually did (used for logging, tray tooltip, diagnostics).
 struct SkinState {
-    bool frame_applied = false;    // DWM window attributes are in place
-    bool surface_visible = false;  // Azy's ring is on screen
-    bool overlay_visible = false;  // ... and the whole-window overlay with it
+    bool frame_applied = false;     // DWM window attributes are in place
+    bool surface_visible = false;   // Azy's ring is on screen
+    bool overlay_visible = false;   // ... and the whole-window overlay with it
+    // The duplicate window: a skinned copy of Premiere on screen, above it.
+    // `duplicate_active` is the one that matters - while it is true the ring and
+    // the veil are deliberately not shown, because they would be behind it.
+    bool duplicate_active = false;
+    bool duplicate_capturing = false;
+    std::string duplicate_note;
     SuspendReason suspend = SuspendReason::None;
     unsigned long long applies = 0;   // number of successful applies
     unsigned long long failures = 0;  // number of failed operations (feeds safe mode)

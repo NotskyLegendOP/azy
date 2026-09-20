@@ -4,6 +4,80 @@ All notable changes to Azy Skin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] — 2026-09-20
+
+The architecture changed. Instead of decorating Premiere from the outside, Azy now
+shows a **skinned copy of Premiere's own window** in a duplicate window placed
+directly above it. Premiere stays the application in every sense - it keeps the
+mouse, the keyboard, the focus, the menus, the timeline, the playback and every
+plugin - and Azy decides what the pixels look like.
+
+**Status: IMPLEMENTED - RUNTIME UNVERIFIED.** No part of the overlay has been run
+against a real Premiere on a real machine yet. The design, the reasoning and the
+proof of what could be checked are in `docs/AZY_OVERLAY_ARCHITECTURE.md`; the
+checklist that closes the rest is `docs/AZY_OVERLAY_TEST_PLAN.md`.
+
+### Added
+
+* **GPU window capture.** Windows Graphics Capture, scoped to the single tracked
+  Premiere window (never the desktop, never a monitor, never another application),
+  with a free-threaded frame pool so no message pump is required. Cursor capture is
+  switched off - the compositor draws the pointer, so mirroring it would show two.
+  The owning process is validated before the capture starts, so a recycled window
+  handle cannot make Azy mirror something else.
+* **The duplicate window.** A click-through, never-activating, non-topmost window
+  placed directly above Premiere, drawn with DirectComposition from a flip-model
+  swap chain with premultiplied alpha.
+* **The composition shader.** One full-screen pass, embedded in the executable and
+  compiled at start-up: charcoal darkening, a glass sheen, a lifted black level, an
+  edge vignette, 1px panel separators, the 1px lighter bezel, rounded corners, and
+  a soft accent - **with the Program and Source Monitors passed through untouched**,
+  so footage is never darkened.
+* **Smart pacing.** 10 frames per second while the window sits still, 30 while it is
+  changing, driven by the capture itself (frames arriving means the window is doing
+  something). The render timer is removed entirely while the duplicate is hidden.
+* **Failure containment.** Every overlay failure ends with the ring and the veil
+  still doing their job. An unsupported host is reported once and never retried;
+  other failures are retried with backoff and then given up on for the session.
+  Overlay problems deliberately do not feed Safe Mode.
+* Overlay diagnostics: window handles and process ids, both rectangles, DPI,
+  capture and present counters, pass-through regions, pacing and capture state, in
+  debug mode and in the settings window's diagnostics.
+* `tools/check-overlay.py`, run as step 3 of `scripts/verify.sh`: the shader's
+  constant buffer and the C++ struct must agree member by member, the region slot
+  counts must match, no `float3` may appear in the buffer, the C++ `static_assert`
+  must equal the size the HLSL packing rules produce (272 bytes), nothing may call
+  the monitor form of the capture API, and the own-process guard must still exist.
+  The checker was itself tested by breaking the shader in two ways.
+* `docs/AZY_OVERLAY_ARCHITECTURE.md` (11 sections, the feasibility decision, the
+  error-recovery matrix) and `docs/AZY_OVERLAY_TEST_PLAN.md` (first-run checklist,
+  targeted checks, ten scenarios).
+
+### Changed
+
+* The ring and the sheet stand down while the duplicate is on screen: they would be
+  behind it, so drawing them would be paying twice for invisible pixels.
+* The duplicate only appears once the capture has produced a frame, so no empty
+  window is ever shown where Premiere's UI should be.
+* The panel model now drives the shader (pass-through rectangles and separators)
+  rather than only the debug view.
+* Test suite grew to **649 checks** (from 578): overlay geometry mapping, panel
+  clipping and packing, `overlay_rect`, and the style derivation from the theme.
+* `verify.sh` has seven steps now (the overlay contract check is new).
+
+### Known limitations of this release
+
+* Widgets are still not restyled - the skin applies to pixels, and changing
+  Premiere's controls would require injection, which stays permanently out of
+  scope.
+* The mirror is a frame or two behind, which shows while dragging or scrubbing.
+* Panel separators come from a ratio layout model and can be a few pixels off on an
+  unusual workspace.
+* `d3dcompiler_47.dll` is required for the composition shader (present on every
+  Windows 10 1809+ machine); without it the duplicate is not created and the static
+  layers are used.
+* Everything in `docs/AZY_OVERLAY_ARCHITECTURE.md` §11 is unverified.
+
 ## [1.2.3] — 2026-09-20
 
 A deep second-pass review: architecture, runtime behaviour, Windows API usage and

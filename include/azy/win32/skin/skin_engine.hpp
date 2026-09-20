@@ -9,7 +9,10 @@
 
 #include <string>
 
+#include "azy/core/overlay_style.hpp"
 #include "azy/core/panel_map.hpp"
+#include "azy/win32/capture/window_capture.hpp"
+#include "azy/win32/gloss/gloss_overlay.hpp"
 #include "azy/win32/skin/composition_surface.hpp"
 #include "azy/win32/skin/debug_overlay.hpp"
 #include "azy/win32/skin/dwm_composer.hpp"
@@ -101,6 +104,28 @@ public:
     // Where the panel map's client area sits on screen (its origin), so a caller
     // can translate panel rectangles into screen coordinates.
     Rect client_origin() const { return client_origin_; }
+
+    // --- the duplicate window (the captured mirror of Premiere) ---------------
+    //
+    // The overlay is the fourth layer and the only one that draws Premiere's own
+    // content: it is a window placed directly above Premiere that shows a skinned
+    // copy of what the capture sees. While it is on screen the ring and the veil
+    // are switched off - they would be hidden behind it, and drawing them would be
+    // paying twice for the same pixels.
+    struct OverlayReport {
+        bool supported = true;   // false when this host cannot do it at all
+        bool created = false;    // the GPU resources exist
+        bool active = false;     // a skinned copy is on screen
+        bool capturing = false;  // the capture worker is running
+        std::string note;        // one line: what it is doing, or why it is not
+    };
+    const OverlayReport& overlay_report() const { return overlay_report_; }
+    const GlossOverlay::Stats& overlay_stats() const { return gloss_.stats(); }
+    CaptureStatus capture_status() const { return capture_.status(); }
+    HWND overlay_window() const { return gloss_.window(); }
+    // Clears a previous failure so the next apply() tries again (the manual retry
+    // behind the "Check visibility" button in the settings window).
+    void retry_overlay();
     unsigned char overlay_alpha() const { return veil_.alpha(); }
     const RingReport& ring_report() const { return surface_.report(); }
     HWND surface_window() const { return surface_.hwnd(); }
@@ -110,8 +135,26 @@ public:
 
 private:
     VisualKey build_key(const SkinRequest& request) const;
+    // Creates/places/updates the duplicate window and starts or stops the capture.
+    // `allowed` says whether the duplicate should be on screen at all; `want_capture`
+    // additionally says whether the capture may keep running. Both are false while
+    // the skin is suspended for a reason that has nothing on screen.
+    void sync_overlay(const SkinRequest& request, bool allowed, bool want_capture, SkinState& state_out);
+    void teardown_overlay();
 
     DwmComposer composer_;
+    GlossOverlay gloss_;
+    WindowCapture capture_;
+    OverlayReport overlay_report_;
+    OverlayStyle overlay_style_;
+    bool overlay_created_ = false;
+    bool overlay_disabled_ = false;   // this host cannot: stop asking
+    bool duplicate_active_ = false;   // the ring and the veil stand down while true
+    int overlay_failure_burst_ = 0;
+    unsigned long long overlay_next_attempt_ms_ = 0;
+    unsigned long long overlay_attempts_ = 0;
+    HWND overlay_attached_ = nullptr;      // the window the capture was started on
+    unsigned long overlay_attached_pid_ = 0;
     CompositionSurface surface_;
     OverlayVeil veil_;
     DebugOverlay debug_;

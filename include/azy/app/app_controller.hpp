@@ -133,6 +133,10 @@ private:
 
     ProductInfo product_;
     win::SkinState engine_state_;
+    // The duplicate window's state, remembered only so that a change is logged
+    // once (the same "log transitions, not ticks" rule as everywhere else).
+    bool duplicate_active_ = false;
+    bool duplicate_capturing_ = false;
     unsigned long long failures_seen_ = 0;
     bool safe_mode_ = false;
     bool premiere_elevated_ = false;  // Premiere runs at a higher integrity level than Azy

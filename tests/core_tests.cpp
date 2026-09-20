@@ -11,7 +11,9 @@
 #include <cstdio>
 #include <string>
 
+#include "azy/core/capture_math.hpp"
 #include "azy/core/compat.hpp"
+#include "azy/core/overlay_style.hpp"
 #include "azy/core/failure_tracker.hpp"
 #include "azy/core/geometry.hpp"
 #include "azy/core/panel_map.hpp"
@@ -1010,6 +1012,211 @@ void test_ring_layout() {
     CHECK_INT(maximized_strips.bottom.bottom, 1040);
 }
 
+
+// ---------------------------------------------------------------------------
+// The duplicate window: the arithmetic that decides what part of the capture is
+// shown where, and the style the shader is given.
+// ---------------------------------------------------------------------------
+void test_capture_math() {
+    group("overlay capture math");
+
+    // A maximized 1920x1080 window: Windows reports a frame that hangs off the
+    // left, right and bottom edges by the resize border, while the visible frame
+    // is the work area. The duplicate covers the work area and has to sample the
+    // matching slice of the capture, not the whole thing.
+    const Rect captured = Rect::from_size(-8, -8, 1936, 1096);   // the whole captured window
+    const Rect overlay = Rect::from_size(0, 0, 1920, 1040);      // the visible part
+    const UvRect uv = map_overlay_to_capture(overlay, captured);
+    CHECK(uv.valid);
+    CHECK_NEAR(uv.u0, 8.0 / 1936.0, 0.0005);
+    CHECK_NEAR(uv.v0, 8.0 / 1096.0, 0.0005);
+    CHECK_NEAR(uv.u1, 1928.0 / 1936.0, 0.0005);
+    CHECK_NEAR(uv.v1, 1048.0 / 1096.0, 0.0005);
+    CHECK(uv.width() > 0.9f && uv.width() < 1.0f);
+    CHECK(uv.height() > 0.9f && uv.height() < 1.0f);
+
+    // The common case: the overlay and the capture are the same rectangle, so the
+    // whole texture is used and nothing is resampled.
+    const UvRect whole = map_overlay_to_capture(overlay, overlay);
+    CHECK(whole.valid);
+    CHECK_NEAR(whole.u0, 0.0, 0.0001);
+    CHECK_NEAR(whole.v0, 0.0, 0.0001);
+    CHECK_NEAR(whole.u1, 1.0, 0.0001);
+    CHECK_NEAR(whole.v1, 1.0, 0.0001);
+
+    // Geometry that does not describe the same region must produce *nothing*: a
+    // stretched or mirrored image is worse than no image.
+    CHECK(!map_overlay_to_capture(overlay, Rect{}).valid);
+    CHECK(!map_overlay_to_capture(Rect{}, captured).valid);
+    CHECK(!map_overlay_to_capture(Rect::from_size(4000, 0, 100, 100), captured).valid);
+    // A sliver (a window dragged until it is nearly off screen) is not worth
+    // showing either: below 2% of the captured axis the mapping is guesswork.
+    CHECK(!map_overlay_to_capture(Rect::from_size(0, 0, 10, 1040), captured).valid);
+
+    // Clipping a panel rectangle into the overlay's own coordinate space.
+    const LocalRect clipped = clip_to_overlay(Rect::from_size(100, 50, 400, 300), Rect::from_size(0, 0, 1920, 1040));
+    CHECK_NEAR(clipped.left, 100.0, 0.001);
+    CHECK_NEAR(clipped.top, 50.0, 0.001);
+    CHECK_NEAR(clipped.right, 500.0, 0.001);
+    CHECK_NEAR(clipped.bottom, 350.0, 0.001);
+    CHECK(clip_to_overlay(Rect::from_size(5000, 5000, 100, 100), overlay).empty());
+    // A panel that runs off the right edge is clipped to the overlay, in the
+    // overlay's own coordinates (1920 wide, origin at its top-left).
+    CHECK_NEAR(clip_to_overlay(Rect::from_size(1900, 100, 100, 100), overlay).right, 1920.0, 0.001);
+
+    // The monitor pass-through: Program first, then Source, and never a sliver.
+    std::vector<PanelRect> panels;
+    PanelRect program;
+    program.id = PanelId::ProgramMonitor;
+    program.usable = true;
+    program.rect = Rect::from_size(700, 200, 500, 300);
+    panels.push_back(program);
+    PanelRect source;
+    source.id = PanelId::SourceMonitor;
+    source.usable = true;
+    source.rect = Rect::from_size(100, 200, 500, 300);
+    panels.push_back(source);
+    PanelRect timeline;
+    timeline.id = PanelId::Timeline;
+    timeline.usable = true;
+    timeline.rect = Rect::from_size(0, 600, 1920, 400);
+    panels.push_back(timeline);
+    PanelRect hidden;
+    hidden.id = PanelId::EffectControls;
+    hidden.usable = false;
+    hidden.rect = Rect::from_size(0, 0, 10, 10);
+    panels.push_back(hidden);
+    PanelRect sliver;
+    sliver.id = PanelId::AudioMeters;
+    sliver.usable = true;
+    sliver.rect = Rect::from_size(0, 0, 8, 300);
+    panels.push_back(sliver);
+
+    const std::vector<LocalRect> pass =
+        monitor_pass_through(panels, overlay, Rect::from_size(0, 32, 1920, 1040));
+    CHECK_INT(static_cast<long long>(pass.size()), 2);
+    // Screen y is the client origin plus the panel's own offset: the model is
+    // built for a client area that starts at (0,0).
+    CHECK_NEAR(pass[0].left, 700.0, 0.001);   // Program Monitor, always first
+    CHECK_NEAR(pass[0].top, 232.0, 0.001);
+    CHECK_NEAR(pass[1].left, 100.0, 0.001);   // Source Monitor
+    CHECK_NEAR(pass[1].top, 232.0, 0.001);
+    // The timeline is not a picture region and an unusable panel is ignored.
+    for (const LocalRect& r : pass) CHECK(r.top < 600.0f);
+
+    // Panel hairlines: the pass-through regions are excluded (a hairline over the
+    // footage would draw the skin on the video), the monitors themselves never get
+    // one, and the menu bar comes first.
+    const std::vector<LocalRect> lines =
+        panel_hairlines(panels, overlay, Rect::from_size(0, 32, 1920, 1040), pass, 4);
+    CHECK(!lines.empty());
+    CHECK(lines.size() <= 4);
+    for (const LocalRect& line : lines) {
+        for (const LocalRect& region : pass) {
+            const bool overlaps = line.left < region.right && region.left < line.right &&
+                                  line.top < region.bottom && region.top < line.bottom;
+            CHECK(!overlaps);
+        }
+    }
+
+    // Packing for the shader: four floats per rectangle, zero-filled beyond the
+    // end, so a stale slot can never light up in the shader.
+    float packed[4 * 4] = {};
+    pack_rects(pass, packed, 4);
+    CHECK_NEAR(packed[0], pass[0].left, 0.001);
+    CHECK_NEAR(packed[3], pass[0].bottom, 0.001);
+    CHECK_NEAR(packed[4], pass[1].left, 0.001);
+    CHECK_NEAR(packed[7], pass[1].bottom, 0.001);
+    // Slots past the end are zeroed: a stale rectangle would otherwise light up a
+    // pass-through region that no longer exists.
+    CHECK_NEAR(packed[8], 0.0, 0.001);
+    CHECK_NEAR(packed[11], 0.0, 0.001);
+    CHECK_NEAR(packed[12], 0.0, 0.001);
+    CHECK_NEAR(packed[15], 0.0, 0.001);
+
+    // Where the duplicate goes: the visible frame, except that a maximized window
+    // must use the work area (Windows reports its frame as larger than the
+    // monitor on purpose) and a fullscreen window must use the whole monitor.
+    const Rect monitor = Rect::from_size(0, 0, 1920, 1080);
+    const Rect work = Rect::from_size(0, 0, 1920, 1040);
+    const Rect floating = Rect::from_size(200, 150, 900, 600);
+    CHECK(overlay_rect(floating, monitor, work, false, false) == floating);
+    CHECK(overlay_rect(Rect::from_size(-8, -8, 1936, 1096), monitor, work, true, false) == work);
+    CHECK(overlay_rect(Rect::from_size(0, 0, 1920, 1080), monitor, work, false, true) == monitor);
+    CHECK(overlay_rect(Rect{}, monitor, work, true, false).empty());
+}
+
+void test_overlay_style() {
+    group("duplicate window style");
+
+    const Appearance defaults;
+    const ThemePalette glass = make_palette(ThemeId::AzyDarkGlass, defaults, true);
+    const OverlayStyle style = make_overlay_style(glass, defaults, false, true);
+
+    CHECK(style.visible);
+    CHECK(!overlay_style_is_passthrough(style));
+    // The default look has to be *visible*: this is the whole point of the
+    // duplicate window (the complaint that started this round was a skin nobody
+    // could see). Darkness and veil both have to be meaningful at the defaults.
+    CHECK(style.darkening > 0.30f);
+    CHECK(style.veil > 0.10f);
+    CHECK(style.gloss > 0.0f);
+    CHECK(style.grain > 0.0f);
+    CHECK(style.bezel > 0.4f);
+    CHECK(style.radius_dip >= 6.0f && style.radius_dip <= 16.0f);
+    CHECK(style.accent_strength > 0.0f);
+    // The charcoal is the theme's, not a second colour invented here.
+    CHECK_NEAR(style.charcoal[0], static_cast<float>(glass.surface_veil.r) / 255.0f, 0.001);
+
+    // Sliders move it: darkness is the same slider the rest of the skin uses.
+    Appearance dark = defaults;
+    dark.darkness = 1.0;
+    const OverlayStyle darker = make_overlay_style(make_palette(ThemeId::AzyDarkGlass, dark, true), dark, false, true);
+    CHECK(darker.darkening > style.darkening);
+    Appearance light = defaults;
+    light.darkness = 0.0;
+    const OverlayStyle lighter = make_overlay_style(make_palette(ThemeId::AzyDarkGlass, light, true), light, false, true);
+    CHECK(lighter.darkening < style.darkening);
+
+    // Performance mode keeps the structure (bezel, hairlines) and drops the GPU
+    // extras, which is what "static colours only" means here.
+    const OverlayStyle perf = make_overlay_style(glass, defaults, true, true);
+    CHECK_NEAR(perf.gloss, 0.0, 0.0001);
+    CHECK_NEAR(perf.grain, 0.0, 0.0001);
+    CHECK_NEAR(perf.depth, 0.0, 0.0001);
+    CHECK(perf.border >= 0.25f);
+    CHECK(perf.bezel > 0.4f);
+    CHECK(perf.darkening > 0.0f);
+
+    // Rounded corners off means square corners, not a smaller radius.
+    const OverlayStyle square = make_overlay_style(glass, defaults, false, false);
+    CHECK_NEAR(square.radius_dip, 0.0, 0.0001);
+
+    // The Original theme is "Azy does nothing": the duplicate must not be drawn at
+    // all, and the caller is told so in one call.
+    const ThemePalette original = make_palette(ThemeId::Original, defaults, true);
+    const OverlayStyle off = make_overlay_style(original, defaults, false, true);
+    CHECK(!off.visible);
+    CHECK(overlay_style_is_passthrough(off));
+
+    // A neutral accent carries no hue and no strength.
+    Appearance neutral = defaults;
+    neutral.accent = AccentId::Neutral;
+    neutral.accent_intensity = 0.0;
+    const OverlayStyle muted =
+        make_overlay_style(make_palette(ThemeId::AzyDarkGlass, neutral, true), neutral, false, true);
+    CHECK_NEAR(muted.accent_strength, 0.0, 0.0001);
+
+    // A user who pushes the overlay slider to zero loses the veil but keeps the
+    // rest of the treatment: the sliders are independent.
+    Appearance no_veil = defaults;
+    no_veil.overlay = false;
+    const OverlayStyle plain =
+        make_overlay_style(make_palette(ThemeId::AzyDarkGlass, no_veil, true), no_veil, false, true);
+    CHECK_NEAR(plain.veil, 0.0, 0.0001);
+    CHECK(plain.darkening > 0.30f);
+}
+
 }  // namespace
 
 int main() {
@@ -1027,6 +1234,8 @@ int main() {
     test_strings();
     test_layout_safety();
     test_ring_layout();
+    test_capture_math();
+    test_overlay_style();
 
     std::printf("\n===================\n%d checks, %d failure(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

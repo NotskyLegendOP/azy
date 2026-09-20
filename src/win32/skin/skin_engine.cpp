@@ -13,6 +13,10 @@ namespace azy {
 namespace win {
 namespace {
 
+// Where the capture starts before the overlay's own pacing controller takes over
+// (it raises this while frames keep arriving and lowers it when they stop).
+constexpr unsigned kOverlayStartFps = 12;
+
 bool same_color(const Rgba& a, const Rgba& b) {
     return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
 }
@@ -101,6 +105,7 @@ void SkinEngine::shutdown() {
     surface_.destroy();
     veil_.destroy();
     debug_.destroy();
+    teardown_overlay();
     panels_.clear();
     target_ = nullptr;
 }
@@ -110,17 +115,280 @@ void SkinEngine::revert() {
     surface_.hide();
     veil_.hide();
     debug_.hide();
+    gloss_.hide();
+    capture_.stop();
+    duplicate_active_ = false;
+    overlay_report_.active = false;
+    overlay_report_.capturing = false;
     has_key_ = false;
     last_key_ = VisualKey{};
+}
+
+void SkinEngine::teardown_overlay() {
+    capture_.stop();
+    gloss_.destroy();
+    overlay_created_ = false;
+    duplicate_active_ = false;
+    overlay_attached_ = nullptr;
+    overlay_attached_pid_ = 0;
+    overlay_report_.created = false;
+    overlay_report_.active = false;
+    overlay_report_.capturing = false;
+    overlay_report_.note = "not running";
+}
+
+void SkinEngine::retry_overlay() {
+    // A manual retry is a fresh start: the failure burst, the backoff and the
+    // "this host cannot do it" verdict are all cleared, because the user may have
+    // changed something (installed a driver, started Premiere with a different
+    // window) since the last attempt.
+    overlay_disabled_ = false;
+    overlay_failure_burst_ = 0;
+    overlay_next_attempt_ms_ = 0;
+    overlay_report_.supported = true;
+    overlay_report_.note = "retrying";
 }
 
 void SkinEngine::release_surface() {
     surface_.destroy();
     veil_.destroy();
     debug_.destroy();
+    // Premiere is gone: the duplicate and its capture go with it, so Azy holds no
+    // GPU memory and no worker thread while there is nothing to mirror.
+    teardown_overlay();
     panels_.clear();
     target_ = nullptr;
     log_debug("composition surface destroyed");
+}
+
+// The duplicate window: create it, keep the capture attached, place it, show it.
+//
+// Everything here is written so that a failure ends with the *other* layers still
+// doing their job: the duplicate is never allowed to be the single point of
+// failure for the skin.
+void SkinEngine::sync_overlay(const SkinRequest& request, bool allowed, bool want_capture, SkinState& state_out) {
+    // Every path below overwrites these; the reset makes sure a path that returns
+    // early cannot leave last tick's verdict in place.
+    state_out.duplicate_active = false;
+    state_out.duplicate_capturing = capture_.running();
+    overlay_style_ = make_overlay_style(request.palette, request.appearance, request.performance_mode,
+                                        request.features.edge_surface_rounded);
+    gloss_.set_style(overlay_style_);
+    gloss_.set_performance_mode(request.performance_mode);
+
+    const bool style_wanted = gloss_.style_visible() && !overlay_style_is_passthrough(overlay_style_);
+    if (!allowed || !style_wanted || overlay_disabled_) {
+        gloss_.hide();
+        capture_.stop();
+        duplicate_active_ = false;
+        overlay_attached_ = nullptr;
+        overlay_attached_pid_ = 0;
+        overlay_report_.active = false;
+        overlay_report_.capturing = false;
+        if (overlay_disabled_) {
+            overlay_report_.note = "not available on this host";
+        } else if (!allowed) {
+            overlay_report_.note = suspend_reason_name(request.suspend);
+        } else {
+            overlay_report_.note = "the style would not change anything";
+        }
+        state_out.duplicate_active = false;
+        state_out.duplicate_capturing = false;
+        state_out.duplicate_note = overlay_report_.note;
+        return;
+    }
+
+    const unsigned long long now = GetTickCount64();
+
+    if (!overlay_created_) {
+        if (now < overlay_next_attempt_ms_) {
+            overlay_report_.note = "waiting before the next attempt";
+            state_out.duplicate_note = overlay_report_.note;
+            return;
+        }
+        std::string error;
+        ++overlay_attempts_;
+        if (!gloss_.create(GetModuleHandleW(nullptr), &error)) {
+            overlay_failure_burst_ += 1;
+            // Three failed attempts in a session is a verdict about this host, not
+            // a hiccup: the duplicate is switched off and the ring and the veil
+            // keep the skin. The user can ask for a retry from the settings window.
+            if (overlay_failure_burst_ >= 3) {
+                overlay_disabled_ = true;
+                overlay_report_.supported = false;
+                log_warn("overlay: giving up after %d attempts - %s", overlay_failure_burst_, error.c_str());
+            } else {
+                log_warn("overlay: could not be created - %s", error.c_str());
+            }
+            overlay_next_attempt_ms_ = now + 4000ull * static_cast<unsigned long long>(overlay_failure_burst_);
+            overlay_report_.note = error;
+            state_out.last_error = error;
+            state_out.duplicate_note = overlay_report_.note;
+            return;
+        }
+        overlay_created_ = true;
+        overlay_report_.created = true;
+        log_info("overlay: duplicate window created (attempt %llu)", overlay_attempts_);
+    }
+
+    // --- the capture ---------------------------------------------------------
+    CaptureStatus capture_status = capture_.status();
+    if (!want_capture) {
+        capture_.stop();
+        gloss_.hide();
+        duplicate_active_ = false;
+        overlay_attached_ = nullptr;
+        overlay_attached_pid_ = 0;
+        overlay_report_.active = false;
+        overlay_report_.capturing = false;
+        overlay_report_.note = suspend_reason_name(request.suspend);
+        state_out.duplicate_active = false;
+        state_out.duplicate_capturing = false;
+        state_out.duplicate_note = overlay_report_.note;
+        return;
+    }
+
+    const bool wrong_window = overlay_attached_ != nullptr &&
+                              (overlay_attached_ != request.target.hwnd || overlay_attached_pid_ != request.target.pid);
+    if (capture_.running() && (wrong_window || capture_.item_closed())) {
+        // The window the capture was attached to is gone (Premiere restarted, or
+        // the handle was recycled): drop it and let the block below start over.
+        capture_.stop();
+        overlay_attached_ = nullptr;
+        overlay_attached_pid_ = 0;
+        overlay_report_.capturing = false;
+    }
+
+    if (!capture_.running()) {
+        if (now < overlay_next_attempt_ms_) {
+            gloss_.hide();
+            duplicate_active_ = false;
+            overlay_report_.active = false;
+            overlay_report_.capturing = false;
+            overlay_report_.note = "waiting before the next capture attempt";
+            state_out.duplicate_note = overlay_report_.note;
+            return;
+        }
+        if (gloss_.shared_device() == nullptr) {
+            overlay_report_.note = "no GPU device";
+            state_out.duplicate_note = overlay_report_.note;
+            return;
+        }
+        std::string detail;
+        const CaptureStart result = capture_.start(request.target.hwnd, request.target.pid,
+                                                   gloss_.shared_device(),
+                                                   kOverlayStartFps, &detail);
+        if (result == CaptureStart::Started) {
+            overlay_attached_ = request.target.hwnd;
+            overlay_attached_pid_ = request.target.pid;
+            overlay_failure_burst_ = 0;
+            overlay_next_attempt_ms_ = 0;
+            overlay_report_.capturing = true;
+            overlay_report_.note = "capturing";
+            log_info("overlay: mirroring the Premiere window (pid %lu)", request.target.pid);
+        } else if (result == CaptureStart::Unsupported) {
+            // This is a fact about the machine (an older Windows, or a locked-down
+            // build), not a defect: no retry storm, no failure counter, no Safe
+            // Mode. The note explains it and the other layers keep working.
+            overlay_disabled_ = true;
+            overlay_report_.supported = false;
+            overlay_report_.note = detail;
+            log_warn("overlay: this host cannot mirror a window - %s", detail.c_str());
+            state_out.duplicate_note = overlay_report_.note;
+            return;
+        } else if (result == CaptureStart::Minimized) {
+            // Expected while Premiere is minimised; nothing to report.
+            overlay_report_.note = detail;
+            state_out.duplicate_note = overlay_report_.note;
+            return;
+        } else {
+            overlay_failure_burst_ += 1;
+            overlay_next_attempt_ms_ = now + 4000ull * static_cast<unsigned long long>(overlay_failure_burst_);
+            overlay_report_.capturing = false;
+            overlay_report_.note = detail;
+            state_out.last_error = detail;
+            log_warn("overlay: capture did not start (%s) - %s", capture_start_text(result), detail.c_str());
+            state_out.duplicate_note = overlay_report_.note;
+            return;
+        }
+    }
+
+    capture_status = capture_.status();
+    overlay_report_.capturing = capture_status.running;
+
+    // The visible size of the capture and the rectangle Windows reports for the
+    // window are two different numbers on a DPI-scaled host. When they disagree,
+    // the mirror would be scaled wrongly; the debug overlay says so instead of
+    // pretending, and the capture is restarted on the sizes we know still match.
+    int content_width = 0;
+    int content_height = 0;
+    capture_.source_size(&content_width, &content_height);
+    const bool size_agrees = content_width <= 0 || content_height <= 0 ||
+                             (std::abs(content_width - request.target.frame.width()) <= 2 &&
+                              std::abs(content_height - request.target.frame.height()) <= 2);
+
+    // --- geometry and presentation -------------------------------------------
+    // Nothing goes on screen until the capture has produced a frame: an empty
+    // composition window would be a hole where Premiere's UI should be, which is
+    // exactly the complaint the duplicate window exists to answer.
+    if (capture_status.frames == 0) {
+        gloss_.hide();
+        duplicate_active_ = false;
+        overlay_report_.active = false;
+        overlay_report_.note = "waiting for the first captured frame";
+        state_out.duplicate_active = false;
+        state_out.duplicate_capturing = true;
+        state_out.duplicate_note = overlay_report_.note;
+        return;
+    }
+
+    GlossFrame frame;
+    frame.overlay = overlay_rect(request.target.visible_frame, request.target.monitor, request.target.work_area,
+                                 request.target.maximized, request.target.fullscreen);
+    frame.captured = request.target.frame;
+    frame.client_origin = client_origin_;
+    frame.dpi = request.target.dpi;
+    frame.panels = panels_;
+    frame.anchor = request.target.hwnd;
+    frame.insert_after = z_order_anchor(request.target.hwnd);
+    frame.size_agrees = size_agrees;
+
+    if (frame.overlay.empty()) {
+        gloss_.hide();
+        duplicate_active_ = false;
+        overlay_report_.active = false;
+        overlay_report_.note = "nothing visible to cover";
+        state_out.duplicate_active = false;
+        state_out.duplicate_note = overlay_report_.note;
+        return;
+    }
+
+    if (!gloss_.set_frame(frame)) {
+        gloss_.hide();
+        duplicate_active_ = false;
+        overlay_report_.active = false;
+        overlay_report_.note = gloss_.stats().note;
+        state_out.duplicate_active = false;
+        state_out.duplicate_note = overlay_report_.note;
+        return;
+    }
+
+    if (gloss_.show()) {
+        duplicate_active_ = true;
+        overlay_report_.active = true;
+        overlay_report_.note = "mirroring";
+        state_out.duplicate_active = true;
+        state_out.duplicate_capturing = true;
+        state_out.duplicate_note = overlay_report_.note;
+        log_debug("overlay: %dx%d over the window, capture %dx%d, uv %.3f,%.3f", frame.overlay.width(),
+                  frame.overlay.height(), content_width, content_height, gloss_.stats().uv[0], gloss_.stats().uv[1]);
+    } else {
+        duplicate_active_ = false;
+        overlay_report_.active = false;
+        overlay_report_.note = gloss_.stats().note;
+        state_out.duplicate_active = false;
+        state_out.duplicate_note = overlay_report_.note;
+    }
 }
 
 SkinEngine::VisualKey SkinEngine::build_key(const SkinRequest& request) const {
@@ -187,6 +455,7 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
     if (!keep_frame) {
         const bool had_frame = composer_.is_applied();
         const bool had_surface = surface_.visible();
+        const bool had_duplicate = duplicate_active_ || capture_.running() || overlay_created_;
         if (had_frame) {
             composer_.revert();
             state_out.frame_applied = false;
@@ -196,15 +465,38 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
             state_out.surface_visible = false;
         }
         has_key_ = false;
+        // The duplicate goes with the window: its capture is stopped and its GPU
+        // resources are released, so a stopped Azy holds no GPU memory and no
+        // worker thread.
+        if (had_duplicate) {
+            gloss_.hide();
+            capture_.stop();
+            duplicate_active_ = false;
+            overlay_attached_ = nullptr;
+            overlay_attached_pid_ = 0;
+            overlay_report_.active = false;
+            overlay_report_.capturing = false;
+            overlay_report_.note = suspend_reason_name(request.suspend);
+            state_out.duplicate_note = overlay_report_.note;
+        }
         // Nothing is attached, so the map describes a window that is no longer
         // tracked: leaving it in place would hand the region work rectangles for a
         // window that is gone.
         panels_.clear();
-        if (had_frame || had_surface) {
+        if (had_frame || had_surface || had_duplicate) {
             log_info("skin removed (%s)", suspend_reason_name(request.suspend));
         }
-        return had_frame || had_surface;
+        return had_frame || had_surface || had_duplicate;
     }
+
+    // Is the duplicate window the thing the user is looking at? While it is, the
+    // ring and the veil stand down: both are placed under it, so drawing them
+    // would spend GDI work and GPU memory on pixels nobody can see. This is the
+    // "avoid double rendering" rule of the overlay design, and it is also what
+    // keeps the skin's cost from doubling when the overlay is on.
+    const bool duplicate_now = duplicate_active_ ||
+                               (overlay_created_ && !overlay_disabled_ && capture_.running() &&
+                                capture_.status().frames > 0);
 
     const VisualKey key = build_key(request);
     const bool frame_changed = !has_key_ || last_key_.hwnd != key.hwnd || last_key_.dark_frame != key.dark_frame ||
@@ -217,8 +509,8 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
 
     // The composition surface is only shown while the window is genuinely on
     // screen and the skin is not suspended for any reason.
-    const bool surface_requested =
-        key.surface && request.suspend == SuspendReason::None && request.target.valid();
+    const bool surface_requested = key.surface && request.suspend == SuspendReason::None && request.target.valid() &&
+                                   !duplicate_now;
     const bool surface_changed = !has_key_ || last_key_.hwnd != key.hwnd || last_key_.surface != key.surface ||
                                  last_key_.surface_rect != key.surface_rect || last_key_.dpi != key.dpi ||
                                  last_key_.radius_px != key.radius_px || last_key_.band_px != key.band_px ||
@@ -247,8 +539,8 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
     // The overlay covers the whole window; the ring decorates its edge. Both are
     // tracked, and the ring is always presented first because the overlay is then
     // stacked *under* it (see below), which keeps the 1px hairline crisp.
-    const bool overlay_requested =
-        key.overlay && request.suspend == SuspendReason::None && request.target.valid();
+    const bool overlay_requested = key.overlay && request.suspend == SuspendReason::None && request.target.valid() &&
+                                   !duplicate_now;
     const bool overlay_changed = !has_key_ || last_key_.hwnd != key.hwnd || last_key_.overlay != key.overlay ||
                                  !same_color(last_key_.veil, key.veil) ||
                                  last_key_.surface_rect != key.surface_rect;
@@ -353,6 +645,21 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
                  request.target.dpi, describe_panel_map(panels_).c_str());
     }
 
+    // --- the duplicate window ------------------------------------------------
+    // Last, because it consumes the panel map this apply() just built, and because
+    // it is the layer that overrides the other two: while it is on screen they are
+    // suppressed above, and here is where "on screen" is decided.
+    {
+        const bool duplicate_allowed = request.skin_enabled && request.palette.visible &&
+                                       request.features.window_overlay && request.target.valid() &&
+                                       (request.suspend == SuspendReason::None || request.suspend == SuspendReason::Moving ||
+                                        request.suspend == SuspendReason::Dragging);
+        const bool capture_wanted = duplicate_allowed && request.suspend != SuspendReason::FullscreenTransition;
+        sync_overlay(request, duplicate_allowed, capture_wanted, state_out);
+        if (state_out.duplicate_active && !duplicate_now) changed = true;
+        if (!state_out.duplicate_active && duplicate_now) changed = true;
+    }
+
     // --- debug overlay (spec §41) -------------------------------------------
     // The rectangles are translated into screen coordinates here: the map is built
     // for a client area that starts at (0,0), while the overlay window covers the
@@ -384,6 +691,24 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
                                    workspace_name(resolve_workspace(request.workspace)), panels_.size(),
                                    static_cast<size_t>(std::count_if(panels_.begin(), panels_.end(),
                                                                      [](const PanelRect& p) { return p.usable; }))));
+        const GlossOverlay::Stats& ostats = gloss_.stats();
+        const CaptureStatus cstatus = capture_.status();
+        const OverlayReport& report = overlay_report();
+        facts.push_back(str_format("duplicate 0x%p | ring 0x%p | anchor 0x%p (pid %lu)",
+                                   (void*)gloss_.window(), (void*)surface_.hwnd(), (void*)request.target.hwnd,
+                                   request.target.pid));
+        facts.push_back(str_format("duplicate: %s | capture: %s | %ux%u -> %dx%d | uv %.3f,%.3f-%.3f,%.3f",
+                                   report.active ? "on screen" : report.note.c_str(),
+                                   cstatus.running ? "running" : cstatus.detail.c_str(), cstatus.content_width,
+                                   cstatus.content_height, ostats.width, ostats.height, ostats.uv[0], ostats.uv[1],
+                                   ostats.uv[2], ostats.uv[3]));
+        facts.push_back(str_format("present %llu | capture frames %llu | copies %llu | empty polls %llu | "
+                                   "failures %llu | pool resizes %llu",
+                                   ostats.presents, cstatus.frames, cstatus.copies, cstatus.empty_polls,
+                                   cstatus.failures, cstatus.pool_resizes));
+        facts.push_back(str_format("paced %u fps (%s) | pass-through regions %d | panel lines %d | size agrees %s",
+                                   ostats.paced_fps, ostats.active ? "active" : "idle", ostats.pass_regions,
+                                   ostats.panel_lines, ostats.capture_size_agrees ? "yes" : "no"));
         facts.push_back("press Check visibility in Settings, then screenshot this window");
 
         std::string debug_error;
@@ -441,9 +766,26 @@ bool SkinEngine::probe_on_screen(std::string* detail) {
     const bool ring_shown = surface_.visible();
     const bool ring_ok = surface_.probe_visible(&ring_detail);
 
-    std::string text = (overlay_ok || ring_ok) ? "the skin is on screen"
-                                               : "the skin is NOT on screen";
+    // The duplicate window is checked structurally, not by reading pixels: it has
+    // no redirection bitmap (the compositor paints it), so a GDI screen read is not
+    // a trustworthy answer about it. What is reported instead is everything the
+    // process itself knows - and it says plainly that this is not a pixel check, so
+    // nobody mistakes one for the other.
+    const GlossOverlay::Stats& gl = gloss_.stats();
+    const CaptureStatus cs = capture_.status();
+    const bool duplicate_shown = overlay_report_.active;
+    std::string duplicate_detail;
+    if (duplicate_shown) {
+        duplicate_detail = str_format("on screen, %llu presents, %llu captured frames, %ux%u, pacing %u fps",
+                                      gl.presents, cs.frames, cs.content_width, cs.content_height, gl.paced_fps);
+    } else {
+        duplicate_detail = "not showing: " + overlay_report_.note;
+    }
+
+    const bool any_visible = overlay_ok || ring_ok || duplicate_shown;
+    std::string text = any_visible ? "the skin is on screen" : "the skin is NOT on screen";
     text += "\n";
+    text += "  duplicate: " + duplicate_detail + (duplicate_shown ? " (structural, not a pixel check)" : "") + "\n";
     text += "  overlay: " + (overlay_shown ? overlay_detail : std::string("not showing")) + "\n";
     text += "  ring: " + (ring_shown ? ring_detail : std::string("not showing"));
     if (detail != nullptr) *detail = text;
@@ -452,7 +794,7 @@ bool SkinEngine::probe_on_screen(std::string* detail) {
     // failure, and it deserves the warning level in the log.
     if (overlay_shown && !overlay_ok) log_warn("visibility check: %s", overlay_detail.c_str());
     if (ring_shown && !ring_ok) log_warn("visibility check: %s", ring_detail.c_str());
-    return overlay_ok || ring_ok;
+    return any_visible;
 }
 
 }  // namespace win

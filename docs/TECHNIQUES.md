@@ -235,6 +235,61 @@ window also covers the video monitors, which is why the strength is a slider
 
 ---
 
+---
+
+## Level 3 — The duplicate window (used, v1.3.0)
+
+The skin the user actually sees since v1.3.0 is a *copy* of Premiere's window,
+drawn back skinned, in a window of Azy's own. It is the only technique in the
+project that reads another application's pixels, so it is the one that gets the
+closest reading of the six tests.
+
+### 3.1 `Windows.Graphics.Capture` — GPU capture of one window
+
+| Test | How it is satisfied |
+|---|---|
+| **Supported** | A documented Windows API (`Windows.Graphics.Capture`, Windows 10 1809+), used in its documented non-UWP form: the activation factory is obtained with `RoGetActivationFactory` and the item is created with the documented `IGraphicsCaptureItemInterop::CreateForWindow`. No injection, no hook, no private interface. |
+| **Stable** | Every failure mode is "the effect is missing": if the capture cannot be created the duplicate is not shown, one warning is logged, and the ring and the sheet carry the skin. Windows can end a capture at any time (the item's `Closed` event, `ReachedConnectionLimit`-style failures, a device reset); each of those is handled by stopping the capture and re-attaching, never by escalating. |
+| **Reversible** | The session, the frame pool, the item and the device are released when the capture stops; the target window is never modified - not one attribute, not one message, not one pixel of Premiere's is written by this technique. |
+| **Compatible with Premiere** | The capture is read-only and window-scoped. It cannot change how Premiere processes input, frames or files; Premiere does not even learn that it is being captured (the capture indicator border, where the OS draws one, is the OS's own decoration). |
+| **Safe for input** | The duplicate window is `WS_EX_TRANSPARENT` + `WS_EX_NOACTIVATE` + `WS_EX_TOOLWINDOW` and answers `HTTRANSPARENT`; there is no keyboard hook anywhere in the project. The capture itself never sees input. |
+| **Necessary** | It is the only supported way to get *skinned* pixels of another window without being inside that process. A DWM thumbnail would be cheaper but cannot be skinned at all (§"rejected" below); GDI screen capture is a CPU copy and forbidden by the performance rules; injection and hooking are permanently out. |
+
+Additional hard rules enforced in code and in `tools/check-overlay.py`:
+
+* **Window capture only.** The monitor form of the API (`CreateForMonitor`) appears
+  nowhere in `src/`; the checker fails the build if it ever does. A monitor capture
+  would include Azy's own window - an infinite mirror - and every other application.
+* **Never Azy itself.** The capture validates the target's owning process id and
+  refuses its own. Together with the rule above, nesting is impossible by
+  construction.
+* **Never a CPU copy.** The arrived frame is a D3D11 texture; it is copied on the
+  GPU into a texture Azy owns and released. No `Map`, no staging texture, no
+  screenshot, no file.
+* **The cursor is switched off** (`IGraphicsCaptureSession2`): the compositor draws
+  the pointer, so without this the mirror would show a second one.
+* **Pacing is bounded** at 10 frames per second while the window is static and 30
+  while it is changing - driven by the capture itself, not by a free-running timer.
+
+### 3.2 `D3D11` + `DirectComposition` — where the copy is drawn
+
+One hardware D3D11 device with `D3D11_CREATE_DEVICE_BGRA_SUPPORT` (no WARP
+fallback: a software rasterizer would burn CPU to show a skin), a flip-model
+composition swap chain with premultiplied alpha, and one `IDCompositionVisual`
+whose root is the duplicate window. The window has
+`WS_EX_NOREDIRECTIONBITMAP`, so there is no GDI redirection surface behind it - the
+compositor owns every pixel. Nothing is drawn with GDI in this path, and the
+composition is bounded by Premiere's own frame, like every other surface Azy owns.
+
+### 3.3 Runtime shader compilation (`d3dcompiler_47.dll`)
+
+The composition pass is a real `.hlsl` file in the repository, embedded into the
+executable at build time and compiled once at start-up (Shader Model 5.0, falling
+back to 4.0). The DLL is loaded dynamically - nothing new is linked - and it ships
+with every Windows 10 1809+ machine. If it is missing or the compile fails, the
+duplicate is not created and the static layers are used: the failure mode is a
+simpler skin, never a broken window.
+
 ## Techniques considered and rejected
 
 | Technique | Why it is not used |
@@ -244,27 +299,32 @@ window also covers the video monitors, which is why the strength is a slider
 | **`SetWindowsHookEx(WH_CBT)` process-wide hooks for detection** | Would require code inside Premiere's processes to be useful, and WinEvent hooks already provide everything needed without injection. |
 | **Memory patching / resource editing of `Adobe Premiere Pro.exe`** | Modifies Adobe files and breaks updates, signatures and support. Forbidden. |
 | **Replacing Premiere's theme files or DLLs** (e.g. shipping `dark` variants) | Same as above: modifies Adobe installation content and cannot be cleanly uninstalled. |
-| **A transparent full-screen overlay window** (over the desktop, or over several applications at once) | Would cover windows Azy was not asked to touch, would need hit-test trickery to stay usable, and would cost GPU time continuously. Azy's surfaces are bounded by Premiere's own frame instead; `SetLayeredWindowAttributes` over that frame (§2.4) is the nearest *accepted* technique, and it stays bounded, constant-alpha and static. |
+| **A transparent full-screen overlay window** (over the desktop, or over several applications at once) | Would cover windows Azy was not asked to touch, would need hit-test trickery to stay usable, and would cost GPU time continuously. Azy's surfaces are bounded by Premiere's own frame instead. The duplicate window (§3.1) is *not* this technique: it is one window the size of Premiere's visible frame, it is not topmost, and another application brought forward covers it. |
 | **`SetWindowCompositionAttribute` acrylic/blur "hacks"** | Undocumented (`user32` private export), historically unstable, interacts badly with DWM, and blurs *behind* a fully opaque client area would be invisible anyway. Rejected even though it is popular in "glass" utilities. |
-| **`BitBlt` of Premiere's window to fake translucency** | Requires screen capture of another process's surface (performance cost, DWM restrictions, content protection), and produces wrong results on 10-bit/HDR displays. |
+| **`BitBlt` of Premiere's window to fake translucency** | GDI screen capture, specifically: a CPU bitmap copy per frame, unreliable for GPU-composited windows, wrong on 10-bit/HDR displays, and forbidden by the performance rules. The GPU capture of §3.1 is a different API with none of those properties. |
 | **Applying a dark title bar by creating an owner window with `WS_EX_LAYERED` and using it as Premiere's parent** | Reparenting another process's window changes its message routing and z-order semantics. Never safe, never necessary. |
 | **`SetWindowLongPtr(GWL_EXSTYLE)` on Premiere's window (e.g. adding `WS_EX_LAYERED` for a translucent Premiere)** | Would alter Premiere's own window semantics and could change input behaviour (a layered window behaves differently for hit-testing and painting). Directly violates the "never break Premiere's controls" rule. |
 | **Subclassing Premiere's window procedure with `SetWindowSubclass`/`SetWindowLongPtr(GWLP_WNDPROC)`** | Requires calling into another process's window procedure; cross-process subclassing is not supported by Windows (the call fails or corrupts state), and it is a stability risk even if it worked. |
 | **Stamping a custom bitmap over Premiere's title bar via `WM_NCPAINT`** | Requires participating in Premiere's non-client painting → cross-process painting into another application's DC. Rejected. |
-| **`WS_EX_NOREDIRECTIONBITMAP` + DirectComposition per-panel surfaces** | Per-panel surfaces would need one layered window per Premiere panel, tracking internal docking geometry through undocumented hierarchy — the exact "chase Premiere's internal layout" trap the brief warns about. Reserved for a future optional module, never a default. |
-| **Continuous timers / animation / screen capture loops** | Forbidden by the performance requirements. Everything Azy does is event-driven, and the single timer is a 1s safety net whose normal path does nothing. |
+| **`WS_EX_NOREDIRECTIONBITMAP` + DirectComposition *per panel*** | One surface per Premiere panel would need one layered window per panel, tracking internal docking geometry through an undocumented hierarchy — the exact "chase Premiere's internal layout" trap the brief warns about. The combination itself is used for **one** surface bounded by Premiere's frame in §3.1/§3.2; what is rejected here is one surface per panel. |
+| **Continuous timers / animation / screen capture loops** | Forbidden by the performance requirements. Everything Azy does is event-driven, and the single timer is a 1 s safety net whose normal path does nothing. The duplicate window's cadence is capped at 10/30 fps, is driven by the capture rather than by a clock, and its timer is removed entirely while the window is hidden. |
 | **Electron / Chromium / QML / any UI framework** | 50–200 MB of RAM and a rendering process to draw one ring. Rejected in favour of ~550 KB of Win32 + one cached bitmap. |
 | **Installing a service or driver** | Not needed for a per-user visual utility; a service would raise the privilege surface, complicate uninstall and (if elevated) interfere with observing a normal user's processes. |
 
 ## The fallback ladder (how Azy degrades)
 
 ```
-DWM frame colours       ── rejected? ──► dark frame only (Level 1.1)
-dark frame              ── rejected? ──► DWM layout attributes only (rounded corners)
-any DWM attribute       ── rejected? ──► Azy's own surface only (Level 2.1)
-surface creation fails  ── recurring? ─► Safe Mode: dark frame only, surfaces disabled
-3 failures in 5 minutes ──────────────► Safe Mode, persisted across restarts
+duplicate window (3.1)  ── unavailable? ─► ring + sheet (Level 2), the round-1..7 skin
+DWM frame colours       ── rejected? ───► dark frame only (Level 1.1)
+dark frame              ── rejected? ───► DWM layout attributes only (rounded corners)
+any DWM attribute       ── rejected? ───► Azy's own surface only (Level 2.1)
+surface creation fails  ── recurring? ──► Safe Mode: dark frame only, surfaces disabled
+3 failures in 5 minutes ────────────────► Safe Mode, persisted across restarts
 ```
+
+The top row is the important one: the duplicate window is the *first* thing Azy
+tries and the *first* thing it gives up, because the static layers below it are a
+complete skin on their own.
 
 At every step the visual result gets simpler, never more invasive. There is no
 path in the code that escalates to a riskier technique in response to failure.

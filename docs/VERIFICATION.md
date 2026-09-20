@@ -1,8 +1,8 @@
 # Verification status
 
-Per-feature evidence for **v1.2.3** (the deep review's fixes; the logic is
-unchanged from v1.2.2 apart from those fixes). This file answers one question only:
-*what has actually been proven, and how?*
+Per-feature evidence for **v1.3.0** (the duplicate window overlay; the static path is
+unchanged from v1.2.3). This file answers one question only: *what has actually been
+proven, and how?*
 
 Three levels are used, and nothing is promoted between them without evidence:
 
@@ -18,16 +18,20 @@ in this development environment, so most of Azy is COMPILED at best.
 Evidence commands, all reproducible:
 
 ```sh
-# native logic tests (13 groups)
+# native logic tests (15 groups)
 cmake -S . -B build-tests -DAZY_BUILD_TESTS=ON && cmake --build build-tests --target azy_core_tests && ./build-tests/azy_core_tests
 
-# the six-step gate: include hygiene, version strings, tests, Windows build, exe inspection, board sync
+# the seven-step gate: include hygiene, version strings, overlay contracts, tests,
+# Windows build, exe inspection, board sync
 ./scripts/verify.sh
+
+# the overlay's own contract check on its own
+python3 tools/check-overlay.py
 ```
 
-Latest results: **578 checks, 0 failures**; **`verify.sh` 6/6 green**; Windows
-artefact `AzySkin.exe` **560,128 bytes**, Release, x64, zero warnings from
-`sources/` + `include/`.
+Latest results: **649 checks, 0 failures**; **`verify.sh` 7/7 green**; Windows
+artefact `AzySkin.exe` **610,816 bytes** (61.1 % of the 1 MB budget), Release, x64,
+zero warnings from `src/` + `include/`.
 
 ---
 
@@ -44,9 +48,9 @@ artefact `AzySkin.exe` **560,128 bytes**, Release, x64, zero warnings from
 | Installer runs, installs, starts, uninstalls cleanly | UNVERIFIED | No Windows machine; Inno Setup cannot run here. Nobody has clicked through Setup. |
 | Portable zip runs from a folder | UNVERIFIED | Never executed |
 | Code signing | UNVERIFIED (and absent by design) | No certificate; SmartScreen warning expected |
-| Progress board matches the repository | VERIFIED | `verify.sh` step 6 (`tools/progress.py --check`) |
+| Progress board matches the repository | VERIFIED | `verify.sh` step 7 (`tools/progress.py --check`) |
 
-## 2. Pure logic — the 578 native checks
+## 2. Pure logic — the 649 native checks
 
 | Feature | Status | Evidence |
 | --- | --- | --- |
@@ -58,6 +62,34 @@ artefact `AzySkin.exe` **560,128 bytes**, Release, x64, zero warnings from
 | Failure tracker / Safe Mode thresholds and window | VERIFIED | `test_failure_tracker` |
 | String/format helpers, no unbounded growth | VERIFIED | `test_strings` |
 | Layout safety: nothing drawn outside its surface, degenerate sizes rejected | VERIFIED | `test_layout_safety`, `test_ring_layout` |
+| Overlay capture mapping: the sub-rectangle of a maximized window's capture, refusal to draw when the geometry does not intersect, panel clipping into window-local pixels, pass-through ordering (Program first), hairlines excluded next to the picture regions, shader packing and zero padding, `overlay_rect` for windowed/maximized/fullscreen | VERIFIED | `test_capture_math` (new in v1.3.0) |
+| Duplicate window style: visible at the shipped defaults, sliders move it, performance mode keeps the structure and drops the GPU extras, rounded corners off = square, Original theme = no duplicate at all, neutral accent = no hue | VERIFIED | `test_overlay_style` (new in v1.3.0) |
+| The shader's constant buffer and the C++ struct agree (members, order, sizes, slot counts, no `float3`, 272 bytes by the HLSL packing rules) | VERIFIED | `verify.sh` step 3, `tools/check-overlay.py`. The checker was itself tested by breaking the shader twice (renamed member, `float3`) and confirming it failed both times. |
+| Nothing calls the monitor form of the capture API; the own-process guard exists | VERIFIED | `verify.sh` step 3 (`tools/check-overlay.py` greps `src/` and the capture module) |
+
+## 2b. The duplicate window overlay (COMPILED — nothing runtime-verified)
+
+Every row here is **COMPILED** unless stated otherwise. This is the honest status of
+the round-8 architecture: the code exists, builds, links and passes every check that
+can run without Windows and Premiere - and not one of its runtime behaviours has
+been observed.
+
+| Feature | Status | Evidence / what is missing |
+| --- | --- | --- |
+| The capture/composition technique is achievable and is the best available (§34) | VERIFIED (by argument, not by test) | `docs/AZY_OVERLAY_ARCHITECTURE.md` §1.3: Windows Graphics Capture chosen; Desktop Duplication, DWM thumbnails, GDI capture and injection rejected with their reasons. The reasoning is reviewable; the runtime behaviour is not. |
+| The WinRT capture ABI is declared correctly (IIDs, vtable order, `CreateFreeThreaded`, cursor capture off) | COMPILED | `include/azy/win32/capture/wgc_abi.hpp`, with the source of every identifier in a comment. **This is the highest risk in the feature**: a wrong vtable slot would not fail cleanly. It has never been executed. |
+| A capture can be created for a Premiere window and delivers frames | UNVERIFIED | Needs Windows + Premiere |
+| The capture's pixel size matches the window rectangle at 100–200 % DPI | UNVERIFIED | Nothing documents a guarantee; the mismatch is reported in the debug overlay rather than hidden |
+| The mirror lines up with the real window (UV mapping) | COMPILED (math VERIFIED, alignment UNVERIFIED) | `test_capture_math` proves the arithmetic; whether it *lines up* needs eyes |
+| The Program Monitor's footage is not darkened | COMPILED | The shader's pass-through loop, the rectangles from the panel model, `test_capture_math` for the rectangles |
+| Click-through, no focus, no keystrokes | COMPILED | `WS_EX_TRANSPARENT`/`NOACTIVATE`/`TOOLWINDOW`, `HTTRANSPARENT`, `MA_NOACTIVATE`, and no keyboard hook anywhere in the source. The round-3 "not in front" report was about stacking, which is measured here structurally, not by a click test. |
+| Above Premiere, below other applications, never topmost | COMPILED | `z_order_anchor()` + `SetWindowPos` with the window in front of Premiere as `hWndInsertAfter`; no `HWND_TOPMOST` anywhere |
+| No recursive/infinite mirror | VERIFIED (structurally) + UNVERIFIED (visually) | Window capture only, the monitor form is banned by `tools/check-overlay.py`, and the capture refuses Azy's own process. That makes nesting impossible *by construction*; the visual check is scenario 2.1 of the test plan. |
+| Geometry sync (move, resize, maximize, minimize, DPI, monitors) | COMPILED | `overlay_rect` (tested), the tracker's event stream, `ResizeBuffers` in place |
+| Pacing (idle/active) and zero cost while hidden | COMPILED | The timer is re-armed only on a pacing change and killed while hidden |
+| All GPU resources are released on suspend/exit/Premiere-close | COMPILED | `teardown_overlay()`, `WindowCapture::stop()` owning the worker thread and the textures |
+| Failure containment (unsupported host, device failure, item closed, device lost) | COMPILED | `docs/AZY_OVERLAY_ARCHITECTURE.md` §7; the ring and veil are never stopped by an overlay failure |
+| Measured CPU/GPU/memory while mirroring | UNVERIFIED | Not measured anywhere; no number is claimed |
 
 ## 3. Detection and monitoring (Win32 — COMPILED only)
 

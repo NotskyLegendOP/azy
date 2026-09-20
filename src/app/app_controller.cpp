@@ -428,6 +428,10 @@ void AppController::on_premiere_event(const win::PremiereDetector::Event& event)
 }
 
 std::string AppController::check_visibility() {
+    // A manual check is also the documented way back from an overlay that decided
+    // this host cannot do it: the answer may have changed (a driver update, a new
+    // Premiere window), so the verdict is cleared before the report is built.
+    engine_.retry_overlay();
     // Present again even though nothing changed: without this there would be
     // nothing to look at (and nothing to measure).
     engine_.invalidate();
@@ -504,6 +508,9 @@ void AppController::compute_request(win::SkinRequest& request, win::SuspendReaso
     request.skin_enabled = settings.enabled && (settings.apply_automatically || manual_apply_);
     request.features = effective_features(product_);
     request.palette = effective_palette(win::host_info().capabilities.dark_titlebar);
+    // The duplicate window needs the raw sliders as well as the palette: the
+    // sheen, the grain and the vignette are not colours, so they are not in it.
+    request.appearance = settings.appearance;
     request.performance_mode = settings.performance_mode;
     request.experimental = settings.experimental && !safe_mode_;
     // Debug mode is deliberately not gated behind `experimental`: it draws a
@@ -608,6 +615,20 @@ void AppController::sync(const char* reason_name) {
                              ? engine_.apply(request, engine_state_)
                              : false;
     if (request.target.valid()) tracker_.mark_applied();
+
+    // One log line per transition, never per tick: this is the line that says
+    // whether the duplicate window is the layer the user is looking at.
+    if (engine_state_.duplicate_active != duplicate_active_ ||
+        engine_state_.duplicate_capturing != duplicate_capturing_) {
+        duplicate_active_ = engine_state_.duplicate_active;
+        duplicate_capturing_ = engine_state_.duplicate_capturing;
+        if (duplicate_active_) {
+            log_info("duplicate: on screen (%s)", engine_state_.duplicate_note.c_str());
+        } else {
+            log_info("duplicate: off (%s)%s", engine_state_.duplicate_note.c_str(),
+                     duplicate_capturing_ ? " - still capturing" : "");
+        }
+    }
 
     if (engine_state_.failures > failures_before) {
         if (failures_.record_failure(now)) {
@@ -848,6 +869,42 @@ std::vector<std::string> AppController::diagnostics_lines() const {
         lines.push_back("Ring: not drawn yet");
     }
 
+    // --- the duplicate window (round 8) --------------------------------------
+    // These are the facts the overlay debug screen asks for that a process can know
+    // about itself. Two of them are deliberately absent: the capture latency and
+    // the GPU memory use have no per-frame counter in the API being used, and a
+    // number nobody can measure would be worse than a missing line.
+    const win::SkinEngine::OverlayReport& report = engine_.overlay_report();
+    const win::CaptureStatus capture = engine_.capture_status();
+    const win::GlossOverlay::Stats& ostats = engine_.overlay_stats();
+    lines.push_back(str_format("Duplicate window: %s | capturing: %s | %s",
+                               report.active ? "on screen" : report.note.c_str(),
+                               report.capturing ? "yes" : "no",
+                               report.supported ? "supported on this host" : "NOT supported on this host"));
+    if (engine_.overlay_window() != nullptr) {
+        lines.push_back(str_format("  handles: duplicate 0x%p, Premiere 0x%p (pid %lu) | monitor (%d,%d)-(%d,%d) | %u dpi",
+                                   (void*)engine_.overlay_window(), (void*)tracker_.target().hwnd, tracker_.pid(),
+                                   tracker_.target().monitor.left, tracker_.target().monitor.top,
+                                   tracker_.target().monitor.right, tracker_.target().monitor.bottom,
+                                   tracker_.target().dpi));
+        lines.push_back(str_format("  capture: %ux%u content | %llu frames | %llu copies | %llu empty polls | "
+                                   "%llu failures | %llu pool resizes",
+                                   capture.content_width, capture.content_height, capture.frames, capture.copies,
+                                   capture.empty_polls, capture.failures, capture.pool_resizes));
+        lines.push_back(str_format("  rendering: %llu presents | %d pass-through regions | %d panel hairlines | "
+                                   "%u fps (%s) | uv %.3f,%.3f-%.3f,%.3f | capture size matches window: %s",
+                                   ostats.presents, ostats.pass_regions, ostats.panel_lines, ostats.paced_fps,
+                                   ostats.active ? "active" : "idle", ostats.uv[0], ostats.uv[1], ostats.uv[2],
+                                   ostats.uv[3], ostats.capture_size_agrees ? "yes" : "no"));
+    }
+    if (capture.cursor_disabled) {
+        lines.push_back("  capture notes: the mouse cursor is excluded; it is drawn by the compositor, not by "
+                        "Premiere, so mirroring it would show two.");
+    } else if (capture.running) {
+        lines.push_back("  capture notes: cursor capture could not be switched off on this host (a second cursor "
+                        "may appear inside the mirror).");
+    }
+
     if (premiere_elevated_) {
         lines.push_back("Note: Premiere runs as administrator, Azy Skin does not - Windows blocks drawing above "
                         "it. Tray menu -> Restart as Administrator fixes that.");
@@ -862,7 +919,8 @@ std::string AppController::state_summary() const {
     // "active" means something of Azy's is really on screen - the ring or the
     // overlay. The overlay alone is a complete answer to "is the skin applying?",
     // so it must not be reported as merely partial.
-    const bool surface_on_screen = engine_.surface_visible() || engine_.overlay_visible();
+    const bool surface_on_screen = engine_.surface_visible() || engine_.overlay_visible() ||
+                                   engine_state_.duplicate_active;
     if (engine_.frame_applied() && surface_on_screen) return "active";
     if (engine_.frame_applied()) return "partial";
     if (!detector_.has_target()) return "idle";

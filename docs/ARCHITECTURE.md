@@ -9,7 +9,12 @@
 │               hidden message window, the tray, the settings window and all    │
 │               policy decisions                                              │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│ win32/        detect/       PremiereDetector · PremiereProbe · ProcessScanner│
+│ win32/        capture/      WindowCapture (GPU capture of one window) ·       │
+│                             D3dShared (the device) · wgc_abi (WinRT ABI,      │
+│                             declared by hand - the toolchain has no WinRT SDK) │
+│               gloss/        GlossOverlay (the duplicate window: swap chain,    │
+│                             DirectComposition, shader, pacing)                 │
+│               detect/       PremiereDetector · PremiereProbe · ProcessScanner│
 │               watch/        EventWatch (global WinEvent observer)            │
 │               performance/  PerformanceManager (suspend policy + cadence)     │
 │               skin/         WindowTracker · SkinEngine · DwmComposer ·        │
@@ -20,7 +25,8 @@
 │               ui/           TrayIcon · SettingsWindow · app_icon              │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │ core/         version · product · compat · theme · geometry · settings ·      │
-│               failure_tracker · log · strings                                 │
+│               failure_tracker · log · strings · panel_map · capture_math ·    │
+│               overlay_style (the shader's constants, derived from the theme)  │
 │               portable C++17: no Windows headers, unit tested on any host     │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -39,7 +45,9 @@ WindowTracker ──── geometry/state/DPI ──────┼──► Ski
                                             │
 PerformanceManager ── suspend decision ─────┼──► SuspendReason
                                             │
-SkinEngine ─── consumes ────────────────────┴──► DWM frame attributes + composition surface
+SkinEngine ─── consumes ────────────────────┴──► DWM frame attributes
+                                                 + the duplicate window (buffer below)
+                                                 + the ring and the sheet (fallback)
 ```
 
 ## Data flow
@@ -120,8 +128,36 @@ Exactly two, both trivial:
    wide and the corners join seamlessly — and why the ring costs ~78 KB of
    bitmaps on a 1080p window instead of a window-sized ARGB layer.
 
-The settings window is a third window and is created lazily, hidden, and only
+3. **The duplicate window** (new in v1.3.0) — one `WS_POPUP` window with
+   `WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW |
+   WS_EX_NOREDIRECTIONBITMAP`, exactly the size of Premiere's visible frame,
+   inserted directly above Premiere (never topmost), painted entirely by
+   DirectComposition from a GPU swap chain. It has no input path at all, and it is
+   destroyed with every GPU resource it owns when the skin is suspended or
+   Premiere closes.
+
+The settings window is a fourth window and is created lazily, hidden, and only
 when the user asks for it.
+
+### Which layer is in charge
+
+```
+     Premiere window exists, skin enabled, style visible
+                       │
+      ┌────────────────┴─────────────────┐
+      │ capture + shader available?      │
+      └───┬──────────────────────────┬───┘
+        no│                        yes│
+          v                          v
+   ring + sheet                 duplicate window  ── the ring and the sheet are
+   (Level 1 + 2, v1.0–v1.2)     (Level 3, v1.3)     then hidden: they would be
+                                                     behind it, and drawing them
+                                                     would be paying twice
+```
+
+While the duplicate is up, the ring and the sheet are not drawn at all
+(`duplicate_now` in `SkinEngine::apply`). If the capture stops, fails, is
+unsupported, or the GPU device is lost, the next apply puts them back.
 
 ## Premiere event lifecycle
 
