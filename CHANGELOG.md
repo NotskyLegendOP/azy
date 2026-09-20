@@ -4,6 +4,39 @@ All notable changes to Azy Skin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] — 2026-09-20
+
+### Fixed
+
+* **A maximized Premiere window could be decorated off screen.** Windows places a
+  maximized window so that its invisible resize border hangs over the monitor
+  edges, and the DWM extended frame bounds can report exactly those coordinates.
+  Azy draws the ring just inside the frame edge, so on such a window the whole
+  treatment could land outside the visible desktop: every call succeeded, the log
+  stayed quiet and the settings window said "active" while nothing was on screen.
+  The ring frame is now derived from what the user can actually see - the monitor
+  work area for a maximized window, the whole monitor for a fullscreen one, and the
+  reported bounds for a windowed one (`ring_frame()` in
+  `include/azy/core/ring_layout.hpp`, covered by unit tests).
+* The settings window headline now reports what the skin engine really did
+  ("active", "partial", "idle", or the reason it is suspended) instead of what the
+  configuration would allow. Saying "active" while nothing is on screen is the one
+  thing that window must never do.
+
+### Added
+
+* One info-level line whenever the ring changes:
+  `ring: 1920x1040 frame at (0,0), 12px thick, band 10px, radius 8px, 288 KB,
+  strongest pixel alpha 199, above Premiere: yes`. It records where the ring was
+  drawn, the strongest pixel the renderer produced (0 would mean an invisible ring)
+  and whether the strips are in front of the Premiere window - so "the skin does
+  nothing" can be diagnosed from the log instead of guessed at.
+* The version in the runtime banner now comes from `project(... VERSION ...)` in
+  `CMakeLists.txt`, so the banner, the installer and the executable's version
+  resource cannot drift apart.
+* A one-time log line when a maximized window's reported frame hangs over the
+  display, naming both rectangles.
+
 ## [1.0.0] — 2026-09-20
 
 First release. Azy Skin 1.0.0 is a native Win32 visual skin for Adobe Premiere

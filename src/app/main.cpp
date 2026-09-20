@@ -32,7 +32,12 @@ namespace {
 // is also declared as AppMutex in packaging/AzySkin.iss, which is how Setup knows
 // to ask a running instance to close before replacing the executable.
 constexpr const wchar_t* kSingleInstanceMutex = L"AzySkin.SingleInstance.7f2a1c94";
-constexpr const char* kProductVersion = "1.0.0";
+// Overridden by the build system (see AZY_VERSION_STRING in CMakeLists.txt), so
+// the runtime banner cannot drift from the installer version.
+#ifndef AZY_VERSION_STRING
+#define AZY_VERSION_STRING "1.0.1"
+#endif
+constexpr const char* kProductVersion = AZY_VERSION_STRING;
 
 struct SingleInstance {
     HANDLE mutex = nullptr;

@@ -54,6 +54,7 @@ private:
     double last_geometry_change_ = 0.0;
     double last_window_count_check_ = 0.0;
     bool was_minimized_ = false;
+    bool clamp_logged_ = false;  // the off-screen-frame explanation is logged once per window
 };
 
 }  // namespace win

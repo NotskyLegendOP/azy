@@ -1,6 +1,7 @@
 #include "azy/win32/skin/window_tracker.hpp"
 
 #include "azy/core/log.hpp"
+#include "azy/core/ring_layout.hpp"
 #include "azy/win32/detect/premiere_probe.hpp"
 #include "azy/win32/os/win_api.hpp"
 #include "azy/win32/os/win_util.hpp"
@@ -41,6 +42,7 @@ bool WindowTracker::set_window(HWND hwnd, unsigned long pid) {
     needs_apply_ = true;
     last_window_count_check_ = 0.0;
     was_minimized_ = false;
+    clamp_logged_ = false;
 
     // Fill the snapshot immediately so the first apply has real geometry.
     RefreshResult result = refresh(monotonic_seconds());
@@ -56,6 +58,7 @@ void WindowTracker::clear() {
     target_ = SkinTarget{};
     has_applied_ = false;
     needs_apply_ = true;
+    clamp_logged_ = false;
 }
 
 WindowTracker::RefreshResult WindowTracker::refresh(double now) {
@@ -78,7 +81,7 @@ WindowTracker::RefreshResult WindowTracker::refresh(double now) {
     RECT visible{};
     const bool have_visible = visible_frame_rect(target_.hwnd, visible);
     const Rect new_frame = to_rect(frame);
-    const Rect new_visible = have_visible ? to_rect(visible) : new_frame;
+    Rect new_visible = have_visible ? to_rect(visible) : new_frame;  // ring_frame() may replace it below
 
     const bool minimized = is_window_minimized(target_.hwnd);
     const bool maximized = is_window_maximized(target_.hwnd);
@@ -97,6 +100,22 @@ WindowTracker::RefreshResult WindowTracker::refresh(double now) {
     const UINT dpi = win::api().get_dpi_for_window ? win::dpi_for_window(target_.hwnd)
                                                    : win::dpi_for_rect(frame);
 
+    // Windows places a maximized window so that its invisible resize border hangs
+    // over the monitor edges, and the numbers we read back can therefore start at
+    // a negative coordinate. The ring is drawn inside the frame edge, so those
+    // numbers would put the entire treatment off the display - the skin would run
+    // perfectly and show nothing. Draw on what is visible instead (see ring_frame).
+    const bool fullscreen_raw = !minimized && !maximized && new_visible == monitor_rect;
+    const Rect reported_visible = new_visible;
+    new_visible = ring_frame(new_visible, monitor_rect, work_area, maximized, fullscreen_raw);
+    if (maximized && new_visible != reported_visible && !clamp_logged_) {
+        clamp_logged_ = true;
+        log_info("ring frame: maximized window reports (%d,%d)-(%d,%d), which hangs over the display; "
+                 "drawing on the visible work area (%d,%d)-(%d,%d) instead",
+                 reported_visible.left, reported_visible.top, reported_visible.right, reported_visible.bottom,
+                 new_visible.left, new_visible.top, new_visible.right, new_visible.bottom);
+    }
+
     const bool geometry_changed = rect_changed(target_.visible_frame, new_visible, 0) ||
                                   rect_changed(target_.frame, new_frame, 0);
     const bool state_changed = minimized != target_.minimized || maximized != target_.maximized ||
@@ -111,7 +130,7 @@ WindowTracker::RefreshResult WindowTracker::refresh(double now) {
     target_.minimized = minimized;
     target_.maximized = maximized;
     target_.cloaked = cloaked;
-    target_.fullscreen = !minimized && !maximized && new_visible == monitor_rect;
+    target_.fullscreen = fullscreen_raw;
     target_.foreground = window_is_foreground(target_.hwnd, target_.pid);
 
     if (now - last_window_count_check_ >= kWindowCountIntervalSeconds) {

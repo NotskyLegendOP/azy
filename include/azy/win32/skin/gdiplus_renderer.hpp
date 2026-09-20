@@ -68,6 +68,10 @@ public:
     bool valid() const { return bitmap_ != nullptr && width_ > 0 && height_ > 0; }
     int width() const { return width_; }
     int height() const { return height_; }
+    // Strongest alpha currently in the bitmap (0 = nothing would be visible).
+    // A cheap self-check: it tells "the ring is drawn but invisible" apart from
+    // "the ring was never placed" without capturing the screen.
+    unsigned char max_alpha() const;
     HDC memory_dc() const { return memory_dc_; }
     HBITMAP bitmap() const { return bitmap_; }
     SIZE size() const { return SIZE{width_, height_}; }

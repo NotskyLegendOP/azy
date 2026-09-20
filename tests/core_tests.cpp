@@ -660,6 +660,41 @@ void test_ring_layout() {
     // Too small for a ring at all: the window would have no content left.
     CHECK(!ring_geometry(Rect::from_size(0, 0, 10, 10), 40, 0).valid);
     CHECK(!ring_geometry(Rect::from_size(0, 0, 0, 0), 10, 0).valid);
+
+    // --- which rectangle the ring is drawn on -----------------------------
+    // A maximized window reports bounds that hang over the monitor edges (the
+    // invisible resize border). Drawing there would put the whole ring off
+    // screen, so a maximized window is drawn on the work area instead.
+    const Rect monitor = Rect::from_size(0, 0, 1920, 1080);
+    const Rect work_area = Rect::from_size(0, 0, 1920, 1040);
+    const Rect overhanging = Rect::from_size(-8, -8, 1936, 1048);
+    CHECK(ring_frame(overhanging, monitor, work_area, true, false) == work_area);
+
+    // A windowed Premiere keeps exactly the bounds Windows reports for it,
+    // including one that is partly dragged off the edge of the display.
+    const Rect floating = Rect::from_size(300, 200, 900, 600);
+    CHECK(ring_frame(floating, monitor, work_area, false, false) == floating);
+    const Rect half_off = Rect::from_size(-400, 100, 900, 600);
+    CHECK(ring_frame(half_off, monitor, work_area, false, false) == half_off);
+
+    // A fullscreen window covers the whole monitor, taskbar included.
+    CHECK(ring_frame(monitor, monitor, work_area, false, true) == monitor);
+
+    // Degenerate monitor data must never move the ring on its own.
+    CHECK(ring_frame(floating, monitor, Rect{}, true, false) == floating);
+    CHECK(ring_frame(floating, Rect{}, work_area, false, true) == floating);
+
+    // ... and the geometry computed for a real maximized 1080p window is usable:
+    // the band still fits, and the ring covers the visible edge.
+    const Rect maximized_frame = ring_frame(overhanging, monitor, work_area, true, false);
+    const RingGeometry maximized_ring = ring_geometry(maximized_frame, 10, 0);
+    CHECK(maximized_ring.valid);
+    CHECK_INT(maximized_ring.thickness_px, 12);
+    const RingStrips maximized_strips = ring_strip_rects(maximized_frame, maximized_ring.thickness_px);
+    CHECK(maximized_strips.valid);
+    CHECK_INT(maximized_strips.top.top, 0);
+    CHECK_INT(maximized_strips.top.height(), 12);
+    CHECK_INT(maximized_strips.bottom.bottom, 1040);
 }
 
 }  // namespace

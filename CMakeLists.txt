@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(AzySkin
-    VERSION 1.0.0
+    VERSION 1.0.1
     DESCRIPTION "Azy Skin - a lightweight visual skin for Adobe Premiere Pro"
     LANGUAGES CXX)
 
@@ -82,6 +82,9 @@ if(WIN32)
         src/win32/watch/event_watch.cpp)
 
     target_include_directories(AzySkin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    # One source of truth for the version: the installer, the executable's
+    # version resource and the runtime banner all follow project(... VERSION).
+    target_compile_definitions(AzySkin PRIVATE AZY_VERSION_STRING="${PROJECT_VERSION}")
     target_link_libraries(AzySkin PRIVATE
         azy_core
         # Documented, long-stable Windows libraries only.

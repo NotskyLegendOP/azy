@@ -377,13 +377,17 @@ void SettingsWindow::update_status(const Status& status, bool skin_enabled, bool
     suspended_ = suspended;
     if (hwnd_ == nullptr) return;
 
+    // "active" here means the ring is on screen, not merely that the settings
+    // allow it: the state comes from the skin engine itself.
     std::wstring headline = L"Azy Skin - ";
     if (!skin_enabled) {
         headline += L"off";
     } else if (suspended) {
         headline += L"suspended";
+    } else if (!status.state.empty()) {
+        headline += to_wide(status.state);
     } else {
-        headline += L"active";
+        headline += L"starting";
     }
     if (HWND control = GetDlgItem(hwnd_, kStatusText)) SetWindowTextW(control, headline.c_str());
 

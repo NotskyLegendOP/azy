@@ -1,6 +1,6 @@
 # Azy Skin — Testing
 
-Automated tests cover the portable core (`tests/core_tests.cpp`, 220+ assertions
+Automated tests cover the portable core (`tests/core_tests.cpp`, 280+ assertions
 run by `ctest`) and CI compiles the complete Windows application (MSVC with the
 resource compiler, plus a cross-compile gate). What cannot be automated is the
 behaviour of the skin on a real Windows desktop with a real Premiere Pro running.
@@ -24,12 +24,33 @@ Before starting: delete `%LOCALAPPDATA%\Azy Skin\` to test first-run behaviour.
 
 ---
 
+## Reading the log
+
+A healthy attach looks like this (one line pair, and nothing else until something
+changes - Azy is event-driven, so a quiet log is a working log):
+
+```
+INFO  Premiere detected: Premiere Pro 2026, version 26.0.0.72
+INFO  Azy Skin: Azy Dark Glass, full - active | Premiere Pro: Premiere Pro 2026 26.0.0.72
+INFO  ring: 1920x1040 frame at (0,0), 12px thick, band 10px, radius 8px, 288 KB, strongest pixel alpha 199, above Premiere: yes
+```
+
+The `ring:` line is the one to read when a user reports "the skin does nothing":
+
+| Field | Meaning |
+|---|---|
+| `1920x1040 frame at (0,0)` | the rectangle the ring was drawn on. A maximized window is drawn on the monitor **work area** (a window that hangs over the display would otherwise put the ring off screen); a windowed one on its reported frame |
+| `strongest pixel alpha` | the strongest pixel the renderer produced. `0` means the bitmap came out fully transparent - a rendering fault, not a placement one |
+| `above Premiere: yes` | the strips sit in front of the Premiere window in the z-order. `no` means something is covering them (a lower-integrity process cannot be placed above a higher-integrity one), and the skin is invisible no matter how well it was rendered |
+
+---
+
 ## 1. Startup and detection
 
 | # | Steps | Pass criteria |
 |---|---|---|
-| 1.1 | Launch `AzySkin.exe` with no Premiere running | Tray icon appears. No window, no taskbar button, no Alt+Tab entry. Log: `Azy Skin 1.0.0 starting`, `host: Windows ...`, `WinEvent observer started` |
-| 1.2 | Now start Premiere Pro | Within ~1 s of the editor window appearing: log shows `Premiere detected: Premiere Pro 2025, version 25.6.0.58` and the skin is applied. Settings → Treatment shows `full` |
+| 1.1 | Launch `AzySkin.exe` with no Premiere running | Tray icon appears. No window, no taskbar button, no Alt+Tab entry. Log: `Azy Skin 1.0.1 starting`, `host: Windows ...`, `WinEvent observer started` |
+| 1.2 | Now start Premiere Pro | Within ~1 s of the editor window appearing: log shows `Premiere detected: Premiere Pro 2025, version 25.6.0.58` and the skin is applied. Settings → Treatment shows `full`, and the headline says `active`. The log line `ring: ... strongest pixel alpha <n>, above Premiere: yes` appears with n > 0 |
 | 1.3 | Start Premiere **first**, then start Azy Skin | The skin appears without restarting Premiere (startup sync picks it up immediately) |
 | 1.4 | Launch Azy Skin a second time | No second instance; the existing instance's Settings window appears. Log: `another Azy Skin instance is already running` |
 | 1.5 | Close Premiere (keep Azy running) | Skin disappears, frame returns to normal. Log: `Premiere Pro closed (pid …) - releasing skin resources`, then `skin resources released`. Tray tooltip says `Premiere Pro: not running` |

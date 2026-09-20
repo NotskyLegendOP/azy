@@ -11,6 +11,26 @@
 
 namespace azy {
 namespace win {
+namespace {
+
+// Confirms the one invariant the whole technique rests on: the strips sit in
+// front of the Premiere window in the z-order. If they ever ended up behind it,
+// every call would still succeed - the ring would simply be composed behind an
+// opaque maximized window and the user would see nothing at all. (A lower
+// integrity process cannot place its windows above a higher integrity one, so
+// this is worth checking rather than assuming.)
+bool sits_above(HWND strip, HWND window) {
+    if (strip == nullptr || window == nullptr) return false;
+    HWND walker = strip;
+    for (int i = 0; i < 1024 && walker != nullptr; ++i) {
+        if (walker == window) return true;
+        walker = GetWindow(walker, GW_HWNDNEXT);  // next window *below* this one
+    }
+    return false;
+}
+
+}  // namespace
+
 LRESULT CALLBACK CompositionSurface::window_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
     switch (message) {
         // Should never be reached (WS_EX_TRANSPARENT answers hit tests before the
@@ -215,12 +235,31 @@ bool CompositionSurface::present(HWND below, const Rect& frame, const RingVisual
         }
     }
 
-    if (!visible_) {
-        visible_ = true;
-        log_debug("composition surface shown: %dx%d at (%d,%d), 4 strips, band %dpx, radius %dpx, %zu KB of bitmaps",
-                  frame.width(), frame.height(), frame.left, frame.top, visual.band_px, visual.radius_px,
-                  bitmap_bytes() / 1024);
+    // The ring is on screen from here on. Log one line per change (present() is
+    // only reached when something actually changed, never on a timer), including
+    // the two facts that decide whether a user can see it: where it was drawn,
+    // and the strongest pixel the renderer produced. A report of "strongest pixel
+    // alpha 0" or "not above Premiere" turns "the skin does nothing" from a guess
+    // into a diagnosis.
+    const RingGeometry reported = ring_geometry(frame, visual.band_px, visual.radius_px);
+    unsigned char strongest = 0;
+    for (const Strip& strip : strips_) {
+        const unsigned char alpha = strip.renderer.max_alpha();
+        if (alpha > strongest) strongest = alpha;
     }
+    const bool above = below == nullptr || !IsWindow(below) || sits_above(strips_[kTop].hwnd, below);
+    log_info("ring: %dx%d frame at (%d,%d), %dpx thick, band %dpx, radius %dpx, %zu KB, "
+             "strongest pixel alpha %u, above Premiere: %s",
+             frame.width(), frame.height(), frame.left, frame.top, reported.thickness_px, visual.band_px,
+             reported.radius_px, bitmap_bytes() / 1024, static_cast<unsigned>(strongest),
+             above ? "yes" : "no");
+    if (!above) {
+        hide();
+        if (error) *error = "the strips could not be placed above the Premiere window (z-order blocked)";
+        return false;
+    }
+
+    visible_ = true;
     ++presents_;
     return true;
 }

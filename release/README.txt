@@ -1,7 +1,7 @@
-Azy Skin 1.0.0 - Windows build
-==============================
+Azy Skin - Windows build
+========================
 
-  AzySkin-1.0.0-x64.exe   64-bit Windows GUI application (no console window)
+  AzySkin.exe    64-bit Windows GUI application (no console window)
 
 What it is
 ----------
@@ -12,11 +12,18 @@ injection, no patching, no files in an Adobe directory.
 
 Running it
 ----------
-1. Double-click AzySkin-1.0.0-x64.exe (no installer, no admin rights needed).
+1. Double-click AzySkin.exe (no installer, no admin rights needed).
 2. It starts in the system tray (no window).
 3. Start Premiere Pro; the skin attaches by itself. Left-click the tray icon to
    turn the skin on and off, right-click for the menu, or run it with --settings
    for the settings window.
+
+Checking that the ring is really on screen
+------------------------------------------
+Settings -> Open log file, and look for the "ring:" line that appears when the
+skin attaches. It names the rectangle the ring was drawn on and the strongest
+pixel the renderer produced; "strongest pixel alpha" must not be 0, and "above
+Premiere" must say yes.
 
 Notes
 -----

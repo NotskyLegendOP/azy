@@ -178,8 +178,7 @@ bool GdiPlusRenderer::prepare(int width, int height, std::string* error) {
     return ensure_size(width, height, error);
 }
 
-bool GdiPlusRenderer::render(const RingVisual& visual, std::string* error) {
-    if (!g_gdiplus_active) {
+bool GdiPlusRenderer::render(const RingVisual& visual, std::string* error) {    if (!g_gdiplus_active) {
         if (error) *error = "GDI+ session is not running";
         return false;
     }
@@ -277,6 +276,18 @@ bool GdiPlusRenderer::render(const RingVisual& visual, std::string* error) {
     }
     graphics.Flush(Gdiplus::FlushIntentionSync);
     return true;
+}
+
+unsigned char GdiPlusRenderer::max_alpha() const {
+    if (bits_ == nullptr || width_ <= 0 || height_ <= 0) return 0;
+    const auto* bytes = static_cast<const unsigned char*>(bits_);
+    const size_t pixels = static_cast<size_t>(width_) * static_cast<size_t>(height_);
+    unsigned char strongest = 0;
+    for (size_t i = 0; i < pixels; ++i) {
+        const unsigned char alpha = bytes[i * 4u + 3u];
+        if (alpha > strongest) strongest = alpha;
+    }
+    return strongest;
 }
 
 }  // namespace win

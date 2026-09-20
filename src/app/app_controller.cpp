@@ -665,6 +665,13 @@ std::string AppController::treatment_summary(const FeatureSet& features) const {
     return summary;
 }
 
+std::string AppController::state_summary() const {
+    if (engine_.frame_applied() && engine_.surface_visible()) return "active";
+    if (engine_.frame_applied()) return "partial";
+    if (!detector_.has_target()) return "idle";
+    return win::suspend_reason_name(engine_state_.suspend);
+}
+
 std::string AppController::status_line() const {
     const Settings& settings = store_.settings();
     const std::string premiere = premiere_summary();
@@ -680,16 +687,7 @@ std::string AppController::status_line() const {
 
     // What is on screen right now, in one word: this is the string the tray
     // tooltip and the log use, so a problem is diagnosable at a glance.
-    std::string state;
-    if (engine_.frame_applied() && engine_.surface_visible()) {
-        state = "active";
-    } else if (engine_.frame_applied()) {
-        state = "partial";
-    } else if (!detector_.has_target()) {
-        state = "idle";
-    } else {
-        state = suspend_reason_name(engine_state_.suspend);
-    }
+    const std::string state = state_summary();
 
     return str_format("Azy Skin: %s, %s - %s | Premiere Pro: %s", theme_name(settings.appearance.theme),
                       treatment.c_str(), state.c_str(), premiere.c_str());
@@ -711,6 +709,9 @@ void AppController::update_settings_window_status() {
     win::SettingsWindow::Status status;
     status.host = win::host_info().os_name;
     status.premiere = premiere_summary();
+    // The headline reports the engine's own state, not the configuration: a
+    // window that says "active" while nothing is on screen is worse than useless.
+    status.state = state_summary();
     status.treatment = treatment_summary(effective_features(product_));
     status.safe_mode = safe_mode_;
     status.safe_mode_note = safe_mode_

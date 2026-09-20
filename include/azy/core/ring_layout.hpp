@@ -69,6 +69,25 @@ struct RingStrips {
     bool valid = false;
 };
 
+// The rectangle the ring is drawn on, given what Windows reports for a window.
+//
+// A maximized window is deliberately placed *off* the display: its invisible
+// resize border hangs over the monitor edges, so GetWindowRect - and, depending
+// on the Windows build, the DWM extended frame bounds - can start at a negative
+// coordinate or end past the screen. The ring is drawn inside the frame edge, so
+// using those numbers puts the entire treatment outside the visible desktop: the
+// skin runs, every call succeeds, and the user sees nothing at all.
+//
+// What the user actually sees on a maximized window is the monitor's work area;
+// on a fullscreen window it is the whole monitor. Normal windows keep exactly the
+// bounds they report, because there the reported frame *is* what is on screen.
+inline Rect ring_frame(const Rect& visible_frame, const Rect& monitor, const Rect& work_area,
+                       bool maximized, bool fullscreen) {
+    if (maximized && !work_area.empty()) return work_area;
+    if (fullscreen && !monitor.empty()) return monitor;
+    return visible_frame;
+}
+
 // Splits the border band of `frame` into four strips of `thickness` pixels.
 //
 // The horizontal strips keep the full width - they own the corner arcs - and the

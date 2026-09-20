@@ -26,7 +26,10 @@ public:
 
     struct Status {
         std::string host;         // "Windows 11 23H2 (build 22631)"
-        std::string premiere;     // "Premiere Pro 2025 25.6.0.58 - active" / "not running"
+        std::string premiere;     // "Premiere Pro 2025 25.6.0.58" / "not running"
+        // What the engine is really doing: "active", "partial", "idle" or the
+        // reason it is suspended. Shown verbatim in the headline.
+        std::string state;
         std::string treatment;    // "full", "reduced (...)", "safe mode"
         std::string safe_mode_note;
         bool safe_mode = false;

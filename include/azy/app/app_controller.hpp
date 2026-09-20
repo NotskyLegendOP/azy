@@ -80,6 +80,11 @@ private:
     void update_settings_window_status();
     void open_log_file() const;
     std::string status_line() const;
+    // One word for what is actually on screen right now: "active", "partial",
+    // "idle" or the reason the skin is suspended. The tray tooltip, the settings
+    // window headline and the log all use it, so none of them can claim more than
+    // the engine really did.
+    std::string state_summary() const;
     std::string premiere_summary() const;
     std::string treatment_summary(const FeatureSet& features) const;
 
