@@ -45,8 +45,10 @@ struct ThemePalette {
 
     // Level 2 — Azy's own click-through composition surfaces.
     bool draw_surface = false;
-    Rgba surface_fill;           // inner wash drawn over the frame border area
-    Rgba surface_border;         // the 1px hairline that separates panels
+    Rgba surface_bezel;          // 1px raised edge just inside the frame: this is
+                                 // what makes the boundary visible on a dark UI
+    Rgba surface_fill;           // subtle glass wash behind the bezel
+    Rgba surface_border;         // the 1px hairline on the very frame edge
     Rgba surface_highlight;      // barely-visible top inner highlight
     Rgba surface_shadow;         // soft inner shadow, max alpha at the edge
     int corner_radius_dip = 0;   // 0 = square

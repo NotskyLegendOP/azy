@@ -83,6 +83,10 @@ private:
     std::string premiere_summary() const;
     std::string treatment_summary(const FeatureSet& features) const;
 
+    // Sampling interval for window geometry while the user is dragging/resizing
+    // Premiere (the surface is hidden during a drag, so ~10 Hz is plenty).
+    static constexpr double kDragRefreshIntervalSeconds = 0.1;
+
     void arm_timer(int interval_ms);
     void shutdown();
 
@@ -112,6 +116,7 @@ private:
     bool sync_pending_ = false;
     int exit_code_ = 0;
     int timer_interval_ = 0;
+    double last_tracker_refresh_ = 0.0;
     std::string last_status_line_;
     std::string premiere_status_;
 };

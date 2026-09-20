@@ -410,25 +410,40 @@ void AppController::sync(const char* reason_name) {
     const double now = win::monotonic_seconds();
 
     // --- 1. Premiere detection (no work unless something changed) ----------
-    if (watch_.consume_dirty()) detector_.note_window_activity();
+    // A process scan costs a toolhelp snapshot, so it is only worth doing while we
+    // are still looking for Premiere or for its editor window. Once a target is
+    // attached, process changes arrive as WMI events and window changes are
+    // handled by the tracker below - so normal interaction in Premiere produces
+    // no process enumeration at all.
+    if (watch_.consume_dirty()) {
+        if (!detector_.has_target() || tracker_.hwnd() == nullptr) detector_.note_window_activity();
+    }
     detector_.pump(now);
 
     // --- 2. Window geometry (only when Windows reported a change) ---------
+    const bool dragging = watch_.in_move_size_loop();
     const bool location_dirty = watch_.consume_location_dirty();
     const bool foreground_dirty = watch_.consume_foreground_dirty();
     if (tracker_.has_window() && (location_dirty || foreground_dirty)) {
-        const win::WindowTracker::RefreshResult result = tracker_.refresh(now);
-        if (result.window_gone) {
-            log_debug("tracked window disappeared (0x%p)", reinterpret_cast<void*>(tracker_.hwnd()));
-            engine_.revert();
-            tracker_.clear();
-            detector_.note_window_activity();
+        // A drag produces one location event per pixel. While a move/size loop is
+        // running the surface is hidden anyway, so the tracker samples instead of
+        // chasing every event, and the final position is exact because the last
+        // event (and MOVESIZE_END) arrives after the movement stops.
+        if (!dragging || (now - last_tracker_refresh_) >= kDragRefreshIntervalSeconds) {
+            last_tracker_refresh_ = now;
+            const win::WindowTracker::RefreshResult result = tracker_.refresh(now);
+            if (result.window_gone) {
+                log_debug("tracked window disappeared (0x%p)", reinterpret_cast<void*>(tracker_.hwnd()));
+                engine_.revert();
+                tracker_.clear();
+                detector_.note_window_activity();
+            }
         }
     }
 
     // Safety net for a lost EVENT_SYSTEM_MOVESIZEEND (e.g. Premiere was killed
     // mid-drag): a move/size loop with no movement for a second is over.
-    if (watch_.in_move_size_loop() && tracker_.seconds_since_geometry_change(now) > 1.0) {
+    if (dragging && tracker_.seconds_since_geometry_change(now) > 1.0) {
         log_debug("move/size loop ended without a notification; resuming");
         watch_.clear_move_size_loop();
     }
@@ -466,6 +481,9 @@ void AppController::sync(const char* reason_name) {
     request.suspend = reason;
 
     // --- 4. Apply ---------------------------------------------------------
+    // Kept in sync even when the engine has nothing to do, so the tray tooltip and
+    // the settings window always explain the current state.
+    engine_state_.suspend = reason;
     const unsigned long long failures_before = engine_state_.failures;
     const bool changed = request.target.valid() || engine_.frame_applied() || engine_.surface_visible()
                              ? engine_.apply(request, engine_state_)

@@ -38,6 +38,7 @@ public:
         int band_px = 0;
         bool shadow = false;
         bool glass = false;
+        Rgba bezel;
         Rgba fill;
         Rgba border;
         Rgba highlight;

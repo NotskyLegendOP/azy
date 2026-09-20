@@ -105,6 +105,7 @@ ThemePalette make_palette(ThemeId theme, const Appearance& appearance, bool dark
         p.apply_frame_colors = false;
         p.draw_surface = false;
         p.surface_fill = with_alpha(surface, 0.0);
+        p.surface_bezel = with_alpha(kHighlight, 0.0);
         p.surface_border = with_alpha(kHighlight, 0.0);
         p.surface_highlight = with_alpha(kHighlight, 0.0);
         p.surface_shadow = with_alpha(kShadow, 0.0);
@@ -117,8 +118,14 @@ ThemePalette make_palette(ThemeId theme, const Appearance& appearance, bool dark
     const double wash_opacity = glassy ? (0.94 - 0.16 * glass) : 1.0;
     p.surface_fill = with_alpha(surface, wash_opacity);
 
-    // Hairline border: white at ~4..13% -> reads as separation, never as an
-    // outline. Original gets nothing.
+    // Haarlines and edges are deliberately built as a two-step ramp:
+    //   depth 0: a bright 1px hairline on the frame edge (separation)
+    //   depth 1: a slightly lightened 1px bezel (makes the edge read on a dark UI)
+    //   depth 2+: a soft dark falloff inward (depth, without a visible bar)
+    // A purely *dark* edge treatment is invisible over Premiere's own near-black
+    // panels, which is why the bezel is lighter than the surface rather than
+    // darker.
+    p.surface_bezel = with_alpha(mix_color(kHighlight, base, 0.70), 0.05 + 0.12 * border);
     p.surface_border = with_alpha(mix_color(kHighlight, surface, 0.35), 0.04 + 0.09 * border);
     p.surface_highlight = with_alpha(kHighlight, 0.02 + 0.05 * border);
     p.surface_shadow = with_alpha(kShadow, 0.10 + 0.22 * shadow);

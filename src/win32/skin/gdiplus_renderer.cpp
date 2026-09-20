@@ -20,6 +20,12 @@ bool g_gdiplus_active = false;
 
 Gdiplus::Color to_color(const Rgba& c) { return Gdiplus::Color(c.a, c.r, c.g, c.b); }
 
+Rgba scaled_alpha(Rgba color, double factor) {
+    const double alpha = std::max(0.0, std::min(1.0, factor)) * color.a;
+    color.a = static_cast<unsigned char>(alpha + 0.5);
+    return color;
+}
+
 // Rounded rectangle path. `radius` == 0 produces a plain rectangle.
 void add_rounded_rect(Gdiplus::GraphicsPath& path, const Gdiplus::RectF& rect, float radius) {
     path.Reset();
@@ -35,6 +41,25 @@ void add_rounded_rect(Gdiplus::GraphicsPath& path, const Gdiplus::RectF& rect, f
     path.AddArc(rect.X + rect.Width - diameter, rect.Y + rect.Height - diameter, diameter, diameter, 0.0f, 90.0f);
     path.AddArc(rect.X, rect.Y + rect.Height - diameter, diameter, diameter, 90.0f, 90.0f);
     path.CloseFigure();
+}
+
+// One 1px stroke of the vignette, at a given inward depth from the frame edge.
+void stroke_band(Gdiplus::Graphics& graphics, int width, int height, float radius, float depth,
+                 const Gdiplus::Color& color, float thickness) {
+    if (color.GetA() == 0) return;
+    const float inset = depth + thickness * 0.5f;
+    const float band_width = static_cast<float>(width) - 2.0f * inset;
+    const float band_height = static_cast<float>(height) - 2.0f * inset;
+    if (band_width <= 0.5f || band_height <= 0.5f) return;
+
+    Gdiplus::GraphicsPath path;
+    const Gdiplus::RectF rect(inset, inset, band_width, band_height);
+    // The radius shrinks as the stroke moves inward, so the corners stay
+    // concentric with the frame instead of bulging.
+    add_rounded_rect(path, rect, std::max(0.0f, radius - inset));
+    Gdiplus::Pen pen(color, thickness);
+    pen.SetLineJoin(Gdiplus::LineJoinRound);
+    graphics.DrawPath(&pen, &path);
 }
 
 }  // namespace
@@ -59,11 +84,6 @@ void GdiPlusSession::stop() {
 }
 
 bool GdiPlusSession::active() { return g_gdiplus_active; }
-
-std::string GdiPlusSession::version_string() {
-    // The GDI+ version is in the registry; not worth a lookup for a log line.
-    return "GDI+";
-}
 
 void GdiPlusRenderer::release() {
     if (graphics_bitmap_ != nullptr) {
@@ -130,8 +150,8 @@ bool GdiPlusRenderer::ensure_size(int width, int height, std::string* error) {
     }
 
     // Premultiplied ARGB is what UpdateLayeredWindow expects (AC_SRC_ALPHA).
-    auto* gdi_bitmap = new Gdiplus::Bitmap(width, height, width * 4, PixelFormat32bppPARGB,
-                                           static_cast<BYTE*>(bits));
+    auto* gdi_bitmap =
+        new Gdiplus::Bitmap(width, height, width * 4, PixelFormat32bppPARGB, static_cast<BYTE*>(bits));
     if (gdi_bitmap->GetLastStatus() != Gdiplus::Ok) {
         delete gdi_bitmap;
         DeleteObject(bitmap);
@@ -149,12 +169,21 @@ bool GdiPlusRenderer::ensure_size(int width, int height, std::string* error) {
     return true;
 }
 
+bool GdiPlusRenderer::prepare(int width, int height, std::string* error) {
+    if (!g_gdiplus_active) {
+        if (error) *error = "GDI+ session is not running";
+        return false;
+    }
+    return ensure_size(width, height, error);
+}
+
 bool GdiPlusRenderer::render(const RingVisual& visual, std::string* error) {
     if (!g_gdiplus_active) {
         if (error) *error = "GDI+ session is not running";
         return false;
     }
-    if (!ensure_size(visual.width_px, visual.width_px, error)) return false;
+    // Defensive: paint the whole frame when the caller did not size the bitmap.
+    if (!valid() && !ensure_size(visual.width_px, visual.height_px, error)) return false;
 
     auto* bitmap = static_cast<Gdiplus::Bitmap*>(graphics_bitmap_);
     Gdiplus::Graphics graphics(bitmap);
@@ -166,66 +195,79 @@ bool GdiPlusRenderer::render(const RingVisual& visual, std::string* error) {
     graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
     graphics.SetCompositingMode(Gdiplus::CompositingModeSourceOver);
     graphics.SetCompositingQuality(Gdiplus::CompositingQualityHighQuality);
-
-    // Start from a fully transparent surface: we render the state we want, we do
-    // not accumulate over previous frames.
     graphics.Clear(Gdiplus::Color(0, 0, 0, 0));
 
-    const float size = static_cast<float>(visual.width_px);
+    // Draw in frame coordinates: the strip's bitmap receives the part of the ring
+    // that falls inside it.
+    graphics.TranslateTransform(static_cast<Gdiplus::REAL>(-visual.origin_x),
+                                static_cast<Gdiplus::REAL>(-visual.origin_y));
+
+    const int width = visual.width_px;
+    const int height = visual.height_px;
+    const int band = std::max(1, visual.band_px);
     const float radius = static_cast<float>(visual.radius_px);
-    // Half-pixel insets keep a 1px stroke on exactly one pixel row/column.
-    const Gdiplus::RectF outer_rect(0.5f, 0.5f, size - 1.0f, size - 1.0f);
 
-    // 1. Panel wash: the glassy fill that darkens the window's outer band and
-    //    lets a little of what is behind it show through.
-    if (visual.draw_fill && visual.fill.a > 0) {
-        Gdiplus::GraphicsPath path;
-        add_rounded_rect(path, outer_rect, radius);
-        Gdiplus::SolidBrush brush(to_color(visual.fill));
-        graphics.FillPath(&brush, &path);
-    }
+    // The wash fades out within a few pixels of the edge, so it reads as depth
+    // and never as a solid strip drawn over the interface.
+    const int wash_depth = std::max(2, std::min(band, 6));
 
-    // 2. Soft inner shadow: a few concentric strokes with a quadratic falloff,
-    //    drawn outermost (brightest) last so the alpha accumulates into a
-    //    gradient near the edge. Bucket count is fixed, so this is a constant
-    //    amount of work no matter how big the window is.
-    if (visual.draw_shadow && visual.shadow.a > 0) {
-        const int buckets = std::max(3, visual.width_px / 3);
-        const float max_alpha = static_cast<float>(visual.shadow.a);
-        for (int i = buckets; i >= 1; --i) {
-            const float t = static_cast<float>(i) / static_cast<float>(buckets);  // 1 at the edge
-            const float inset = 0.5f + (1.0f - t) * (size - 1.0f) * 0.65f;
-            const float alpha = max_alpha * t * t / static_cast<float>(buckets);
-            Gdiplus::GraphicsPath path;
-            const float side = size - 2.0f * inset;
-            if (side <= 1.0f) continue;
-            const Gdiplus::RectF band(inset, inset, side, side);
-            add_rounded_rect(path, band, std::max(0.0f, radius - inset));
-            Gdiplus::Pen pen(Gdiplus::Color(static_cast<BYTE>(std::min(255.0f, alpha)), 0, 0, 0), 1.6f);
-            pen.SetLineJoin(Gdiplus::LineJoinRound);
-            graphics.DrawPath(&pen, &path);
+    // Per-pixel-depth strokes. The loop count is bounded by the band thickness
+    // (about 10-20px, and 1-3px in performance mode), never by the window size, so
+    // a 4K window costs exactly the same as a small dialog.
+    for (int depth = band + 1; depth >= 1; --depth) {
+        if (depth == 1) {
+            // Outermost pixel inside the hairline: the raised bezel. This is what
+            // makes the frame edge legible over Premiere's near-black panels.
+            if (visual.bezel.a > 0) {
+                stroke_band(graphics, width, height, radius, 0.0f, to_color(visual.bezel), 1.0f);
+            }
+            continue;
         }
+
+        // Quadratic falloff reads as a soft shadow rather than a hard band, and it
+        // starts one pixel in so it never muddies the bezel.
+        const double offset = static_cast<double>(depth - 2) / static_cast<double>(band);
+        const double edge_strength = 1.0 - offset;
+        double strength = visual.draw_shadow ? edge_strength * edge_strength : 0.0;
+
+        Rgba color = visual.shadow;
+        if (strength > 0.0) color = scaled_alpha(color, strength);
+
+        if (visual.draw_fill) {
+            const double wash = depth <= wash_depth
+                                    ? 1.0 - static_cast<double>(depth - 1) / static_cast<double>(wash_depth)
+                                    : 0.0;
+            if (wash > 0.0) {
+                const Rgba wash_color = scaled_alpha(visual.fill, wash * wash);
+                const double total = static_cast<double>(color.a) + wash_color.a;
+                if (total > 0.0) {
+                    const double mix = wash_color.a / total;
+                    color.r = static_cast<unsigned char>(color.r * (1.0 - mix) + wash_color.r * mix);
+                    color.g = static_cast<unsigned char>(color.g * (1.0 - mix) + wash_color.g * mix);
+                    color.b = static_cast<unsigned char>(color.b * (1.0 - mix) + wash_color.b * mix);
+                    color.a = static_cast<unsigned char>(total > 255.0 ? 255 : total);
+                }
+            }
+        }
+        if (color.a == 0) continue;
+
+        stroke_band(graphics, width, height, radius, static_cast<float>(depth - 2), to_color(color), 1.0f);
     }
 
-    // 3. Top highlight: one barely-visible line along the inner top edge. Reads
-    //    as light falling on glass without becoming a "glow".
-    if (visual.draw_highlight && visual.highlight.a > 0) {
-        const float inset = size - 0.5f;
-        const float left = radius;
-        const float right = size - radius;
+    // Hairline on the frame edge itself, drawn last so it is always crisp.
+    if (visual.draw_border && visual.border.a > 0) {
+        stroke_band(graphics, width, height, radius, 0.0f, to_color(visual.border), 1.0f);
+    }
+
+    // Barely visible top inner highlight: light falling on glass, not a glow.
+    if (visual.draw_highlight && visual.highlight.a > 0 && width > 4 * radius + 8) {
+        const float left = radius > 0 ? radius + 2.0f : 2.0f;
+        const float right = static_cast<float>(width) - left;
+        const float y = static_cast<float>(band) + 0.5f;
         if (right > left) {
             Gdiplus::Pen pen(to_color(visual.highlight), 1.0f);
-            graphics.DrawLine(&pen, left, inset, right, inset);
+            graphics.DrawLine(&pen, left, y, right, y);
         }
-    }
-
-    // 4. The hairline border itself.
-    if (visual.border.a > 0) {
-        Gdiplus::GraphicsPath path;
-        add_rounded_rect(path, outer_rect, radius);
-        Gdiplus::Pen pen(to_color(visual.border), 1.0f);
-        pen.SetLineJoin(Gdiplus::LineJoinRound);
-        graphics.DrawPath(&pen, &path);
     }
 
     if (graphics.GetLastStatus() != Gdiplus::Ok) {

@@ -28,7 +28,11 @@
 
 namespace {
 
-constexpr const wchar_t* kSingleInstanceMutex = L"Local\\AzySkin.SingleInstance.7f2a1c94";
+// Session-local (per-user) instance mutex: Azy is a per-user utility with
+// per-user settings, so a second Windows session may run its own copy. The name
+// is also declared as AppMutex in packaging/AzySkin.iss, which is how Setup knows
+// to ask a running instance to close before replacing the executable.
+constexpr const wchar_t* kSingleInstanceMutex = L"AzySkin.SingleInstance.7f2a1c94";
 constexpr const char* kProductVersion = "1.0.0";
 
 struct SingleInstance {

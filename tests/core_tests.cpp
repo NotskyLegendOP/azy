@@ -279,6 +279,15 @@ void test_theme() {
     CHECK(glass.surface_shadow.a <= 90);
     CHECK_INT(glass.corner_radius_dip, 8);
 
+    // The raised bezel is what makes the frame edge readable on a dark UI: it must
+    // be visible, but still an edge treatment rather than a border line, and
+    // lighter than the surface it sits on (a darker edge would vanish against
+    // Premiere's own near-black panels).
+    CHECK(glass.surface_bezel.a > glass.surface_border.a);
+    CHECK(glass.surface_bezel.a < 90);
+    CHECK(glass.surface_bezel.r > glass.surface_fill.r);
+    CHECK(glass.surface_bezel.r <= glass.surface_border.r);
+
     // More glass -> more transparency, monotonically.
     Appearance more = appearance;
     more.glass_intensity = 1.0;
@@ -297,10 +306,13 @@ void test_theme() {
     const ThemePalette strong_border = make_palette(ThemeId::AzyDarkGlass, strong, true);
     CHECK(strong_border.surface_border.a > glass.surface_border.a);
     CHECK(strong_border.surface_border.a <= 40);
+    CHECK(strong_border.surface_bezel.a > glass.surface_bezel.a);
+    CHECK(strong_border.surface_bezel.a <= 45);  // 0.05 + 0.12 -> 17% white, never a bright outline
 
     // Opaque theme: no translucency at all.
     const ThemePalette dark = make_palette(ThemeId::AzyDark, appearance, true);
     CHECK_INT(dark.surface_fill.a, 255);
+    CHECK(dark.surface_bezel.a > 0);  // the bezel is the visual anchor, in both themes
 
     // Original: Azy does nothing.
     const ThemePalette original = make_palette(ThemeId::Original, appearance, true);
@@ -308,6 +320,7 @@ void test_theme() {
     CHECK(!original.draw_surface);
     CHECK(!original.apply_frame_colors);
     CHECK_INT(original.surface_fill.a, 0);
+    CHECK_INT(original.surface_bezel.a, 0);
     CHECK_INT(original.surface_border.a, 0);
     CHECK_INT(original.corner_radius_dip, 0);
 

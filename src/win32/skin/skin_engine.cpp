@@ -26,10 +26,13 @@ int ring_radius_px(const SkinRequest& request, bool frame_rounded) {
     return dip_to_px(dip, request.target.dpi);
 }
 
-// Band thickness of the composition surface, in physical pixels. Bounded so a
-// small floating window cannot be swallowed by its own decoration.
+// Band thickness of the composition surface, in physical pixels: how far the
+// edge treatment reaches into the window. Bounded so a small floating window
+// cannot be swallowed by its own decoration, and kept thin in performance mode,
+// where the treatment is a static edge rather than a shaded one.
 int ring_band_px(const SkinRequest& request) {
-    const int nominal = dip_to_px(10, request.target.dpi);
+    const int nominal = request.performance_mode ? dip_to_px(3, request.target.dpi)
+                                                 : dip_to_px(10, request.target.dpi);
     const int shorter = request.target.visible_frame.width() < request.target.visible_frame.height()
                             ? request.target.visible_frame.width()
                             : request.target.visible_frame.height();
@@ -47,8 +50,9 @@ bool SkinEngine::VisualKey::operator==(const VisualKey& other) const {
            same_color(frame_text, other.frame_text) && surface == other.surface &&
            surface_rect == other.surface_rect && dpi == other.dpi && radius_px == other.radius_px &&
            band_px == other.band_px && shadow == other.shadow && glass == other.glass &&
-           same_color(fill, other.fill) && same_color(border, other.border) &&
-           same_color(highlight, other.highlight) && same_color(shadow_color, other.shadow_color);
+           same_color(bezel, other.bezel) && same_color(fill, other.fill) &&
+           same_color(border, other.border) && same_color(highlight, other.highlight) &&
+           same_color(shadow_color, other.shadow_color);
 }
 
 bool SkinEngine::initialize(std::string* error) {
@@ -92,19 +96,31 @@ SkinEngine::VisualKey SkinEngine::build_key(const SkinRequest& request) const {
     key.surface = request.features.edge_surface;
     key.surface_rect = request.target.visible_frame;
     key.dpi = request.target.dpi;
-    key.radius_px = ring_radius_px(request, frame_rounded);
+    // FeatureSet::edge_surface_rounded off (performance mode, disabled in the
+    // INI, or a rounded-corner-less host) means a square ring.
+    key.radius_px = request.features.edge_surface_rounded ? ring_radius_px(request, frame_rounded) : 0;
     key.band_px = ring_band_px(request);
-    key.shadow = request.palette.shadow_enabled && request.features.edge_surface_rounded;
+    key.shadow = request.palette.shadow_enabled;
     key.glass = request.palette.surface_fill.a < 255;
+    key.bezel = request.palette.surface_bezel;
     key.fill = request.palette.surface_fill;
     key.border = request.palette.surface_border;
     key.highlight = request.palette.surface_highlight;
     key.shadow_color = request.palette.surface_shadow;
+    if (request.target.maximized || request.target.fullscreen) {
+        // On a screen-filling window the ring runs along the physical screen
+        // edges, where a full-strength bezel reads as a border drawn around the
+        // display. Halve it and leave a soft edge treatment instead.
+        key.bezel.a = static_cast<unsigned char>(key.bezel.a / 2);
+    }
     if (request.performance_mode) {
-        // Performance mode: static colours only. The wash becomes a flat fill and
-        // the shadow is dropped entirely.
-        key.shadow = false;
+        // Performance mode: static colours only. The translucent wash is dropped
+        // (the bezel and the hairline carry the look) and so is the shadow
+        // gradient, leaving two constant strokes per strip.
+        key.fill.a = 0;
         key.glass = false;
+        key.shadow = false;
+        key.shadow_color.a = 0;
     }
     return key;
 }
@@ -156,6 +172,7 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
                                  last_key_.surface_rect != key.surface_rect || last_key_.dpi != key.dpi ||
                                  last_key_.radius_px != key.radius_px || last_key_.band_px != key.band_px ||
                                  last_key_.shadow != key.shadow || last_key_.glass != key.glass ||
+                                 !same_color(last_key_.bezel, key.bezel) ||
                                  !same_color(last_key_.fill, key.fill) ||
                                  !same_color(last_key_.border, key.border) ||
                                  !same_color(last_key_.highlight, key.highlight) ||
@@ -178,11 +195,18 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
 
     if (surface_requested && surface_changed) {
         RingVisual visual;
-        visual.width_px = key.band_px;
+        // The ring is described in frame coordinates; CompositionSurface splits it
+        // into four thin strips and hands each one the right origin, so a 1px line
+        // stays exactly one pixel wide at every DPI without any resampling.
+        visual.width_px = key.surface_rect.width();
+        visual.height_px = key.surface_rect.height();
+        visual.band_px = key.band_px;
         visual.radius_px = key.radius_px;
-        visual.draw_fill = true;
+        visual.draw_fill = key.fill.a > 0;
         visual.draw_shadow = key.shadow;
-        visual.draw_highlight = true;
+        visual.draw_highlight = request.features.edge_surface_rounded;
+        visual.draw_border = true;
+        visual.bezel = key.bezel;
         visual.fill = key.fill;
         visual.border = key.border;
         visual.highlight = key.highlight;
