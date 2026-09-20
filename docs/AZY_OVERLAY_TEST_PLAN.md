@@ -143,24 +143,41 @@ something that contains Azy's own window. Check:
 If a nested-copy effect ever appears, screenshot it immediately: it means the
 capture is not scoped to one window, which the design forbids.
 
-**2.2 Capture border.** On some Windows 10 builds, Windows draws a thin border
+**2.2 The window-style combination (the least-documented part).** The duplicate is
+a layered, transparent, redirection-bitmap-less window that the compositor paints
+(`docs/AZY_OVERLAY_ARCHITECTURE.md` §4). Three outcomes are possible on a given
+machine, and they are told apart instantly:
+
+| What you see | What it means | What to do |
+|---|---|---|
+| The mirror appears, skinned, and clicks go through to Premiere | The combination works | Nothing — this is the intended outcome |
+| **No duplicate at all**, Premiere normal, tray reports the ring/veil layer | The layered/redirection-bitmap combination was refused, or the shader/device failed. This is the *safe* failure the design chose | Note the log lines (`overlay:` …) and report them; the static layers are already carrying the skin |
+| **A black or empty rectangle over Premiere** | The compositor's visual is not being shown while the window is still opaque — the one outcome the design must never produce | Move the mouse out, press Tray → *Suspend Skin* immediately, note the log, and report it. The knob is `WS_EX_LAYERED` / the `255` constant alpha in `src/win32/gloss/gloss_overlay.cpp` |
+
+A fourth, milder outcome — the mirror is visible but **dimmed** — also points at the
+constant alpha: 255 is the value that changes nothing.
+
+While the duplicate is up, press **Check visibility** in the tray/settings: the
+diagnostics must report the duplicate layer, not the ring-and-veil layer.
+
+**2.3 Capture border.** On some Windows 10 builds, Windows draws a thin border
 around a captured window. Look at the outer 2px of the duplicate: a coloured line
 means the border was captured. Note the Windows build (`winver`).
 
-**2.3 Playback.** Play a timeline for ~20 s and scroll a long timeline. Expect the
+**2.4 Playback.** Play a timeline for ~20 s and scroll a long timeline. Expect the
 mirror to look live. Note whether the picture in the Program Monitor keeps up with
 the audio, and whether the window ever tears at the top edge.
 
-**2.4 Menus.** Open Premiere's menus, including a submenu. Expect the mirror to
+**2.5 Menus.** Open Premiere's menus, including a submenu. Expect the mirror to
 show them. A menu that appears in the real window but not in the mirror (or vice
 versa) is exactly the kind of thing that would be a serious limitation: report it.
 
-**2.5 Elevated Premiere.** If you normally run Premiere as administrator, run this
+**2.6 Elevated Premiere.** If you normally run Premiere as administrator, run this
 check with Azy non-elevated: the tray tooltip should report `partial` and the log
 should explain that Windows blocked placement. Then use Tray → *Restart as
 Administrator* and confirm the mirror appears.
 
-**2.6 No shader compiler.** Optional, for completeness: temporarily rename
+**2.7 No shader compiler.** Optional, for completeness: temporarily rename
 `C:\Windows\System32\d3dcompiler_47.dll` (do this only on a test machine, and put
 it back). Expect: the log says the shader could not be compiled, the duplicate is
 not created, and the ring/veil carry the skin.
@@ -184,7 +201,7 @@ is not evidence, and the column says so.
 | 7 | **Second monitor / DPI change** | Duplicate follows the window to the other monitor at that monitor's DPI, hairlines stay 1 physical pixel | §1.5; debug `size agrees` |
 | 8 | **Another app in front** | The duplicate is covered by the other app (it is not topmost) and Azy does nothing about it | §2.1 |
 | 9 | **Skin switched off while running** | Suspend: duplicate hides, capture stops, GPU released, Premiere normal. Re-enable: it comes back | §1.8, §1.9 |
-| 10 | **Failure of the capture path** | Ring + veil carry the skin, the reason is in the log, no crash, no CPU spike, no Safe Mode | §2.6 (shader) or a Windows build without the capture API |
+| 10 | **Failure of the capture path** | Ring + veil carry the skin, the reason is in the log, no crash, no CPU spike, no Safe Mode | §2.7 (shader) or a Windows build without the capture API |
 
 ---
 
@@ -198,9 +215,14 @@ is not evidence, and the column says so.
    the C++ `AzyParams` struct have the same members in the same order with the
    same sizes; the region slot counts agree; no `float3` in the buffer; the C++
    `static_assert` equals the size the HLSL packing rules compute (272 bytes); no
-   `CreateForMonitor` anywhere in `src/`; the own-process guard is present.
-   *The checker was itself tested by breaking the shader in two ways (a renamed
-   member, a `float3`) and confirming it failed both times.*
+   `CreateForMonitor` anywhere in `src/`; the own-process guard is present; the
+   duplicate window still carries `WS_EX_LAYERED | WS_EX_TRANSPARENT |
+   WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW` in its extended style and no `*TOPMOST`
+   anywhere; the window procedure still answers `HTTRANSPARENT`; nothing captures
+   the desktop window.
+   *The checker was itself tested by breaking things on purpose — a renamed
+   constant-buffer member, a `float3`, a dropped `WS_EX_LAYERED`, an added
+   `WS_EX_TOPMOST`, a removed `HTTRANSPARENT` — and confirming it failed each time.*
 4. Portable core tests: **649 checks, 0 failures**, including the new
    `overlay capture math` group (UV mapping of a maximized window, refusal to draw
    when the geometry does not intersect, panel clipping, pass-through ordering and
@@ -210,7 +232,7 @@ is not evidence, and the column says so.
 5. Windows cross-compile: the complete application compiles and links with the GUI
    subsystem, including the new capture, compositor and shader modules.
 6. Executable inspection: PE32+, x64, GUI subsystem, version/icon/manifest
-   resources present, 610,816 bytes (61.1 % of the 1 MB budget).
+   resources present, 614,400 bytes (61.4 % of the 1 MB budget).
 7. The progress board is in sync with `docs/progress.json`.
 
 **UNVERIFIED — needs the real machine:** everything in §1, §2 and §3 above. In

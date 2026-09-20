@@ -12,8 +12,10 @@ user's machine - so this script does the comparison:
   * the constant buffer is written in the packing-safe style (no float3),
   * the C++ static_assert agrees with the size the HLSL packing rules produce,
   * nothing anywhere calls the monitor form of the capture API (a monitor capture
-    would include the duplicate window itself: an infinite mirror), and
-  * the capture still refuses to mirror Azy's own process.
+    would include the duplicate window itself: an infinite mirror),
+  * the capture still refuses to mirror Azy's own process, and
+  * the duplicate window still carries the styles that make it click-through and
+    never topmost, and still answers HTTRANSPARENT.
 
 Run: python3 tools/check-overlay.py [repo root]
 """
@@ -215,7 +217,36 @@ def main() -> int:
     if guard not in captures:
         fail("window_capture.cpp lost its own-process guard: Azy could be asked to mirror itself")
 
-    # 5. The static_assert has to agree with the packing rules above.
+    # 5. The duplicate window's stacking and input contract. Three of the round-8
+    #    hard rules are structural, so they are checked rather than trusted:
+    #      * a window over *another process* is skipped by hit testing only when it
+    #        is layered and transparent (HTTRANSPARENT alone only forwards within
+    #        the same thread - that is why the ring and the veil carry the same
+    #        pair),
+    #      * the duplicate must never be created topmost: it belongs directly above
+    #        Premiere and below everything else, and
+    #      * the window procedure must still answer HTTRANSPARENT.
+    gloss = read(root / "src" / "win32" / "gloss" / "gloss_overlay.cpp")
+    gloss_code = re.sub(r"//[^\n]*", "", gloss)
+    style_match = re.search(r"const DWORD ex_style\s*=\s*([^;]+);", gloss_code)
+    if not style_match:
+        fail("gloss_overlay.cpp: the duplicate window's extended style could not be found")
+    else:
+        style_expression = style_match.group(1)
+        for needed in ("WS_EX_LAYERED", "WS_EX_TRANSPARENT", "WS_EX_NOACTIVATE", "WS_EX_TOOLWINDOW"):
+            if needed not in style_expression:
+                fail(f"the duplicate window lost {needed}: click-through and focus safety depend on it")
+        if "WS_EX_TOPMOST" in style_expression:
+            fail("the duplicate window is created topmost: it must sit above Premiere only")
+    for forbidden in ("WS_EX_TOPMOST", "HWND_TOPMOST"):
+        if forbidden in gloss_code:
+            fail(f"gloss_overlay.cpp contains {forbidden}: never global always-on-top")
+    if "HTTRANSPARENT" not in gloss_code:
+        fail("gloss_overlay.cpp no longer answers HTTRANSPARENT in WM_NCHITTEST")
+    if "GetDesktopWindow" in captures or "GetDesktopWindow" in gloss_code:
+        fail("the desktop window is being captured or mirrored: the duplicate must stay window-scoped")
+
+    # 6. The static_assert has to agree with the packing rules above.
     assert_match = re.search(r"static_assert\(sizeof\(AzyParams\)\s*==\s*(\d+)", impl)
     if not assert_match:
         fail("AzyParams has no static_assert on its size")
@@ -235,7 +266,7 @@ def report() -> None:
         for message in FAILURES:
             print(f"  - {message}")
     else:
-        print("overlay check: shader, constant buffer and capture guard all agree")
+        print("overlay check: shader, constant buffer, window styles and capture guard all agree")
 
 
 if __name__ == "__main__":

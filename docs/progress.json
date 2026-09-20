@@ -12,7 +12,7 @@
     {
       "id": "P1",
       "title": "Research & feasibility",
-      "spec": "§2, §44 Phase 1",
+      "spec": "\u00a72, \u00a744 Phase 1",
       "eta": "1 session",
       "next": "Correct the panel model against one debug screenshot from your machine",
       "items": [
@@ -21,7 +21,7 @@
           "class": "A",
           "status": "done",
           "weight": 1,
-          "note": "docs/FEASIBILITY.md §1: docked panels are pixels, not windows"
+          "note": "docs/FEASIBILITY.md \u00a71: docked panels are pixels, not windows"
         },
         {
           "name": "Accessibility / UI Automation coverage assessed",
@@ -63,7 +63,7 @@
     {
       "id": "P2",
       "title": "Window tracking",
-      "spec": "§3 Layer 1, §30-32, §44 Phase 2",
+      "spec": "\u00a73 Layer 1, \u00a730-32, \u00a744 Phase 2",
       "eta": "done",
       "next": "Fold workspace identification into the panel model (Phase 5)",
       "items": [
@@ -133,7 +133,7 @@
     {
       "id": "P3",
       "title": "Rendering prototype",
-      "spec": "§4, §5, §44 Phase 3",
+      "spec": "\u00a74, \u00a75, \u00a744 Phase 3",
       "eta": "1 session",
       "next": "One region prototype: header band plus a 1px dock separator",
       "items": [
@@ -149,7 +149,7 @@
           "class": "B",
           "status": "done",
           "weight": 3,
-          "note": "One solid colour per window, no bitmap; the cheapest possible answer to §5"
+          "note": "One solid colour per window, no bitmap; the cheapest possible answer to \u00a75"
         },
         {
           "name": "Prove it is on screen, not just that calls succeeded",
@@ -184,7 +184,7 @@
     {
       "id": "P4",
       "title": "Design system",
-      "spec": "§7, §8, §10, §12, §24-27, §38-40",
+      "spec": "\u00a77, \u00a78, \u00a710, \u00a712, \u00a724-27, \u00a738-40",
       "eta": "0 sessions",
       "next": "Region chrome (handed to P5): dock separators, header band, static lighting",
       "items": [
@@ -207,7 +207,7 @@
           "class": "B",
           "status": "done",
           "weight": 2,
-          "note": "§7/§25: AccentId blue-violet|blue|violet|neutral, 35% by default, reaches the 1px lit edge, the frame border and ~12% of the tint. Neutral reproduces the pre-accent look exactly (tested)"
+          "note": "\u00a77/\u00a725: AccentId blue-violet|blue|violet|neutral, 35% by default, reaches the 1px lit edge, the frame border and ~12% of the tint. Neutral reproduces the pre-accent look exactly (tested)"
         },
         {
           "name": "One reusable glass material (base + reflection + border + shadow)",
@@ -221,28 +221,28 @@
           "class": "B",
           "status": "todo",
           "weight": 2,
-          "note": "§25-26: top-left blue, bottom-right violet, diagonal reflection - static, rendered once"
+          "note": "\u00a725-26: top-left blue, bottom-right violet, diagonal reflection - static, rendered once"
         },
         {
           "name": "Corner radius in DIPs, clamped, per element size",
           "class": "A",
           "status": "partial",
           "weight": 1,
-          "note": "Ring: done. 12-16px panel radii (§24) arrive with the region chrome"
+          "note": "Ring: done. 12-16px panel radii (\u00a724) arrive with the region chrome"
         },
         {
           "name": "Presets: Ultra / Balanced / Performance / Low Power",
           "class": "B",
           "status": "done",
           "weight": 2,
-          "note": "§40: four presets + Custom detection, in the Settings combo and in settings.ini. Balanced is the default and is byte-identical to the shipped 1.1.x look"
+          "note": "\u00a740: four presets + Custom detection, in the Settings combo and in settings.ini. Balanced is the default and is byte-identical to the shipped 1.1.x look"
         },
         {
           "name": "Configuration file covering every visual value (INI/JSON)",
           "class": "B",
           "status": "partial",
           "weight": 2,
-          "note": "§38: accent, accent_intensity, glow_intensity, animations and preset added. Blur is the one key that cannot exist - Windows has no supported blur for a foreign window"
+          "note": "\u00a738: accent, accent_intensity, glow_intensity, animations and preset added. Blur is the one key that cannot exist - Windows has no supported blur for a foreign window"
         },
         {
           "name": "Tests for the design system",
@@ -256,7 +256,7 @@
     {
       "id": "P5",
       "title": "Major panels",
-      "spec": "§8-§23, §44 Phase 5",
+      "spec": "\u00a78-\u00a723, \u00a744 Phase 5",
       "eta": "2-3 sessions",
       "next": "Dock separators + the application-header band, drawn straight from the panel map",
       "items": [
@@ -279,38 +279,38 @@
           "class": "B",
           "status": "done",
           "weight": 4,
-          "note": "§3/§32/§37: ratio profiles per workspace applied to the client rect at the window DPI. 11 panels, six profiles, 211 new checks. Published (UIA) rectangles remain an optional refinement"
+          "note": "\u00a73/\u00a732/\u00a737: ratio profiles per workspace applied to the client rect at the window DPI. 11 panels, six profiles, 211 new checks. Published (UIA) rectangles remain an optional refinement"
         },
         {
           "name": "Dock separators: 1px hairlines where panels meet",
           "class": "C",
           "status": "todo",
           "weight": 3,
-          "note": "§9-§12: gives panels measurable depth and separation without touching Premiere's widgets"
+          "note": "\u00a79-\u00a712: gives panels measurable depth and separation without touching Premiere's widgets"
         },
         {
-          "name": "Application header band (§23)",
+          "name": "Application header band (\u00a723)",
           "class": "C",
           "status": "todo",
           "weight": 2,
           "note": "Static top highlight + darkened header strip"
         },
         {
-          "name": "Timeline band, selected-track accent line (§16)",
+          "name": "Timeline band, selected-track accent line (\u00a716)",
           "class": "C",
           "status": "todo",
           "weight": 3,
           "note": "Clips and playhead stay Premiere's: per-clip styling is class D"
         },
         {
-          "name": "Monitor / Project / Effect Controls bands (§17-19)",
+          "name": "Monitor / Project / Effect Controls bands (\u00a717-19)",
           "class": "C",
           "status": "todo",
           "weight": 3,
           "note": "Video pixels are never touched; only the frame around them"
         },
         {
-          "name": "Audio meter region (§20, static only)",
+          "name": "Audio meter region (\u00a720, static only)",
           "class": "C",
           "status": "todo",
           "weight": 1,
@@ -321,7 +321,7 @@
           "class": "B",
           "status": "done",
           "weight": 3,
-          "note": "§32/§39: five profiles plus Auto, selectable by hand in Settings (UI profile) and in settings.ini (ui_profile)"
+          "note": "\u00a732/\u00a739: five profiles plus Auto, selectable by hand in Settings (UI profile) and in settings.ini (ui_profile)"
         },
         {
           "name": "Resize/DPI re-layout straight from ratios",
@@ -335,7 +335,7 @@
     {
       "id": "P6",
       "title": "Secondary UI",
-      "spec": "§14, §15, §21, §22, §44 Phase 6",
+      "spec": "\u00a714, \u00a715, \u00a721, \u00a722, \u00a744 Phase 6",
       "eta": "1 session",
       "next": "Undocked panels and dialogs - real windows, so real treatments",
       "items": [
@@ -379,7 +379,7 @@
     {
       "id": "P7",
       "title": "Animation",
-      "spec": "§28, §44 Phase 7",
+      "spec": "\u00a728, \u00a744 Phase 7",
       "eta": "0-1 session, decision first",
       "next": "Say yes/no to 100ms transitions on Azy's own layers",
       "items": [
@@ -388,7 +388,7 @@
           "class": "A",
           "status": "done",
           "weight": 1,
-          "note": "docs/FEASIBILITY.md §6 resolves the conflict with the original no-animation rule"
+          "note": "docs/FEASIBILITY.md \u00a76 resolves the conflict with the original no-animation rule"
         },
         {
           "name": "animations switch: stored, validated and shown, but inactive (documented, disabled in the UI)",
@@ -402,7 +402,7 @@
     {
       "id": "P8",
       "title": "Performance",
-      "spec": "§29, §44 Phase 8, §45",
+      "spec": "\u00a729, \u00a744 Phase 8, \u00a745",
       "eta": "1 session",
       "next": "Scripted 30-minute idle capture so the budget is a number, not a promise",
       "items": [
@@ -458,7 +458,7 @@
     {
       "id": "P9",
       "title": "Compatibility & acceptance",
-      "spec": "§33-37, §44 Phase 9, §45, §46",
+      "spec": "\u00a733-37, \u00a744 Phase 9, \u00a745, \u00a746",
       "eta": "1 session + your test run",
       "next": "Live acceptance pass on 1080p/1440p/4K, dual monitor, 100-200%",
       "items": [
@@ -495,17 +495,17 @@
           "class": "C",
           "status": "todo",
           "weight": 4,
-          "note": "Needs Premiere: the rows are written down in docs/TESTING.md §2-§9 | Round 8 adds the overlay first-run checklist and the ten scenarios (docs/AZY_OVERLAY_TEST_PLAN.md) to this run"
+          "note": "Needs Premiere: the rows are written down in docs/TESTING.md \u00a72-\u00a79 | Round 8 adds the overlay first-run checklist and the ten scenarios (docs/AZY_OVERLAY_TEST_PLAN.md) to this run"
         },
         {
-          "name": "Visual quality compared against the reference image (§46)",
+          "name": "Visual quality compared against the reference image (\u00a746)",
           "class": "C",
           "status": "todo",
           "weight": 3,
           "note": "The reference image did not arrive with the specification - attach it and the palette is read from it"
         },
         {
-          "name": "Undo/redo safety: no project state touched (§33)",
+          "name": "Undo/redo safety: no project state touched (\u00a733)",
           "class": "A",
           "status": "done",
           "weight": 1,
@@ -521,16 +521,16 @@
     {
       "id": "P10",
       "title": "Duplicate window overlay (round-8 architecture)",
-      "spec": "§34, §43 and the round-8 brief",
+      "spec": "\u00a734, \u00a743 and the round-8 brief",
       "eta": "delivered in v1.3.0",
-      "next": "Verify it against a real Premiere run: docs/AZY_OVERLAY_TEST_PLAN.md §1",
+      "next": "Run the test plan against a real Premiere: that is the only open item in this phase.",
       "items": [
         {
-          "name": "Feasibility decision on the capture and composition APIs (§34)",
+          "name": "Feasibility decision on the capture and composition APIs (\u00a734)",
           "class": "A",
           "status": "done",
           "weight": 3,
-          "note": "Windows Graphics Capture + D3D11 + DirectComposition chosen; Desktop Duplication, DWM thumbnails, GDI and injection rejected with reasons (AZY_OVERLAY_ARCHITECTURE.md §1.3)"
+          "note": "Windows Graphics Capture + D3D11 + DirectComposition chosen; Desktop Duplication, DWM thumbnails, GDI and injection rejected with reasons (AZY_OVERLAY_ARCHITECTURE.md \u00a71.3)"
         },
         {
           "name": "GPU window capture with a hand-declared WinRT ABI",
@@ -621,119 +621,119 @@
   ],
   "out_of_scope": [
     {
-      "spec": "§16 Selected/unselected clip styling, playhead styling",
+      "spec": "\u00a716 Selected/unselected clip styling, playhead styling",
       "why": "Clips and the playhead are painted by Premiere inside one window. Recolouring them means hooking its renderer - the definition of what this project does not do. Closest alternative: the timeline band, its separators and an accent line for the selected track."
     },
     {
-      "spec": "§14-15 Dropdown and context menus as glass cards",
+      "spec": "\u00a714-15 Dropdown and context menus as glass cards",
       "why": "Those popups belong to Premiere's process and are themed by Windows. No supported external theming exists. They stay exactly as they are."
     },
     {
-      "spec": "§13 Buttons, §19 sliders/checkboxes/keyframes, §18 search field, §21 toolbar icons",
+      "spec": "\u00a713 Buttons, \u00a719 sliders/checkboxes/keyframes, \u00a718 search field, \u00a721 toolbar icons",
       "why": "Premiere's own drawing, with no HWND behind them. Alternative: region chrome around them (separators, bands, accents), which is what class C delivers."
     },
     {
-      "spec": "§9-10 Background blur behind panels",
+      "spec": "\u00a79-10 Background blur behind panels",
       "why": "Windows can blur only a process's own window. Blurring Premiere's pixels requires constant screen capture and reprojection - explicitly ruled out. Alternative: static gradients that read as depth."
     },
     {
-      "spec": "§11 Panel hover/active/focus states on Premiere's panels",
+      "spec": "\u00a711 Panel hover/active/focus states on Premiere's panels",
       "why": "Premiere's panels never tell an outside process that the pointer is over them. Alternative: focus-aware treatment of the tracked window as a whole (active window vs. inactive), which is measurable."
     }
   ],
   "spec_map": [
     {
-      "section": "§3 Layer 2 Panel discovery",
+      "section": "\u00a73 Layer 2 Panel discovery",
       "phase": "P5",
       "class": "B/C",
       "status": "partial"
     },
     {
-      "section": "§7 Design system",
+      "section": "\u00a77 Design system",
       "phase": "P4",
       "class": "B",
       "status": "done"
     },
     {
-      "section": "§8 Background layers",
+      "section": "\u00a78 Background layers",
       "phase": "P4/P5",
       "class": "C",
       "status": "partial"
     },
     {
-      "section": "§9-12 Glass panels, material, states, borders",
+      "section": "\u00a79-12 Glass panels, material, states, borders",
       "phase": "P4/P5",
       "class": "C",
       "status": "partial"
     },
     {
-      "section": "§13-15 Controls, dropdowns, context menus",
+      "section": "\u00a713-15 Controls, dropdowns, context menus",
       "phase": "P6",
       "class": "D",
       "status": "impossible"
     },
     {
-      "section": "§16 Timeline",
+      "section": "\u00a716 Timeline",
       "phase": "P5",
       "class": "C",
       "status": "todo"
     },
     {
-      "section": "§17-19 Monitors, Project, Effect Controls",
+      "section": "\u00a717-19 Monitors, Project, Effect Controls",
       "phase": "P5",
       "class": "C",
       "status": "todo"
     },
     {
-      "section": "§20 Audio meters",
+      "section": "\u00a720 Audio meters",
       "phase": "P5",
       "class": "C",
       "status": "todo"
     },
     {
-      "section": "§21-23 Toolbar, menu bar, application header",
+      "section": "\u00a721-23 Toolbar, menu bar, application header",
       "phase": "P5/P6",
       "class": "C",
       "status": "todo"
     },
     {
-      "section": "§24-27 Radius, lighting, reflections, shadows",
+      "section": "\u00a724-27 Radius, lighting, reflections, shadows",
       "phase": "P4",
       "class": "B",
       "status": "partial"
     },
     {
-      "section": "§28 Animation",
+      "section": "\u00a728 Animation",
       "phase": "P7",
       "class": "B",
       "status": "partial"
     },
     {
-      "section": "§33 Undo/redo safety",
+      "section": "\u00a733 Undo/redo safety",
       "phase": "P9",
       "class": "A",
       "status": "done"
     },
     {
-      "section": "§37 Version -> UI profile system",
+      "section": "\u00a737 Version -> UI profile system",
       "phase": "P5",
       "class": "B",
       "status": "partial"
     },
     {
-      "section": "§38 Configuration file",
+      "section": "\u00a738 Configuration file",
       "phase": "P4",
       "class": "B",
       "status": "done"
     },
     {
-      "section": "§39-40 Settings, presets",
+      "section": "\u00a739-40 Settings, presets",
       "phase": "P4",
       "class": "B",
       "status": "done"
     },
     {
-      "section": "§41 Debug mode",
+      "section": "\u00a741 Debug mode",
       "phase": "P5",
       "class": "B",
       "status": "done"

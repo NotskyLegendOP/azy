@@ -1,5 +1,7 @@
 #include "azy/win32/gloss/gloss_overlay.hpp"
 
+#include "azy/win32/os/win_util.hpp"
+
 #include <d3dcompiler.h>
 
 #include <cstring>
@@ -176,15 +178,37 @@ bool GlossOverlay::create(HINSTANCE instance, std::string* error) {
         return false;
     }
 
-    // No redirection bitmap (the compositor owns the pixels), no activation, no
-    // alt-tab entry, and transparent to the mouse. Deliberately *not* topmost.
-    const DWORD ex_style = WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOREDIRECTIONBITMAP;
+    // Window styles, and why each one is there:
+    //   WS_EX_NOREDIRECTIONBITMAP - there is no GDI surface behind this window, so
+    //       the compositor's visual is the only content that exists. Nothing can
+    //       ever be painted black behind the mirror, and no window-sized bitmap is
+    //       allocated.
+    //   WS_EX_LAYERED | WS_EX_TRANSPARENT - the click-through mechanism for a
+    //       window over *another process*. `WM_NCHITTEST` answering HTTRANSPARENT
+    //       only forwards a hit to windows of the same thread (documented
+    //       behaviour), so it cannot be what carries a click from here into
+    //       Premiere; the layered bit is what makes the system skip this window
+    //       during hit testing, and the window procedure keeps answering
+    //       HTTRANSPARENT as well, for the same-process case.
+    //   WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW - never in the focus chain, never in
+    //       alt-tab.
+    // Deliberately *not* topmost: the duplicate sits directly above Premiere and
+    // below every other application, so bringing another program forward covers it.
+    const DWORD ex_style = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW |
+                           WS_EX_NOREDIRECTIONBITMAP;
     window_ = CreateWindowExW(ex_style, kOverlayClass, L"Azy Skin overlay", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr,
                               instance, this);
     if (window_ == nullptr) {
         if (error != nullptr) *error = "overlay window could not be created";
         shared_.destroy();
         return false;
+    }
+
+    // A layered window needs its constant alpha stated. 255 is the value that
+    // changes nothing: the compositor's own premultiplied alpha is what the skin is
+    // made of, and a smaller constant would dim the whole mirror.
+    if (SetLayeredWindowAttributes(window_, 0, 255, LWA_ALPHA) == FALSE) {
+        log_warn("overlay: the layered attribute was refused (click-through may not hold)");
     }
 
     if (!create_device_resources(&problem) || !compile_shader(&problem)) {
@@ -369,6 +393,10 @@ bool GlossOverlay::compile_shader(std::string* error) {
     return false;
 }
 
+// Note the ownership contract: the *capture* is not owned here (the engine owns its
+// lifetime), but the D3D11 device the capture was handed is - so a caller must stop
+// the capture before destroying this object, which is exactly what the engine's
+// teardown path does.
 void GlossOverlay::destroy() {
     if (window_ != nullptr) {
         KillTimer(window_, kRenderTimerId);
@@ -377,6 +405,7 @@ void GlossOverlay::destroy() {
         window_ = nullptr;
     }
     visible_ = false;
+    device_lost_ = false;
     release(stage_view_);
     release(stage_);
     stage_width_ = 0;
@@ -475,13 +504,17 @@ bool GlossOverlay::update_window() {
     // null hint means "leave the order alone": HWND_TOP would be a silent
     // always-on-top, which the brief forbids.
     const HWND insert_after =
-        frame_.insert_after != nullptr ? frame_.insert_after : GetWindow(frame_.anchor, GW_HWNDPREV);
+        frame_.insert_after != nullptr ? frame_.insert_after : win::z_order_anchor(frame_.anchor);
     if (!SetWindowPos(window_, insert_after, frame_.overlay.left, frame_.overlay.top, frame_.overlay.width(),
                       frame_.overlay.height(),
                       SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOCOPYBITS)) {
         stats_.note = "window placement failed";
         return false;
     }
+    stats_.window_x = frame_.overlay.left;
+    stats_.window_y = frame_.overlay.top;
+    stats_.window_w = frame_.overlay.width();
+    stats_.window_h = frame_.overlay.height();
     if (!resize_swap_chain(frame_.overlay.width(), frame_.overlay.height(), &stats_.note)) return false;
     return true;
 }
@@ -708,7 +741,10 @@ bool GlossOverlay::pump() {
     const HRESULT present_hr = swap_chain_->Present(0, 0);
     if (FAILED(present_hr)) {
         if (present_hr == DXGI_ERROR_DEVICE_REMOVED || present_hr == DXGI_ERROR_DEVICE_RESET) {
+            // The device is gone: everything built on it (swap chain, shaders,
+            // textures) is unusable and must be recreated from scratch.
             stats_.note = "the GPU device was lost";
+            device_lost_ = true;
             hide();
             return false;
         }

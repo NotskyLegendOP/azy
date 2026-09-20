@@ -252,7 +252,7 @@ closest reading of the six tests.
 | **Stable** | Every failure mode is "the effect is missing": if the capture cannot be created the duplicate is not shown, one warning is logged, and the ring and the sheet carry the skin. Windows can end a capture at any time (the item's `Closed` event, `ReachedConnectionLimit`-style failures, a device reset); each of those is handled by stopping the capture and re-attaching, never by escalating. |
 | **Reversible** | The session, the frame pool, the item and the device are released when the capture stops; the target window is never modified - not one attribute, not one message, not one pixel of Premiere's is written by this technique. |
 | **Compatible with Premiere** | The capture is read-only and window-scoped. It cannot change how Premiere processes input, frames or files; Premiere does not even learn that it is being captured (the capture indicator border, where the OS draws one, is the OS's own decoration). |
-| **Safe for input** | The duplicate window is `WS_EX_TRANSPARENT` + `WS_EX_NOACTIVATE` + `WS_EX_TOOLWINDOW` and answers `HTTRANSPARENT`; there is no keyboard hook anywhere in the project. The capture itself never sees input. |
+| **Safe for input** | The duplicate window is `WS_EX_LAYERED` + `WS_EX_TRANSPARENT` (the pair that makes Windows skip a window during hit testing *across processes*) + `WS_EX_NOACTIVATE` + `WS_EX_TOOLWINDOW`, and it answers `HTTRANSPARENT` as well; there is no keyboard hook anywhere in the project. The capture itself never sees input. |
 | **Necessary** | It is the only supported way to get *skinned* pixels of another window without being inside that process. A DWM thumbnail would be cheaper but cannot be skinned at all (§"rejected" below); GDI screen capture is a CPU copy and forbidden by the performance rules; injection and hooking are permanently out. |
 
 Additional hard rules enforced in code and in `tools/check-overlay.py`:
@@ -265,7 +265,9 @@ Additional hard rules enforced in code and in `tools/check-overlay.py`:
   construction.
 * **Never a CPU copy.** The arrived frame is a D3D11 texture; it is copied on the
   GPU into a texture Azy owns and released. No `Map`, no staging texture, no
-  screenshot, no file.
+  screenshot, no file. A frame pool resize (after the window is resized) happens
+  *after* the frame in hand has been copied and released, so a rebuild can never
+  invalidate a texture that is being read.
 * **The cursor is switched off** (`IGraphicsCaptureSession2`): the compositor draws
   the pointer, so without this the mirror would show a second one.
 * **Pacing is bounded** at 10 frames per second while the window is static and 30

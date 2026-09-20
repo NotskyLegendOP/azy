@@ -200,6 +200,22 @@ void SkinEngine::sync_overlay(const SkinRequest& request, bool allowed, bool wan
 
     const unsigned long long now = GetTickCount64();
 
+    // A lost GPU device is not a failure of the capture: it is the whole pipeline
+    // going away at once. Everything is released and rebuilt from scratch, with the
+    // backoff cleared so the rebuild happens on this very apply.
+    if (overlay_created_ && gloss_.needs_recreate()) {
+        log_warn("overlay: the GPU device was lost - rebuilding the duplicate window");
+        capture_.stop();
+        gloss_.destroy();
+        overlay_created_ = false;
+        overlay_attached_ = nullptr;
+        overlay_attached_pid_ = 0;
+        overlay_failure_burst_ = 0;
+        overlay_next_attempt_ms_ = 0;
+        overlay_report_.created = false;
+        overlay_report_.note = "rebuilding after a lost GPU device";
+    }
+
     if (!overlay_created_) {
         if (now < overlay_next_attempt_ms_) {
             overlay_report_.note = "waiting before the next attempt";

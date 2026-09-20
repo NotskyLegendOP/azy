@@ -100,16 +100,18 @@ float4 ps_main(VsOut input) : SV_Target {
     }
 
     // -------------------------------------------------- picture pass-through
-    // Any pixel inside a monitor keeps exactly what Premiere drew. The feather is
-    // a couple of pixels wide so the boundary between skinned UI and untouched
-    // footage does not turn into a hard line.
+    // Any pixel inside a monitor keeps exactly what Premiere drew. FEATHER is the
+    // width of the transition: inside the rectangle the value is 1 (nothing is
+    // touched at all), and it ramps to 0 over the last FEATHER pixels at the edge,
+    // so the boundary between skinned UI and untouched footage is not a hard line.
+    // The ramp lives *inside* the rectangle, which is why the picture is never
+    // darkened, not even at its border.
     float passthrough = 0.0;
     [unroll] for (int p = 0; p < PASS_SLOTS; ++p) {
         if (g_pass_active[p] > 0.5) {
             const float4 rect = g_pass[p];
-            const float2 lo = rect.xy - FEATHER;
-            const float2 hi = rect.zw + FEATHER;
-            const float inside = step(lo.x, pixel.x) * step(pixel.x, hi.x) * step(lo.y, pixel.y) * step(pixel.y, hi.y);
+            const float2 to_edge = min(pixel - rect.xy, rect.zw - pixel);
+            const float inside = saturate(min(to_edge.x, to_edge.y) / FEATHER);
             passthrough = max(passthrough, inside);
         }
     }
@@ -149,7 +151,9 @@ float4 ps_main(VsOut input) : SV_Target {
             const float dx = min(pixel.x - rect.x, rect.z - pixel.x);
             const float dy = min(pixel.y - rect.y, rect.w - pixel.y);
             const float d = min(dx, dy);
-            const float line = saturate(1.0 - abs(d) / (1.0 * g_dpi));
+            // 1 *physical* pixel wide, at every DPI: a separator that doubled on a
+            // 200% display would read as a thick line, not as a hairline.
+            const float line = saturate(1.0 - abs(d));
             colour = lerp(colour, colour + 0.055, line * g_border * ui);
         }
     }
@@ -157,7 +161,9 @@ float4 ps_main(VsOut input) : SV_Target {
     // ------------------------------------------------------------- glass frame
     // The 1px lighter bezel the whole visual language is built on, plus a trace
     // of the accent along the top edge.
-    const float bezel = saturate(1.0 - edge_distance / (1.0 * g_dpi + 0.5)) * g_bezel * alpha;
+    // Also one physical pixel: the bezel is the boundary of the mirror, and it has
+    // to agree with the frame it is drawn over.
+    const float bezel = saturate(1.0 - edge_distance / 1.5) * g_bezel * alpha;
     colour += bezel * (0.075 + g_accent.rgb * g_accent.a * 0.05);
 
     if (g_grain > 0.0) {

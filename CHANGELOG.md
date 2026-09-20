@@ -27,7 +27,10 @@ checklist that closes the rest is `docs/AZY_OVERLAY_TEST_PLAN.md`.
   handle cannot make Azy mirror something else.
 * **The duplicate window.** A click-through, never-activating, non-topmost window
   placed directly above Premiere, drawn with DirectComposition from a flip-model
-  swap chain with premultiplied alpha.
+  swap chain with premultiplied alpha. Click-through *across processes* is carried by
+  `WS_EX_LAYERED | WS_EX_TRANSPARENT` — `HTTRANSPARENT` alone only forwards inside
+  the same thread — and the window is created without a redirection bitmap, so there
+  is no GDI surface that could ever be painted behind the mirror.
 * **The composition shader.** One full-screen pass, embedded in the executable and
   compiled at start-up: charcoal darkening, a glass sheen, a lifted black level, an
   edge vignette, 1px panel separators, the 1px lighter bezel, rounded corners, and
@@ -35,7 +38,9 @@ checklist that closes the rest is `docs/AZY_OVERLAY_TEST_PLAN.md`.
   so footage is never darkened.
 * **Smart pacing.** 10 frames per second while the window sits still, 30 while it is
   changing, driven by the capture itself (frames arriving means the window is doing
-  something). The render timer is removed entirely while the duplicate is hidden.
+  something; 5/24 in performance mode). The frame pool is rebuilt *after* the frame
+  in hand has been copied and released, so a resize can never invalidate a texture
+  being read. The render timer is removed entirely while the duplicate is hidden.
 * **Failure containment.** Every overlay failure ends with the ring and the veil
   still doing their job. An unsupported host is reported once and never retried;
   other failures are retried with backoff and then given up on for the session.
@@ -47,8 +52,10 @@ checklist that closes the rest is `docs/AZY_OVERLAY_TEST_PLAN.md`.
   constant buffer and the C++ struct must agree member by member, the region slot
   counts must match, no `float3` may appear in the buffer, the C++ `static_assert`
   must equal the size the HLSL packing rules produce (272 bytes), nothing may call
-  the monitor form of the capture API, and the own-process guard must still exist.
-  The checker was itself tested by breaking the shader in two ways.
+  the monitor form of the capture API, the own-process guard must still exist, and
+  the duplicate window must still be layered, transparent and non-activating, with
+  no `*TOPMOST` anywhere and `HTTRANSPARENT` still answered. The checker was itself
+  tested by breaking each of those on purpose and confirming it failed every time.
 * `docs/AZY_OVERLAY_ARCHITECTURE.md` (11 sections, the feasibility decision, the
   error-recovery matrix) and `docs/AZY_OVERLAY_TEST_PLAN.md` (first-run checklist,
   targeted checks, ten scenarios).
@@ -67,6 +74,9 @@ checklist that closes the rest is `docs/AZY_OVERLAY_TEST_PLAN.md`.
 
 ### Known limitations of this release
 
+* The window-style combination is the least-documented part of the feature; its
+  failure mode is "nothing is shown" rather than an opaque box, and §4 of the
+  architecture document names the knob.
 * Widgets are still not restyled - the skin applies to pixels, and changing
   Premiere's controls would require injection, which stays permanently out of
   scope.

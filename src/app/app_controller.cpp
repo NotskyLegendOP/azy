@@ -820,6 +820,65 @@ std::string AppController::treatment_summary(const FeatureSet& features) const {
     return summary;
 }
 
+// CPU time of this process between two calls, as a percentage of one core.
+//
+// Measured with GetProcessTimes, which the scheduler maintains anyway: two calls
+// and one subtraction, no timer, no sampling thread. It is a *process* figure (Azy
+// is one process) and it is a percentage of a single core, so 100% means one core
+// saturated. The first call has no previous sample to compare against and says so
+// rather than inventing a number.
+std::string AppController::process_cpu_line() const {
+    FILETIME created{};
+    FILETIME exited{};
+    FILETIME kernel{};
+    FILETIME user{};
+    if (!GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user)) {
+        return "unavailable";
+    }
+    const auto to_seconds = [](const FILETIME& value) {
+        ULARGE_INTEGER ticks{};
+        ticks.LowPart = value.dwLowDateTime;
+        ticks.HighPart = value.dwHighDateTime;
+        return static_cast<double>(ticks.QuadPart) / 10000000.0;  // 100 ns units
+    };
+    const double cpu_seconds = to_seconds(kernel) + to_seconds(user);
+    const double wall = win::wall_seconds();
+
+    static double previous_cpu = 0.0;
+    static double previous_wall = 0.0;
+    std::string text;
+    if (previous_wall > 0.0 && wall > previous_wall) {
+        const double percent = (cpu_seconds - previous_cpu) / (wall - previous_wall) * 100.0;
+        text = str_format("%.1f%% of one core (measured between the last two diagnostics reads)", percent);
+    } else {
+        text = "no previous sample yet (open the diagnostics again)";
+    }
+    previous_cpu = cpu_seconds;
+    previous_wall = wall;
+    return text;
+}
+
+std::string AppController::measured_rates_line(unsigned long long frames, unsigned long long presents) const {
+    const double wall = win::wall_seconds();
+    static unsigned long long previous_frames = 0;
+    static unsigned long long previous_presents = 0;
+    static double previous_wall = 0.0;
+    std::string text;
+    if (previous_wall > 0.0 && wall > previous_wall + 0.05) {
+        const double seconds = wall - previous_wall;
+        const double capture_fps = static_cast<double>(frames - previous_frames) / seconds;
+        const double draw_fps = static_cast<double>(presents - previous_presents) / seconds;
+        text = str_format("capture %.1f fps, draw %.1f fps (measured between the last two diagnostics reads)",
+                          capture_fps < 0.0 ? 0.0 : capture_fps, draw_fps < 0.0 ? 0.0 : draw_fps);
+    } else {
+        text = "no previous sample yet (open the diagnostics again)";
+    }
+    previous_frames = frames;
+    previous_presents = presents;
+    previous_wall = wall;
+    return text;
+}
+
 std::vector<std::string> AppController::diagnostics_lines() const {
     std::vector<std::string> lines;
     const win::SkinTarget& target = tracker_.target();
@@ -870,10 +929,12 @@ std::vector<std::string> AppController::diagnostics_lines() const {
     }
 
     // --- the duplicate window (round 8) --------------------------------------
-    // These are the facts the overlay debug screen asks for that a process can know
-    // about itself. Two of them are deliberately absent: the capture latency and
-    // the GPU memory use have no per-frame counter in the API being used, and a
-    // number nobody can measure would be worse than a missing line.
+    // The facts the overlay debug screen asks for, as far as a process can honestly
+    // know them. The capture latency is reported as the age of the newest captured
+    // frame (the part Azy can measure); GPU *memory* use is not reported at all,
+    // because the API being used exposes no counter for it and a number nobody can
+    // measure would be worse than a missing line. Everything that reads "measured"
+    // in these lines comes from two samples, and says so on the first one.
     const win::SkinEngine::OverlayReport& report = engine_.overlay_report();
     const win::CaptureStatus capture = engine_.capture_status();
     const win::GlossOverlay::Stats& ostats = engine_.overlay_stats();
@@ -882,20 +943,36 @@ std::vector<std::string> AppController::diagnostics_lines() const {
                                report.capturing ? "yes" : "no",
                                report.supported ? "supported on this host" : "NOT supported on this host"));
     if (engine_.overlay_window() != nullptr) {
-        lines.push_back(str_format("  handles: duplicate 0x%p, Premiere 0x%p (pid %lu) | monitor (%d,%d)-(%d,%d) | %u dpi",
-                                   (void*)engine_.overlay_window(), (void*)tracker_.target().hwnd, tracker_.pid(),
-                                   tracker_.target().monitor.left, tracker_.target().monitor.top,
-                                   tracker_.target().monitor.right, tracker_.target().monitor.bottom,
-                                   tracker_.target().dpi));
+        const Rect& frame = tracker_.target().visible_frame;
+        lines.push_back(str_format("  handles: duplicate 0x%p (Azy pid %lu), Premiere 0x%p (pid %lu) | monitor "
+                                   "(%d,%d)-(%d,%d) | %u dpi",
+                                   (void*)engine_.overlay_window(), GetCurrentProcessId(),
+                                   (void*)tracker_.target().hwnd, tracker_.pid(), tracker_.target().monitor.left,
+                                   tracker_.target().monitor.top, tracker_.target().monitor.right,
+                                   tracker_.target().monitor.bottom, tracker_.target().dpi));
+        // Both rectangles, side by side: this is the line that answers "does the
+        // duplicate actually sit where Premiere is".
+        lines.push_back(str_format("  geometry: Premiere %d,%d %dx%d | duplicate %d,%d %dx%d | offset %d,%d",
+                                   frame.left, frame.top, frame.width(), frame.height(), ostats.window_x,
+                                   ostats.window_y, ostats.window_w, ostats.window_h,
+                                   ostats.window_x - frame.left, ostats.window_y - frame.top));
         lines.push_back(str_format("  capture: %ux%u content | %llu frames | %llu copies | %llu empty polls | "
-                                   "%llu failures | %llu pool resizes",
+                                   "%llu failures | %llu pool resizes | newest frame %llu ms old | state: %s",
                                    capture.content_width, capture.content_height, capture.frames, capture.copies,
-                                   capture.empty_polls, capture.failures, capture.pool_resizes));
+                                   capture.empty_polls, capture.failures, capture.pool_resizes,
+                                   capture.frame_age_ms,
+                                   capture.running ? (capture.item_closed ? "item closed" : "running")
+                                                   : "stopped"));
         lines.push_back(str_format("  rendering: %llu presents | %d pass-through regions | %d panel hairlines | "
-                                   "%u fps (%s) | uv %.3f,%.3f-%.3f,%.3f | capture size matches window: %s",
+                                   "%u fps (%s) | uv %.3f,%.3f-%.3f,%.3f | capture size matches window: %s | "
+                                   "swap chain 2 x %dx%d BGRA8 premultiplied, capture texture %dx%d (sizes only, "
+                                   "no VRAM number is claimed)",
                                    ostats.presents, ostats.pass_regions, ostats.panel_lines, ostats.paced_fps,
                                    ostats.active ? "active" : "idle", ostats.uv[0], ostats.uv[1], ostats.uv[2],
-                                   ostats.uv[3], ostats.capture_size_agrees ? "yes" : "no"));
+                                   ostats.uv[3], ostats.capture_size_agrees ? "yes" : "no", ostats.width,
+                                   ostats.height, capture.content_width, capture.content_height));
+        lines.push_back("  rates: " + measured_rates_line(capture.frames, ostats.presents));
+        lines.push_back("  process cpu: " + process_cpu_line());
     }
     if (capture.cursor_disabled) {
         lines.push_back("  capture notes: the mouse cursor is excluded; it is drawn by the compositor, not by "

@@ -107,6 +107,10 @@ private:
     // settings window: "the skin does nothing" can then be reported with a
     // screenshot instead of a log file.
     std::vector<std::string> diagnostics_lines() const;
+    std::string process_cpu_line() const;
+    // Frames per second actually observed, from two diagnostics reads. Honest
+    // about the first read, which has nothing to compare against.
+    std::string measured_rates_line(unsigned long long frames, unsigned long long presents) const;
     std::string treatment_summary(const FeatureSet& features) const;
 
     // Sampling interval for window geometry while the user is dragging/resizing

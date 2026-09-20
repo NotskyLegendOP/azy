@@ -30,7 +30,7 @@ python3 tools/check-overlay.py
 ```
 
 Latest results: **649 checks, 0 failures**; **`verify.sh` 7/7 green**; Windows
-artefact `AzySkin.exe` **610,816 bytes** (61.1 % of the 1 MB budget), Release, x64,
+artefact `AzySkin.exe` **614,400 bytes** (61.4 % of the 1 MB budget), Release, x64,
 zero warnings from `src/` + `include/`.
 
 ---
@@ -65,7 +65,8 @@ zero warnings from `src/` + `include/`.
 | Overlay capture mapping: the sub-rectangle of a maximized window's capture, refusal to draw when the geometry does not intersect, panel clipping into window-local pixels, pass-through ordering (Program first), hairlines excluded next to the picture regions, shader packing and zero padding, `overlay_rect` for windowed/maximized/fullscreen | VERIFIED | `test_capture_math` (new in v1.3.0) |
 | Duplicate window style: visible at the shipped defaults, sliders move it, performance mode keeps the structure and drops the GPU extras, rounded corners off = square, Original theme = no duplicate at all, neutral accent = no hue | VERIFIED | `test_overlay_style` (new in v1.3.0) |
 | The shader's constant buffer and the C++ struct agree (members, order, sizes, slot counts, no `float3`, 272 bytes by the HLSL packing rules) | VERIFIED | `verify.sh` step 3, `tools/check-overlay.py`. The checker was itself tested by breaking the shader twice (renamed member, `float3`) and confirming it failed both times. |
-| Nothing calls the monitor form of the capture API; the own-process guard exists | VERIFIED | `verify.sh` step 3 (`tools/check-overlay.py` greps `src/` and the capture module) |
+| Nothing calls the monitor form of the capture API; the own-process guard exists; the desktop window is never captured | VERIFIED | `verify.sh` step 3 (`tools/check-overlay.py` greps `src/` and the capture module) |
+| The duplicate window keeps the styles that make it click-through, non-activating and never topmost, and still answers `HTTRANSPARENT` | VERIFIED | `verify.sh` step 3; mutation-tested by dropping `WS_EX_LAYERED`, adding `WS_EX_TOPMOST` and removing `HTTRANSPARENT` on purpose |
 
 ## 2b. The duplicate window overlay (COMPILED — nothing runtime-verified)
 
@@ -82,7 +83,7 @@ been observed.
 | The capture's pixel size matches the window rectangle at 100–200 % DPI | UNVERIFIED | Nothing documents a guarantee; the mismatch is reported in the debug overlay rather than hidden |
 | The mirror lines up with the real window (UV mapping) | COMPILED (math VERIFIED, alignment UNVERIFIED) | `test_capture_math` proves the arithmetic; whether it *lines up* needs eyes |
 | The Program Monitor's footage is not darkened | COMPILED | The shader's pass-through loop, the rectangles from the panel model, `test_capture_math` for the rectangles |
-| Click-through, no focus, no keystrokes | COMPILED | `WS_EX_TRANSPARENT`/`NOACTIVATE`/`TOOLWINDOW`, `HTTRANSPARENT`, `MA_NOACTIVATE`, and no keyboard hook anywhere in the source. The round-3 "not in front" report was about stacking, which is measured here structurally, not by a click test. |
+| Click-through, no focus, no keystrokes | COMPILED | `WS_EX_LAYERED`/`TRANSPARENT`/`NOACTIVATE`/`TOOLWINDOW`, `HTTRANSPARENT`, `MA_NOACTIVATE`, and no keyboard hook anywhere in the source; the styles are held in place by the checker. Whether a real click lands on Premiere is still UNVERIFIED — that needs the machine. |
 | Above Premiere, below other applications, never topmost | COMPILED | `z_order_anchor()` + `SetWindowPos` with the window in front of Premiere as `hWndInsertAfter`; no `HWND_TOPMOST` anywhere |
 | No recursive/infinite mirror | VERIFIED (structurally) + UNVERIFIED (visually) | Window capture only, the monitor form is banned by `tools/check-overlay.py`, and the capture refuses Azy's own process. That makes nesting impossible *by construction*; the visual check is scenario 2.1 of the test plan. |
 | Geometry sync (move, resize, maximize, minimize, DPI, monitors) | COMPILED | `overlay_rect` (tested), the tracker's event stream, `ResizeBuffers` in place |

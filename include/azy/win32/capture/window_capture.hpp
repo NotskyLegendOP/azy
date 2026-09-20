@@ -47,6 +47,10 @@ struct CaptureStatus {
     int content_height = 0;
     unsigned paced_fps = 0;
     unsigned long long frames = 0;
+    // Age of the newest frame at the moment this snapshot was taken, in
+    // milliseconds (0 when nothing has arrived yet). It is measured, not modelled:
+    // the worker stamps every frame as it copies it.
+    unsigned long long frame_age_ms = 0;
     unsigned long long copies = 0;      // frames actually handed to the renderer
     unsigned long long empty_polls = 0;
     unsigned long long failures = 0;

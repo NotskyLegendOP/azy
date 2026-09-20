@@ -94,10 +94,20 @@ public:
     void request_burst(double seconds);
     void set_performance_mode(bool performance_mode);
 
+    // True after the GPU device was lost (a driver reset, a hybrid-GPU switch, a
+    // remote-session change). The owner must destroy and recreate the overlay:
+    // nothing can be drawn on a removed device, and a dead device would otherwise
+    // be retried forever.
+    bool needs_recreate() const { return device_lost_; }
+
     struct Stats {
         bool visible = false;
-        int width = 0;
+        int width = 0;   // swap chain size == the duplicate window's client size
         int height = 0;
+        int window_x = 0;  // where the duplicate actually is, in physical pixels
+        int window_y = 0;
+        int window_w = 0;
+        int window_h = 0;
         float uv[4] = {0.0f, 0.0f, 1.0f, 1.0f};
         int pass_regions = 0;
         int panel_lines = 0;
@@ -154,6 +164,7 @@ private:
     WindowCapture* capture_ = nullptr;
 
     bool visible_ = false;
+    bool device_lost_ = false;
     bool dirty_ = true;
     bool performance_mode_ = false;
     UINT timer_ms_ = 0;

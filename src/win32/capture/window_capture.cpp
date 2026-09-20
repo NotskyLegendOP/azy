@@ -181,6 +181,11 @@ bool WindowCapture::read_into(ID3D11DeviceContext* context, ID3D11Texture2D* des
 
 CaptureStatus WindowCapture::status() const {
     CaptureStatus out;
+    // How old the newest frame is *now*: the age that matters when the user looks at
+    // the debug screen.
+    const unsigned long long newest_ms = last_frame_ms_.load(std::memory_order_relaxed);
+    const unsigned long long now = static_cast<unsigned long long>(now_ms());
+    out.frame_age_ms = newest_ms == 0 ? 0 : (now > newest_ms ? now - newest_ms : 0);
     out.running = running_.load(std::memory_order_acquire);
     out.item_closed = item_closed_.load(std::memory_order_acquire);
     {
@@ -331,7 +336,10 @@ void WindowCapture::thread_main() {
         while (running_.load(std::memory_order_acquire) && !item_closed_.load(std::memory_order_acquire)) {
             unsigned fps = paced_fps_live_.load(std::memory_order_relaxed);
             if (now_ms() < burst_until_ms_.load(std::memory_order_relaxed)) fps = kMaxPacedFps;
-            const DWORD wait_ms = fps == 0 ? 0 : std::max<DWORD>(1, 1000 / fps);
+            // Never a zero wait: an unpaced poll loop would be a busy loop, and a
+            // busy loop is the one thing this design must not contain. The floor is
+            // the burst rate.
+            const DWORD wait_ms = std::max<DWORD>(1, 1000 / (fps == 0 ? kMaxPacedFps : fps));
             if (WaitForSingleObject(stop_event_, wait_ms) != WAIT_TIMEOUT) break;
 
             IDirect3D11CaptureFrame* frame = nullptr;
@@ -354,6 +362,9 @@ void WindowCapture::thread_main() {
             IInspectable* surface = nullptr;
             IDirect3DDxgiInterfaceAccess* access = nullptr;
             ID3D11Texture2D* texture = nullptr;
+            SizeInt32 content_size{};
+            bool content_known = false;
+            bool pool_needs_recreate = false;
             bool copied = false;
             do {
                 if (FAILED(frame->get_Surface(&surface)) || surface == nullptr) break;
@@ -369,17 +380,16 @@ void WindowCapture::thread_main() {
 
                 SizeInt32 content{};
                 if (FAILED(frame->get_ContentSize(&content)) || content.width <= 0 || content.height <= 0) break;
+                content_size = content;
+                content_known = true;
 
                 // The frame pool is sized once, at the size the window had when
-                // the capture started. After a resize the pool has to be told, or
-                // it keeps handing out frames at the old size (which reads as a
-                // stretched or cropped mirror).
-                if (content.width != pool_size.width || content.height != pool_size.height) {
-                    if (SUCCEEDED(pool->Recreate(winrt_device, kPixelFormatB8G8R8A8UIntNormalized, 2, content))) {
-                        pool_size = content;
-                        pool_resizes_.fetch_add(1, std::memory_order_relaxed);
-                    }
-                }
+                // the capture started. After a resize it has to be told, or it
+                // keeps handing out frames at the old size (which reads as a
+                // stretched or cropped mirror). The resize happens *after* this
+                // frame has been copied and released, so a pool rebuild can never
+                // invalidate the texture being read.
+                pool_needs_recreate = content.width != pool_size.width || content.height != pool_size.height;
 
                 D3D11_TEXTURE2D_DESC source_desc{};
                 texture->GetDesc(&source_desc);
@@ -434,6 +444,16 @@ void WindowCapture::thread_main() {
             release(access);
             release(texture);
             release(frame);
+
+            // Only now that this frame is released is it safe to rebuild the pool:
+            // a pool resize while one of its textures is still being read is the
+            // one ordering that could hand out a half-updated surface.
+            if (pool_needs_recreate && content_known) {
+                if (SUCCEEDED(pool->Recreate(winrt_device, kPixelFormatB8G8R8A8UIntNormalized, 2, content_size))) {
+                    pool_size = content_size;
+                    pool_resizes_.fetch_add(1, std::memory_order_relaxed);
+                }
+            }
 
             if (copied) {
                 consecutive_failures = 0;

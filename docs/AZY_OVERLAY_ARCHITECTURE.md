@@ -186,11 +186,30 @@ static path is kept for hosts where the capture cannot run.
 
 ## 4. Input
 
-* **Mouse:** the duplicate never receives it. `WS_EX_TRANSPARENT` makes the window
-  transparent to hit testing, `WM_NCHITTEST` returns `HTTRANSPARENT` as a second,
-  explicit guarantee, and `WM_MOUSEACTIVATE` returns `MA_NOACTIVATE`. Mouse down,
-  drag, wheel, double-click, right-click and timeline scrubbing therefore reach the
-  real Premiere window underneath, unchanged. IMPLEMENTED — RUNTIME UNVERIFIED.
+* **Mouse:** the duplicate never receives it. The window is created with
+  `WS_EX_LAYERED | WS_EX_TRANSPARENT`, which is what makes Windows skip it during hit
+  testing **across processes** — `WM_NCHITTEST` answering `HTTRANSPARENT` only
+  forwards a hit to windows of the *same thread* (documented behaviour), so that
+  alone could not carry a click into Premiere. The window procedure returns
+  `HTTRANSPARENT` as well, for the same-process case, and `WM_MOUSEACTIVATE`
+  returns `MA_NOACTIVATE`. Mouse down, drag, wheel, double-click, right-click and
+  timeline scrubbing therefore reach the real Premiere window underneath, unchanged.
+  IMPLEMENTED — RUNTIME UNVERIFIED.
+* **The constant alpha is 255 on purpose.** A layered window has to state one
+  (`SetLayeredWindowAttributes`). 255 changes nothing: the skin's transparency comes
+  from the compositor's own premultiplied alpha, and a smaller value would dim the
+  whole mirror. If a future report says the duplicate looks dimmed, this is the
+  first line to look at.
+* **The one combination that is not documented together.** `WS_EX_LAYERED` and
+  `WS_EX_TRANSPARENT` are required for cross-process click-through (above);
+  `WS_EX_NOREDIRECTIONBITMAP` is required so there is no GDI surface that could be
+  painted black behind the mirror. Microsoft documents each of the three with
+  DirectComposition, and its DirectComposition *layered child window* sample uses
+  the layered bit too, but the three are not documented *together* on a top-level
+  window. The failure mode was chosen deliberately: with no redirection bitmap
+  there is nothing to paint, so an unsupported combination shows nothing — the ring
+  and the sheet are put back — rather than an opaque box over Premiere. Test plan
+  §3.1 is the check for it.
 * **Keyboard:** nothing in the capture or composition path touches keyboard input.
   There is no keyboard hook, no `RegisterHotKey`, no message filter. `WM_SETFOCUS`
   is handled only to give focus back to the tracked window if Windows ever hands it
@@ -264,10 +283,38 @@ Design rules, all of them implemented:
   kill the timer, join the capture worker and release every GPU object; the device
   itself is released with the overlay. Nothing is left running after "Exit" or
   after Premiere closes.
-* **Budget:** the executable grew from 559,616 to 610,816 bytes (61.1% of the 1 MB
+* **Budget:** the executable grew from 559,616 to 614,400 bytes (61.4% of the 1 MB
   budget) — VERIFIED by `tools/inspect-pe.py`. No CPU or GPU percentage is claimed
   anywhere: none has been measured on a real machine, and the brief forbids numbers
   that were not measured.
+
+---
+
+## 6b. The debug screen's field list
+
+The brief lists the fields the overlay's debug view has to show. Where they are
+available they are **measured**, and where they are not the line says so instead of
+estimating. Diagnostics are visible in Settings → *Diagnostics* (and logged when
+debug mode is on); they are read on demand, so nothing here costs anything while the
+user is not looking.
+
+| Field | Where it comes from | Status |
+|---|---|---|
+| Premiere's window handle and process id | the tracker's target + `GetWindowThreadProcessId` | measured |
+| The duplicate's window handle and Azy's process id | `GetCurrentProcessId` + the overlay's `HWND` | measured |
+| Premiere's X/Y/W/H | `SkinTarget::visible_frame` | measured |
+| The duplicate's X/Y/W/H, and the offset between the two | the last placement the overlay made | measured — the offset should be `0,0` |
+| DPI | the tracker's per-monitor DPI | measured |
+| Monitor rectangle | the tracker's monitor bounds | measured |
+| Capture state | the capture's own flags (`running`, `item closed`, unsupported) | measured |
+| Captured frames, GPU copies, empty polls, failures, frame-pool rebuilds | counters in the capture worker | measured |
+| Capture rate and draw rate | two diagnostics reads, divided by the wall time between them | measured — the first read says "no previous sample yet" |
+| Newest captured frame's age | the worker stamps every frame it copies | measured |
+| Render pacing (idle/active) and the pass-through/panel counts | the overlay's own stats | measured |
+| Overlay state (`on screen`, note, supported on this host) | the engine's overlay report | measured |
+| GPU resources | the *sizes* of the swap chain buffers and the capture texture | reported as an inventory only — no VRAM figure is claimed, because the API exposes no counter for it |
+| Process CPU | `GetProcessTimes` deltas between two diagnostics reads | measured, as a percentage of one core |
+| Capture latency | — | **not reported.** Windows Graphics Capture gives no trustworthy per-frame timestamp in this code path, so the nearest honest figure is the newest frame's age |
 
 ---
 
@@ -280,7 +327,7 @@ Design rules, all of them implemented:
 | `CreateForWindow` refuses the window | Retried with backoff (4 s, 8 s, 12 s…), the reason logged; after three attempts the overlay is disabled for the session | Ring + veil |
 | The capture stops delivering frames (240 consecutive failures) | The worker ends, reports the reason; the engine sees a stopped capture and re-attaches on the next apply | Ring + veil, then retry |
 | The frame pool outlives a window resize | `Recreate` is called with the new content size on the worker thread | Mirror continues at the new size |
-| The GPU device is lost (`DXGI_ERROR_DEVICE_REMOVED`/`RESET` on present) | The duplicate hides itself; the note says "the GPU device was lost" | Ring + veil |
+| The GPU device is lost (`DXGI_ERROR_DEVICE_REMOVED`/`RESET` on present) | The overlay flags itself for recreation; the engine stops the capture, destroys the overlay (and with it the lost device, the swap chain, the shaders and the textures) and rebuilds everything on the next apply, with the backoff cleared so it happens immediately | Mirroring again a moment later — the ring and the veil cover the gap |
 | Premiere is minimized | The duplicate hides, the capture stops, `Minimized` is not an error | Restores automatically |
 | Premiere is closed | Capture worker joined, all GPU resources released | Nothing held |
 | Premiere is restarted | New window, new capture, no Azy restart needed | Mirroring again |
@@ -291,6 +338,15 @@ Design rules, all of them implemented:
 **The rule behind the table:** a failure of the duplicate may never be the reason
 the skin disappears. Every path above ends with either the mirror working or the
 previous layers doing their job.
+
+**What is *not* handled this way: a hard process crash.** If Azy is killed or
+crashes outright there is no marker file and no watchdog on the next start; it simply
+starts again and tries the mirror again. That is a deliberate non-goal for 1.3.0 —
+the overlay has no persistent state that could be left inconsistent, the capture dies
+with the process, and every Windows-side change Azy makes to Premiere's window is
+read-and-restored rather than owned. The open question a crash would raise is a
+*cause*, not a cleanup: if a real run ever crashes while mirroring, the log up to
+that point is the artefact to send.
 
 **Deliberate design decision worth stating:** overlay problems do **not** feed the
 failure tracker that can trip Safe Mode. A missing capture API is a property of the
@@ -364,16 +420,20 @@ the settings window retries it.
    hides it — but the *mirror itself* may contain it on hosts where a border is
    drawn inside the captured pixels. Reported through `border_state` in the debug
    overlay.
-6. **`d3dcompiler_47.dll` is required** for the composition shader; every Windows
+6. **The window-style combination is the least-documented part of the feature**
+   (`WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOREDIRECTIONBITMAP` on one top-level
+   window, §4). It has a safe failure mode — nothing is shown, the static layers
+   carry the skin — and a one-line knob in `gloss_overlay.cpp`.
+7. **`d3dcompiler_47.dll` is required** for the composition shader; every Windows
    10 1809+ machine ships it, but where it is missing the duplicate is not created
    and the static layers are used.
-7. **An elevated Premiere blocks placement**, exactly as in earlier rounds
+8. **An elevated Premiere blocks placement**, exactly as in earlier rounds
    (UIPI). Unchanged, reported, and fixable by running Azy elevated.
-8. **Animations are still not implemented.** The `Animations` setting remains a
+9. **Animations are still not implemented.** The `Animations` setting remains a
    reserved key with no code path behind it; the brief asks for a static look, and
    the settings window now says so rather than offering a control that does
    nothing.
-9. **Two cursors if cursor capture cannot be disabled** (older capture interface):
+10. **Two cursors if cursor capture cannot be disabled** (older capture interface):
    reported in the diagnostics, not silently ignored.
 
 ---
