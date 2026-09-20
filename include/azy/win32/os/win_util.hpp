@@ -50,6 +50,17 @@ private:
 
 // --- Privileges -----------------------------------------------------------
 
+// The handle to pass as `hWndInsertAfter` to SetWindowPos so that a new window
+// ends up *directly above* `below` in the z-order - and above nothing else. Used
+// by both composition layers so the ring and the overlay always stack the same way.
+HWND z_order_anchor(HWND below);
+
+// True when `window` really sits above `other` in the z-order (walks down from
+// `window`, bounded). Azy's surfaces are only visible when this holds; when a
+// higher-integrity process owns `other`, Windows refuses the placement and every
+// API still reports success.
+bool window_is_above(HWND window, HWND other);
+
 // Windows integrity level of a process: 0 = untrusted, 1 = low, 2 = medium
 // (a normally launched application), 3 = high (elevated / "as administrator"),
 // 4 = system. Returns -1 when it cannot be read, which is itself meaningful: a

@@ -98,6 +98,9 @@ ring on (0,0)-(1920,1040), screen (0,0)-(1920,1080), work area top 0 bottom 1040
 
 | # | Steps | Pass criteria |
 |---|---|---|
+| 2.0a | Settings → Appearance → uncheck *Cover the whole window* | The tint over the whole window disappears immediately; the edge ring stays. Log: `overlay: … veil …` is no longer followed by anything until it is re-enabled |
+| 2.0b | Re-enable it and drag *Overlay strength* 0 → 100% | The tint deepens smoothly and immediately (no animation, no repaint storm: one `SetLayeredWindowAttributes` call and one fill per change). At 100% the layer reaches 60% alpha; at 0% only the ring remains |
+| 2.0c | With the overlay on, click into the Premiere timeline, drag a clip, scroll, use shortcuts | Nothing is intercepted: the overlay is click-through (`WS_EX_TRANSPARENT`), never activated (`WS_EX_NOACTIVATE`) and never appears in Alt+Tab |
 | 2.1 | Single left-click the tray icon (skin ON → OFF) | Frame reverts **immediately** and exactly to its previous appearance (title bar colour, corner rounding, border). Log: `skin removed (skin disabled)`, `skin disabled by the user` |
 | 2.2 | Single left-click again | Skin returns instantly. No Premiere restart, no flicker beyond one apply |
 | 2.3 | Toggle 20 times in a row | No leakage (see §8), no flicker between states, no delay |

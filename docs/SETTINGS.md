@@ -66,6 +66,8 @@ schema=1
 | `corner_radius` | 0–16 px (DIP) | `8` | Azy's surface radius. Also clamped at 20% of the window's shorter side, and forced to 0 when DWM rounded the frame (the ring then mirrors DWM's own 8 DIP radius instead) |
 | `shadow_intensity` | 0–1 | `0.40` | Soft inner shadow at the window band, 10% → 32% black. Ignored in Performance mode |
 | `darkness` | 0–1 | `0.50` | Position on the charcoal ramp between "lifted" (46,47,51) and "deep" (11,11,13). Never pure black at either end |
+| `overlay` | bool | `1` | Cover the **whole** window with one translucent charcoal layer (the overlay), instead of decorating only its edge. Off = the ring alone |
+| `overlay_intensity` | 0–1 | `0.35` | How strong that layer is: alpha 5% → 60%. 0 is identical to `overlay=0`. It also widens the edge falloff proportionally, so the window is framed rather than outlined |
 
 ### `[performance]`
 

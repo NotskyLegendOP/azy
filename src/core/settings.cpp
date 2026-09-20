@@ -79,6 +79,7 @@ void Settings::clamp() {
     appearance.border_intensity = std::max(0.0, std::min(1.0, appearance.border_intensity));
     appearance.shadow_intensity = std::max(0.0, std::min(1.0, appearance.shadow_intensity));
     appearance.darkness = std::max(0.0, std::min(1.0, appearance.darkness));
+    appearance.overlay_intensity = std::max(0.0, std::min(1.0, appearance.overlay_intensity));
     appearance.corner_radius_dip = std::max(0, std::min(16, appearance.corner_radius_dip));
     if (schema < 1) schema = 1;
     if (failure_count < 0) failure_count = 0;
@@ -126,7 +127,9 @@ std::string Settings::to_ini() const {
     out += "border_intensity=" + fmt_double(appearance.border_intensity) + "\n";
     out += "corner_radius=" + std::to_string(appearance.corner_radius_dip) + "\n";
     out += "shadow_intensity=" + fmt_double(appearance.shadow_intensity) + "\n";
-    out += "darkness=" + fmt_double(appearance.darkness) + "\n\n";
+    out += "darkness=" + fmt_double(appearance.darkness) + "\n";
+    out += "overlay=" + bool_str(appearance.overlay) + "\n";
+    out += "overlay_intensity=" + fmt_double(appearance.overlay_intensity) + "\n\n";
 
     out += "[performance]\n";
     out += "performance_mode=" + bool_str(performance_mode) + "\n";
@@ -150,7 +153,8 @@ std::string Settings::to_ini() const {
     std::set<std::string> known;
     static const char* kKnown[] = {
         "enabled", "start_with_windows", "apply_automatically", "theme", "glass_intensity",
-        "border_intensity", "corner_radius", "shadow_intensity", "darkness", "performance_mode",
+        "border_intensity", "corner_radius", "shadow_intensity", "darkness", "overlay",
+        "overlay_intensity", "performance_mode",
         "suspend_while_minimized", "suspend_while_inactive", "experimental", "safe_mode",
         "safe_mode_reason", "failures", "failure_window_start", "failure_last", "failure_tripped",
         "last_premiere_version", "schema"};
@@ -201,6 +205,11 @@ Settings Settings::from_ini(const std::string& text, std::vector<std::string>* w
             s.appearance.shadow_intensity = read_double(value, s.appearance.shadow_intensity);
         } else if (key == "darkness") {
             s.appearance.darkness = read_double(value, s.appearance.darkness);
+        } else if (key == "overlay") {
+            bool v = false;
+            if (parse_bool(value, v)) s.appearance.overlay = v;
+        } else if (key == "overlay_intensity") {
+            s.appearance.overlay_intensity = read_double(value, s.appearance.overlay_intensity);
         } else if (key == "performance_mode") {
             bool v = false;
             if (parse_bool(value, v)) s.performance_mode = v;

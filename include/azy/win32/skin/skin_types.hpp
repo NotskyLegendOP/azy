@@ -89,7 +89,8 @@ struct SkinRequest {
 // What the engine actually did (used for logging, tray tooltip, diagnostics).
 struct SkinState {
     bool frame_applied = false;    // DWM window attributes are in place
-    bool surface_visible = false;  // Azy's composition surface is on screen
+    bool surface_visible = false;  // Azy's ring is on screen
+    bool overlay_visible = false;  // ... and the whole-window overlay with it
     SuspendReason suspend = SuspendReason::None;
     unsigned long long applies = 0;   // number of successful applies
     unsigned long long failures = 0;  // number of failed operations (feeds safe mode)

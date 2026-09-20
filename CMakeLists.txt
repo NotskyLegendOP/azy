@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(AzySkin
-    VERSION 1.0.2
+    VERSION 1.1.0
     DESCRIPTION "Azy Skin - a lightweight visual skin for Adobe Premiere Pro"
     LANGUAGES CXX)
 
@@ -73,6 +73,7 @@ if(WIN32)
         src/win32/skin/dwm_composer.cpp
         src/win32/skin/gdiplus_renderer.cpp
         src/win32/skin/input_guard.cpp
+        src/win32/skin/overlay_veil.cpp
         src/win32/skin/skin_engine.cpp
         src/win32/skin/skin_types.cpp
         src/win32/skin/window_tracker.cpp

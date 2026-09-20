@@ -13,22 +13,6 @@ namespace azy {
 namespace win {
 namespace {
 
-// Confirms the one invariant the whole technique rests on: the strips sit in
-// front of the Premiere window in the z-order. If they ever ended up behind it,
-// every call would still succeed - the ring would simply be composed behind an
-// opaque maximized window and the user would see nothing at all. (A lower
-// integrity process cannot place its windows above a higher integrity one, so
-// this is worth checking rather than assuming.)
-bool sits_above(HWND strip, HWND window) {
-    if (strip == nullptr || window == nullptr) return false;
-    HWND walker = strip;
-    for (int i = 0; i < 1024 && walker != nullptr; ++i) {
-        if (walker == window) return true;
-        walker = GetWindow(walker, GW_HWNDNEXT);  // next window *below* this one
-    }
-    return false;
-}
-
 }  // namespace
 
 LRESULT CALLBACK CompositionSurface::window_proc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
@@ -210,21 +194,11 @@ bool CompositionSurface::present(HWND below, const Rect& frame, const RingVisual
     }
     if (!ensure_created(error)) return false;
 
-    // Resolve the z-order anchor once: the ring must sit directly above Premiere
-    // and nowhere else, so the strips follow Premiere's own stacking (they are
-    // covered when Premiere is covered, and they vanish with it when it is
-    // minimised) instead of floating over unrelated applications.
-    HWND anchor = HWND_TOPMOST;
-    if (below != nullptr && IsWindow(below)) {
-        if (GetWindowLongPtrW(below, GWL_EXSTYLE) & WS_EX_TOPMOST) {
-            anchor = HWND_TOPMOST;
-        } else {
-            // The window currently in front of Premiere: inserting the strip after
-            // it puts the strip between that window and Premiere.
-            anchor = GetWindow(below, GW_HWNDPREV);
-            if (anchor == nullptr || anchor == HWND_TOPMOST) anchor = HWND_TOP;
-        }
-    }
+    // The ring must sit directly above Premiere and nowhere else, so the strips
+    // follow Premiere's own stacking (they are covered when Premiere is covered,
+    // and they vanish with it when it is minimised) instead of floating over
+    // unrelated applications.
+    const HWND anchor = z_order_anchor(below);
 
     for (int i = 0; i < kStripCount; ++i) {
         if (!present_strip(i, anchor, frame, visual, error)) {
@@ -252,7 +226,13 @@ bool CompositionSurface::present(HWND below, const Rect& frame, const RingVisual
         const unsigned char alpha = strip.renderer.max_alpha();
         if (alpha > strongest) strongest = alpha;
     }
-    const bool above = below == nullptr || !IsWindow(below) || sits_above(strips_[kTop].hwnd, below);
+    // Confirms the one invariant the whole technique rests on: the strips sit in
+    // front of the Premiere window in the z-order. If they ever ended up behind it,
+    // every call would still succeed - the ring would simply be composed behind an
+    // opaque window and the user would see nothing at all. (A lower-integrity
+    // process cannot place its windows above a higher-integrity one, so this is
+    // worth checking rather than assuming.)
+    const bool above = below == nullptr || !IsWindow(below) || window_is_above(strips_[kTop].hwnd, below);
 
     // Confirm the strips ended up where they were put. A window that Windows moves
     // back (a virtual desktop switch mid-present, a policy on window placement)

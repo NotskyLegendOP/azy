@@ -39,6 +39,7 @@ struct FeatureSet {
     bool frame_backdrop = false;   // DWM backdrop (Mica/Acrylic) in the frame area
     bool edge_surface = true;      // Azy's own 1px border + soft inner shadow ring
     bool edge_surface_rounded = true;  // rounded ring corners (cheap, GDI-free)
+    bool window_overlay = true;    // translucent sheet over the whole window
     bool experimental = false;     // anything gated behind Advanced settings
 
     // Human-readable list of what was disabled, for the log and settings UI.

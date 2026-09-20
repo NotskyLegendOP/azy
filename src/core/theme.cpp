@@ -110,6 +110,7 @@ ThemePalette make_palette(ThemeId theme, const Appearance& appearance, bool dark
         p.surface_border = with_alpha(kHighlight, 0.0);
         p.surface_highlight = with_alpha(kHighlight, 0.0);
         p.surface_shadow = with_alpha(kShadow, 0.0);
+        p.surface_veil = with_alpha(kShadow, 0.0);
         p.corner_radius_dip = 0;
         return p;
     }
@@ -131,6 +132,18 @@ ThemePalette make_palette(ThemeId theme, const Appearance& appearance, bool dark
     p.surface_highlight = with_alpha(kHighlight, 0.02 + 0.05 * border);
     p.surface_shadow = with_alpha(kShadow, 0.10 + 0.22 * shadow);
     p.shadow_enabled = shadow > 0.001;
+
+    // The veil: one translucent sheet over the whole window. Its colour follows
+    // the theme's own charcoal so the overlay reads as the same material as the
+    // frame, and its strength is the slider. The floor keeps a "0%" overlay from
+    // being a hard edge: 0 disables it completely, anything above starts visible.
+    if (appearance.overlay && appearance.overlay_intensity > 0.001) {
+        const double strength = clamp01(appearance.overlay_intensity);
+        const Rgba veil_color = lerp_darkness(Rgba{22, 23, 26, 255}, kCharcoalDeep, darkness);
+        p.surface_veil = with_alpha(veil_color, 0.05 + 0.55 * strength);
+    } else {
+        p.surface_veil = with_alpha(kShadow, 0.0);
+    }
 
     // Level 1: the window frame. Only applied when the host supports it AND
     // the theme is visible.

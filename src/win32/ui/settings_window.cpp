@@ -41,6 +41,9 @@ enum ControlId : int {
     kShadowLabel,
     kDarkness,
     kDarknessLabel,
+    kOverlayCheck,
+    kOverlay,
+    kOverlayLabel,
     kPerformanceMode,
     kSuspendMinimized,
     kSuspendInactive,
@@ -137,7 +140,8 @@ void SettingsWindow::set_dark_theme() {
     SetWindowTheme(hwnd_, L"DarkMode_Explorer", nullptr);
     const int controls[] = {kEnableSkin,     kStartWithWindows,  kApplyAutomatically, kThemeCombo,
                             kGlass,          kBorder,            kRadius,         kShadow,
-                            kDarkness,       kPerformanceMode,   kSuspendMinimized, kSuspendInactive,
+                            kDarkness,       kOverlayCheck,      kOverlay,         kPerformanceMode,
+                            kSuspendMinimized, kSuspendInactive,
                             kExperimental,   kReenableButton,    kResetButton,    kOpenLogButton,
                             kCloseButton};
     for (int id : controls) {
@@ -254,6 +258,11 @@ void SettingsWindow::layout(int dpi) {
     }
     y += kRowHeight + 4;
 
+    // The whole-window overlay: the one setting that changes the look of the entire
+    // application rather than its edge, so it gets its own row and its own strength.
+    checkbox(kOverlayCheck, y, width, L"Cover the whole window (overlay)");
+    y += kRowHeight;
+
     struct SliderRow {
         int slider_id;
         int label_id;
@@ -266,6 +275,7 @@ void SettingsWindow::layout(int dpi) {
         {kRadius, kRadiusLabel, L"Corner &radius", 16},
         {kShadow, kShadowLabel, L"&Shadow intensity", 100},
         {kDarkness, kDarknessLabel, L"Overall dar&kness", 100},
+        {kOverlay, kOverlayLabel, L"&Overlay strength", 100},
     };
     const int slider_width = 150;
     for (const SliderRow& row : rows) {
@@ -343,6 +353,7 @@ void SettingsWindow::sync_controls() {
     check(kSuspendMinimized, settings_.suspend_when_minimized);
     check(kSuspendInactive, settings_.suspend_when_inactive);
     check(kExperimental, settings_.experimental);
+    check(kOverlayCheck, settings_.appearance.overlay);
 
     if (HWND combo = GetDlgItem(hwnd_, kThemeCombo)) {
         const int index = settings_.appearance.theme == ThemeId::AzyDark      ? 1
@@ -356,6 +367,12 @@ void SettingsWindow::sync_controls() {
     slider(kRadius, settings_.appearance.corner_radius_dip);
     slider(kShadow, static_cast<int>(settings_.appearance.shadow_intensity * 100.0 + 0.5));
     slider(kDarkness, static_cast<int>(settings_.appearance.darkness * 100.0 + 0.5));
+    slider(kOverlay, static_cast<int>(settings_.appearance.overlay_intensity * 100.0 + 0.5));
+
+    // The strength only means anything while the overlay is on.
+    if (HWND control = GetDlgItem(hwnd_, kOverlay)) {
+        EnableWindow(control, settings_.appearance.overlay);
+    }
 
     if (HWND control = GetDlgItem(hwnd_, kReenableButton)) {
         EnableWindow(control, settings_.safe_mode || !settings_.experimental);
@@ -375,6 +392,7 @@ void SettingsWindow::update_slider_labels() {
     set(kRadiusLabel, std::to_wstring(settings_.appearance.corner_radius_dip) + L" px");
     set(kShadowLabel, format_percent(settings_.appearance.shadow_intensity));
     set(kDarknessLabel, format_percent(settings_.appearance.darkness));
+    set(kOverlayLabel, format_percent(settings_.appearance.overlay_intensity));
 }
 
 void SettingsWindow::update_status(const Status& status, bool skin_enabled, bool suspended) {
@@ -499,7 +517,8 @@ LRESULT SettingsWindow::handle(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
                                    control_id == kSectionAppearance || control_id == kSectionPerformance ||
                                    control_id == kSectionAdvanced || control_id == kGlassLabel ||
                                    control_id == kBorderLabel || control_id == kRadiusLabel ||
-                                   control_id == kShadowLabel || control_id == kDarknessLabel;
+                                   control_id == kShadowLabel || control_id == kDarknessLabel ||
+                                   control_id == kOverlayLabel;
             SetTextColor(dc, secondary ? kDimTextColor : kTextColor);
             SetBkColor(dc, kBackgroundColor);
             return reinterpret_cast<LRESULT>(background_);
@@ -523,6 +542,7 @@ LRESULT SettingsWindow::handle(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
                 case kRadius: settings_.appearance.corner_radius_dip = value; break;
                 case kShadow: settings_.appearance.shadow_intensity = value / 100.0; break;
                 case kDarkness: settings_.appearance.darkness = value / 100.0; break;
+                case kOverlay: settings_.appearance.overlay_intensity = value / 100.0; break;
                 default: return 0;
             }
             update_slider_labels();
@@ -548,6 +568,15 @@ LRESULT SettingsWindow::handle(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
                         SendMessageW(GetDlgItem(hwnd_, id), BM_GETCHECK, 0, 0) == BST_CHECKED;
                     push_settings();
                     return 0;
+                case kOverlayCheck: {
+                    settings_.appearance.overlay =
+                        SendMessageW(GetDlgItem(hwnd_, id), BM_GETCHECK, 0, 0) == BST_CHECKED;
+                    if (HWND slider = GetDlgItem(hwnd_, kOverlay)) {
+                        EnableWindow(slider, settings_.appearance.overlay);
+                    }
+                    push_settings();
+                    return 0;
+                }
                 case kPerformanceMode:
                     settings_.performance_mode =
                         SendMessageW(GetDlgItem(hwnd_, id), BM_GETCHECK, 0, 0) == BST_CHECKED;

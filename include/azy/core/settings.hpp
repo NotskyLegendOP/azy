@@ -23,6 +23,7 @@ constexpr const char* kEdgeSurface = "edge_surface";
 constexpr const char* kRoundedSurface = "rounded_surface";
 constexpr const char* kShadow = "shadow";
 constexpr const char* kGlass = "glass";
+constexpr const char* kOverlay = "window_overlay";
 }  // namespace feature_key
 
 struct Settings {

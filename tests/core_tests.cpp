@@ -201,12 +201,21 @@ void test_compat() {
 
     FeatureSet full = resolve_features(p2025, win11_host(), false, false, false);
     CHECK(full.dark_frame);
+    CHECK(full.window_overlay);  // the whole-window overlay is on by default
     CHECK(full.frame_colors);
     CHECK(full.rounded_frame);
     CHECK(full.edge_surface);
     CHECK(full.edge_surface_rounded);
     CHECK(!full.frame_backdrop);  // experimental: never on by default
     CHECK_STR(feature_summary(full), "full");
+
+    // Without layered windows there is no overlay and no ring: both are Azy's own
+    // windows, and neither can be drawn without them.
+    HostCapabilities no_layered = win11_host();
+    no_layered.layered_windows = false;
+    const FeatureSet plain = resolve_features(p2025, no_layered, false, false, false);
+    CHECK(!plain.window_overlay);
+    CHECK(!plain.edge_surface);
 
     FeatureSet v24 = resolve_features(p2024, win11_host(), false, false, false);
     CHECK(v24.frame_colors);
@@ -289,6 +298,22 @@ void test_theme() {
     CHECK(glass.surface_bezel.r > glass.surface_fill.r);
     CHECK(glass.surface_bezel.r <= glass.surface_border.r);
 
+    // The whole-window overlay: its alpha is the strength, a zero alpha means
+    // "off", and it stays a tint rather than an opaque sheet even at 100%.
+    CHECK(glass.surface_veil.a > 0);
+    CHECK(glass.surface_veil.a < 200);
+    Appearance overlay_max = appearance;
+    overlay_max.overlay_intensity = 1.0;
+    const ThemePalette veil_max = make_palette(ThemeId::AzyDarkGlass, overlay_max, true);
+    CHECK(veil_max.surface_veil.a > glass.surface_veil.a);
+    CHECK(veil_max.surface_veil.a <= 200);
+    Appearance no_overlay = appearance;
+    no_overlay.overlay = false;
+    CHECK_INT(make_palette(ThemeId::AzyDarkGlass, no_overlay, true).surface_veil.a, 0);
+    Appearance zero_overlay = appearance;
+    zero_overlay.overlay_intensity = 0.0;
+    CHECK_INT(make_palette(ThemeId::AzyDarkGlass, zero_overlay, true).surface_veil.a, 0);
+
     // More glass -> more transparency, monotonically.
     Appearance more = appearance;
     more.glass_intensity = 1.0;
@@ -321,6 +346,7 @@ void test_theme() {
     CHECK(!original.draw_surface);
     CHECK(!original.apply_frame_colors);
     CHECK_INT(original.surface_fill.a, 0);
+    CHECK_INT(original.surface_veil.a, 0);  // "Original" leaves the window alone too
     CHECK_INT(original.surface_bezel.a, 0);
     CHECK_INT(original.surface_border.a, 0);
     CHECK_INT(original.corner_radius_dip, 0);
@@ -397,6 +423,8 @@ void test_settings() {
     s.appearance.corner_radius_dip = 10;
     s.appearance.shadow_intensity = 0.1;
     s.appearance.darkness = 0.8;
+    s.appearance.overlay = false;
+    s.appearance.overlay_intensity = 0.15;
     s.performance_mode = true;
     s.suspend_when_minimized = false;
     s.suspend_when_inactive = true;
@@ -421,6 +449,8 @@ void test_settings() {
     CHECK_INT(loaded.appearance.corner_radius_dip, 10);
     CHECK_NEAR(loaded.appearance.shadow_intensity, 0.1, 1e-6);
     CHECK_NEAR(loaded.appearance.darkness, 0.8, 1e-6);
+    CHECK(!loaded.appearance.overlay);
+    CHECK_NEAR(loaded.appearance.overlay_intensity, 0.15, 1e-6);
     CHECK(loaded.performance_mode);
     CHECK(!loaded.suspend_when_minimized);
     CHECK(loaded.suspend_when_inactive);
@@ -445,6 +475,7 @@ void test_settings() {
     const Settings junk = Settings::from_ini(
         "[appearance]\n"
         "glass_intensity=999\n"
+        "overlay_intensity=4.5\n"
         "corner_radius=-40\n"
         "darkness=banana\n"
         "theme=rgb_gaming\n"
@@ -454,6 +485,8 @@ void test_settings() {
         "future_key=kept\n",
         &warnings);
     CHECK_NEAR(junk.appearance.glass_intensity, 1.0, 1e-6);   // clamped
+    CHECK_NEAR(junk.appearance.overlay_intensity, 1.0, 1e-6); // clamped
+    CHECK(junk.appearance.overlay);                          // default kept (on)
     CHECK_INT(junk.appearance.corner_radius_dip, 0);          // clamped
     CHECK_NEAR(junk.appearance.darkness, 0.5, 1e-6);          // default kept
     CHECK(junk.appearance.theme == ThemeId::AzyDarkGlass);    // warning + default

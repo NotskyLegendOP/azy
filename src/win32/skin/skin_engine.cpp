@@ -211,20 +211,23 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
         changed = true;
     }
 
-    if (surface_requested && !window_large_enough_for_ring(key.surface_rect, key.band_px, key.radius_px)) {
-        // Too small to decorate: hide the ring and leave the frame treatment in
-        // place. Not counted as a failure.
+    // The overlay covers the whole window; the ring decorates its edge. Both are
+    // tracked, and the ring is always presented first because the overlay is then
+    // stacked *under* it (see below), which keeps the 1px hairline crisp.
+    const bool overlay_requested =
+        key.overlay && request.suspend == SuspendReason::None && request.target.valid();
+    const bool overlay_changed = !has_key_ || last_key_.hwnd != key.hwnd || last_key_.overlay != key.overlay ||
+                                 !same_color(last_key_.veil, key.veil) ||
+                                 last_key_.surface_rect != key.surface_rect;
+
+    // A window too small for a ring is still worth covering with the overlay.
+    const bool ring_fits =
+        surface_requested && window_large_enough_for_ring(key.surface_rect, key.band_px, key.radius_px);
+
+    if (surface_requested && !ring_fits) {
         if (surface_.visible()) surface_.hide();
         state_out.surface_visible = false;
-        if (changed || has_key_) {
-            last_key_ = key;
-            last_key_.surface = false;
-            has_key_ = true;
-        }
-        return changed;
-    }
-
-    if (surface_requested && surface_changed) {
+    } else if (surface_requested && surface_changed) {
         RingVisual visual;
         // The ring is described in frame coordinates; CompositionSurface splits it
         // into four thin strips and hands each one the right origin, so a 1px line
@@ -261,12 +264,37 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
         state_out.surface_visible = surface_.visible();
     }
 
+    // --- the overlay ------------------------------------------------------
+    // One constant-alpha window over the whole tracked window. A failed overlay is
+    // logged once and retried on the next apply (it is only recorded as done when
+    // it is really on screen).
+    if (overlay_requested && (overlay_changed || state_out.surface_visible)) {
+        std::string veil_error;
+        if (veil_.present(request.target.hwnd, state_out.surface_visible ? surface_.hwnd() : nullptr,
+                          key.surface_rect, key.veil, &veil_error)) {
+            state_out.overlay_visible = true;
+            changed = true;
+        } else {
+            ++state_out.failures;
+            state_out.last_error = veil_error;
+            log_warn("overlay veil failed: %s", veil_error.c_str());
+            state_out.overlay_visible = veil_.visible();
+        }
+    } else if (!overlay_requested && veil_.visible()) {
+        veil_.hide();
+        state_out.overlay_visible = false;
+        changed = true;
+    } else {
+        state_out.overlay_visible = veil_.visible();
+    }
+
     if (changed) {
         last_key_ = key;
         // Only record the surface as "done" when it is actually on screen: if it
         // failed, the next apply retries instead of silently giving up until
         // something else changes.
         last_key_.surface = state_out.surface_visible && surface_requested;
+        last_key_.overlay = state_out.overlay_visible && overlay_requested;
         has_key_ = true;
         ++state_out.applies;
     }

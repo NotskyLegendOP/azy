@@ -11,6 +11,7 @@
 
 #include "azy/win32/skin/composition_surface.hpp"
 #include "azy/win32/skin/dwm_composer.hpp"
+#include "azy/win32/skin/overlay_veil.hpp"
 #include "azy/win32/skin/skin_types.hpp"
 
 namespace azy {
@@ -44,6 +45,10 @@ public:
         Rgba highlight;
         Rgba shadow_color;
 
+        // Whole-window overlay (veil).
+        bool overlay = false;
+        Rgba veil;
+
         bool operator==(const VisualKey& other) const;
     };
 
@@ -66,6 +71,8 @@ public:
 
     bool frame_applied() const { return composer_.is_applied(); }
     bool surface_visible() const { return surface_.visible(); }
+    bool overlay_visible() const { return veil_.visible(); }
+    unsigned char overlay_alpha() const { return veil_.alpha(); }
     const RingReport& ring_report() const { return surface_.report(); }
     HWND surface_window() const { return surface_.hwnd(); }
     const VisualKey& last_key() const { return last_key_; }
@@ -77,6 +84,7 @@ private:
 
     DwmComposer composer_;
     CompositionSurface surface_;
+    OverlayVeil veil_;
     VisualKey last_key_;
     bool has_key_ = false;
 };

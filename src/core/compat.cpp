@@ -35,6 +35,11 @@ FeatureSet resolve_features(const ProductInfo& product,
     if (!host.system_backdrop) note(fs, "host does not support system backdrop");
 
     fs.edge_surface = host.layered_windows && host.win_event_hooks;
+    // The overlay is a constant-alpha layered window: one colour, no bitmap, so it
+    // is as cheap as the ring's strips. It is what makes the window read as skinned
+    // rather than outlined, so it is on by default and only dropped where layered
+    // windows are unavailable.
+    fs.window_overlay = host.layered_windows;
 
     // --- Premiere build gating --------------------------------------------
     // Unknown builds (unreadable VERSIONINFO, or a version newer than this
@@ -96,6 +101,7 @@ FeatureSet resolve_features(const ProductInfo& product,
         fs.frame_backdrop = false;
         fs.edge_surface = false;
         fs.edge_surface_rounded = false;
+        fs.window_overlay = false;
         fs.experimental = false;
     }
 

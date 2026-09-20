@@ -30,6 +30,10 @@ struct Appearance {
     int corner_radius_dip = 8;       // 0..16 device-independent pixels
     double shadow_intensity = 0.40;  // soft inner shadow strength
     double darkness = 0.50;          // 0 = lifted charcoal, 1 = near black
+    // Whole-window overlay: one translucent sheet over everything Premiere draws
+    // (the "skin everything" look), plus a proportionally wider edge falloff.
+    bool overlay = true;             // on by default: it is what makes the skin read
+    double overlay_intensity = 0.45; // how opaque that sheet is, 0 = invisible
 };
 
 // Everything the renderers need, resolved once per settings change.
@@ -51,6 +55,9 @@ struct ThemePalette {
     Rgba surface_border;         // the 1px hairline on the very frame edge
     Rgba surface_highlight;      // barely-visible top inner highlight
     Rgba surface_shadow;         // soft inner shadow, max alpha at the edge
+    // Uniform wash over the entire window (the overlay). Alpha is the strength; a
+    // zero alpha means "no overlay", which is how the feature is switched off.
+    Rgba surface_veil;
     int corner_radius_dip = 0;   // 0 = square
     bool shadow_enabled = false; // disabled in performance mode
 };

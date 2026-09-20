@@ -738,6 +738,10 @@ std::vector<std::string> AppController::diagnostics_lines() const {
                                    ring.thickness_px, ring.frame.left, ring.frame.top, ring.frame.right,
                                    ring.frame.bottom, static_cast<unsigned>(ring.max_alpha),
                                    ring.above ? "yes" : "no"));
+        if (engine_.overlay_visible()) {
+            lines.push_back(str_format("Overlay: %d%% tint over the whole window",
+                                       static_cast<int>(engine_.overlay_alpha()) * 100 / 255));
+        }
         if (ring.misplaced_strips > 0) {
             lines.push_back(str_format(
                 "Note: %d of the 4 ring strips are not where Windows was asked to put them.",

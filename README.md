@@ -152,6 +152,14 @@ restrained; the sliders exist for people who want to push them.
 The other two themes are **Azy Dark** (the same treatment, fully opaque — no
 translucency anywhere) and **Original** (Azy applies nothing at all).
 
+On top of that edge treatment, **the overlay covers the whole window**: one
+translucent charcoal layer over everything Premiere draws, so the application reads
+as skinned rather than outlined. It is a single window composited with a constant
+alpha — no bitmap, no per-pixel work, no animation — and it is adjustable
+(*Cover the whole window* + *Overlay strength* in Settings, 0% = edge only). Because
+it covers the video monitors as well, it is the first thing to turn down if you
+grade footage: the edge vignette frames the workspace without touching the picture.
+
 ![The ring in the three treatments](docs/images/ring-preview.png)
 
 *Left: Azy Dark Glass (default). Middle: Azy Dark (opaque). Right: Performance
@@ -232,7 +240,7 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 Packaging: `powershell -File scripts\package.ps1` (needs Inno Setup 6) produces
-`dist\AzySkin-1.0.2-setup.exe`.
+`dist\AzySkin-1.1.0-setup.exe`.
 
 Full instructions, including what the cross build can and cannot verify:
 [`docs/BUILDING.md`](docs/BUILDING.md).

@@ -203,6 +203,27 @@ bool cursor_in_rect(const RECT& rect) {
     return cursor.x >= rect.left && cursor.x < rect.right && cursor.y >= rect.top && cursor.y < rect.bottom;
 }
 
+HWND z_order_anchor(HWND below) {
+    if (below == nullptr || !IsWindow(below)) return HWND_TOP;
+    // Insert after a topmost window to stay in the topmost band.
+    if ((GetWindowLongPtrW(below, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0) return HWND_TOPMOST;
+    // The window currently in front of `below`: inserting after it puts the new
+    // window between that window and `below`.
+    HWND above = GetWindow(below, GW_HWNDPREV);
+    if (above == nullptr || above == HWND_TOPMOST) return HWND_TOP;
+    return above;
+}
+
+bool window_is_above(HWND window, HWND other) {
+    if (window == nullptr || other == nullptr) return false;
+    HWND walker = window;
+    for (int i = 0; i < 1024 && walker != nullptr; ++i) {
+        if (walker == other) return true;
+        walker = GetWindow(walker, GW_HWNDNEXT);  // the next window *below* this one
+    }
+    return false;
+}
+
 namespace {
 
 // Reads a token's integrity level RID. Returns -1 when the token cannot be

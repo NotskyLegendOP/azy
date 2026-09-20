@@ -4,6 +4,47 @@ All notable changes to Azy Skin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] — 2026-09-20
+
+The skin now covers the whole window, not only its edge.
+
+### Added
+
+* **The whole-window overlay.** Azy's ring decorates the edge of Premiere's window;
+  the overlay covers everything inside it, which is what makes the application read
+  as *skinned* rather than outlined. It is one click-through, non-activating,
+  layered top-level window the size of the tracked window, filled with a single
+  translucent charcoal colour and blended by Windows with a constant alpha
+  (`SetLayeredWindowAttributes`): no bitmap, no per-pixel work, no animation, and
+  nothing new to monitor. It is on by default at 35% strength, sits directly above
+  Premiere and directly *below* the ring (so the 1px hairline and the bezel stay
+  crisp), and is hidden with the ring whenever the skin is suspended.
+* Settings → Appearance gained two entries: **Cover the whole window (overlay)**
+  (on/off) and **Overlay strength** (0–100%, default 35%). At 0% only the edge
+  treatment remains; at 100% the tint reaches 60%, which is the "make everything
+  dark" end of the range. Both are in `settings.ini` as `overlay` and
+  `overlay_intensity`, and the strength slider is disabled while the overlay is off.
+* The overlay is verified exactly like the ring: if Windows will not let it be
+  placed above Premiere's window (a higher-integrity Premiere), the attempt fails
+  loudly - a warning in the log, a reason in the settings window - instead of
+  silently covering nothing.
+* The settings window now names the build it belongs to in the diagnostics block
+  (`Azy Skin 1.1.0 - window 'Premiere Pro' …`), so a screenshot always says which
+  version produced it.
+* `tools/check-version.py` checks all five copies of the version number (CMake,
+  the fallback header, the installer, the resource file, the release workflow) and
+  runs as part of `scripts/verify.sh`.
+
+### Notes
+
+* The overlay is a tint, not a repaint: Premiere's own controls, panels and video
+  previews are not modified in any way, they are simply composited under a
+  translucent layer, exactly like any other window on the desktop.
+* Because it covers the video monitors too, the strength is a trade-off: it is the
+  first thing to turn down if you grade footage. The vignette (the wider edge
+  falloff that comes with the overlay) is what frames the workspace without
+  touching the picture.
+
 ## [1.0.2] — 2026-09-20
 
 ### Added
