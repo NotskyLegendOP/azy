@@ -124,7 +124,15 @@ jobs:
             throw "build/Release/AzySkin.exe is missing; the .iss expects the MSVC Release output."
           }
       - name: Compile installer
-        run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging\AzySkin.iss'
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc /Qp packaging\AzySkin.iss 2>&1 | Tee-Object -Variable output | Out-Host
+          if ($LASTEXITCODE -ne 0) {
+            ($output | Where-Object { $_ -match 'Error|error|Unknown|expected' } |
+              Select-Object -First 10) | ForEach-Object { Write-Output "::error title=ISCC::$($_.ToString().Trim())" }
+            exit 1
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: AzySkin-installer

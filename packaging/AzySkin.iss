@@ -33,16 +33,28 @@ OutputDir=..\dist
 OutputBaseFilename=AzySkin-{#AppVersion}-setup
 Compression=lzma2/max
 SolidCompression=yes
-; Dark, to match the application itself.
+; Dark, to match the application itself (6.6+; older compilers get the light wizard).
+#if VER >= EncodeVer(6,6,0)
 WizardStyle=modern dark
+#else
+WizardStyle=modern
+#endif
 ; Refuse to run while Azy is running: the installer asks it to close instead of
 ; overwriting a running executable, and restarts it afterwards if it was running.
 AppMutex=AzySkin.SingleInstance.7f2a1c94
 CloseApplications=yes
 RestartApplications=yes
 UninstallDisplayIcon={app}\{#AppExeName}
+; Version-guarded so the script still compiles with an older Inno Setup: the
+; *compatible architecture values need 6.3, dark mode needs 6.6. Both fall back to
+; something an older compiler accepts instead of failing.
+#if VER >= EncodeVer(6,3,0)
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+#else
+ArchitecturesAllowed=x64
+ArchitecturesInstallIn64BitMode=x64
+#endif
 MinVersion=10.0.17763
 LicenseFile=..\LICENSE
 InfoBeforeFile=packaging\info-before.txt
