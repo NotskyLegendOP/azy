@@ -55,7 +55,6 @@ bool SkinEngine::initialize(std::string* error) {
 void SkinEngine::shutdown() {
     capture_.stop();
     mirror_.destroy();
-    has_key_ = false;
     frames_seen_ = false;
     capture_attempted_ = false;
     attached_hwnd_ = nullptr;
@@ -71,7 +70,12 @@ void SkinEngine::retry_overlay() {
     failure_burst_ = 0;
     next_attempt_ms_ = 0;
     capture_attempted_ = false;
-    has_key_ = false;
+    place_again_ = true;
+    if (mirror_.created() && mirror_.needs_recreate()) {
+        // The manual retry is also the way back from a lost GPU device.
+        recover_device("the manual retry");
+        return;
+    }
     mirror_.set_animations(style_.animations);
     if (!mirror_.created()) {
         std::string mirror_error;
@@ -96,7 +100,7 @@ void SkinEngine::teardown_mirror(const char* reason) {
     attached_pid_ = 0;
     frames_seen_ = false;
     capture_attempted_ = false;
-    has_key_ = false;
+    target_ = nullptr;
     if (was_active) {
         log_info("mirror: released (%s)", reason == nullptr ? "teardown" : reason);
     }
@@ -163,13 +167,19 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
     style_ = make_mirror_style(tokens, request.appearance, request.performance_mode, dpi_scale);
     mirror_.set_style(style_);
 
+    // A lost GPU device is noticed by the presenter, not here, so the rebuild happens
+    // on the next apply rather than inside the pump - one second of nothing at worst,
+    // and a bounded number of attempts (three, the same budget the capture uses).
+    if (mirror_.created() && mirror_.needs_recreate() && GetTickCount64() >= next_attempt_ms_) {
+        recover_device("the GPU device was lost");
+    }
+
     const bool style_wanted = style_.visible && !mirror_style_is_passthrough(style_);
     const bool allowed = request.skin_enabled && style_wanted && request.suspend == SuspendReason::None &&
                          request.target.valid() && mirror_.created() && !unsupported_;
-    const bool want_capture = allowed;
 
     ++state_out.applies;
-    sync_mirror(request, allowed, want_capture, state_out);
+    sync_mirror(request, allowed, state_out);
     // `mirror_active` / `mirror_capturing` / `mirror_note` are written by
     // sync_mirror, which is the only place that knows what actually happened; the
     // rest of the snapshot is filled in here.
@@ -180,9 +190,7 @@ bool SkinEngine::apply(const SkinRequest& request, SkinState& state_out) {
     return true;
 }
 
-void SkinEngine::sync_mirror(const SkinRequest& request, bool allowed, bool want_capture, SkinState& state_out) {
-    (void)want_capture;  // the capture follows `allowed` exactly; kept for the call-site contract
-
+void SkinEngine::sync_mirror(const SkinRequest& request, bool allowed, SkinState& state_out) {
     // --- the state machine (spec §33) ----------------------------------------
     if (!request.target.hwnd) {
         // Nothing to mirror. If we were mirroring, the Premiere window is gone:
@@ -235,6 +243,11 @@ void SkinEngine::sync_mirror(const SkinRequest& request, bool allowed, bool want
     if (state_ == MirrorState::PremiereFound) {
         set_state(MirrorState::WindowValidated, "main window validated");
     }
+    // Remembered for the z-order re-assertion below: the mirror is placed above *this*
+    // window, and `reassert_stacking()` needs it to notice that something raised
+    // Premiere over it (which is what activating Premiere does to every ordinary
+    // window). It is cleared whenever the mirror is torn down.
+    target_ = request.target.hwnd;
 
     // --- the frame the mirror draws -------------------------------------------
     const MirrorRect overlay = overlay_for(request.target);
@@ -254,6 +267,12 @@ void SkinEngine::sync_mirror(const SkinRequest& request, bool allowed, bool want
     frame.panels = panels_;
     frame.size_agrees = true;
     const bool frame_moved = mirror_.set_frame(frame);
+    if (place_again_) {
+        // Asked for explicitly (a manual visibility check, a settings change that only
+        // affects the material): place the window again with the frame it already has.
+        place_again_ = false;
+        if (mirror_.visible()) mirror_.reassert_placement();
+    }
     if (frame_moved) {
         // A move or a resize is exactly when the mirror must not lag behind, so the
         // capture and the renderer are both asked for a short burst.
@@ -321,8 +340,47 @@ void SkinEngine::reassert_stacking() {
     if (!IsWindow(target_)) return;
     if (window_is_above(mirror_.window(), target_)) return;
     log_debug("mirror: re-asserting the stacking order above 0x%p", (void*)target_);
-    // `has_key_ = false` is what makes the next apply place the window again.
-    has_key_ = false;
+    // One SetWindowPos with the placement the frame already carries. This has to be a
+    // placement and not a flag for the next apply: activating Premiere raises it above
+    // every ordinary window, and the geometry it was placed with has not changed, so
+    // an unchanged frame is exactly the case that would never be re-placed.
+    if (!mirror_.reassert_placement()) {
+        log_warn("mirror: the stacking order could not be re-asserted (%s)", mirror_.stats().note.c_str());
+    }
+}
+
+void SkinEngine::recover_device(const char* why) {
+    // A removed device cannot draw again: every resource built on it is gone, so the
+    // renderer is destroyed and rebuilt from scratch. The capture holds the same device
+    // and is stopped first (it must not keep a reference to it across the rebuild).
+    capture_.stop();
+    attached_hwnd_ = nullptr;
+    attached_pid_ = 0;
+    frames_seen_ = false;
+    capture_attempted_ = false;
+    mirror_.destroy();
+
+    std::string error;
+    if (!mirror_.create(GetModuleHandleW(nullptr), &error)) {
+        last_error_ = error;
+        note_ = error;
+        ++failure_burst_;
+        if (failure_burst_ >= kMaxFailureBurst) {
+            unsupported_ = true;
+            set_state(MirrorState::Unsupported, "the GPU device was lost and could not be rebuilt");
+        } else {
+            next_attempt_ms_ = GetTickCount64() + kRetryBackoffMs * failure_burst_;
+            set_state(MirrorState::CaptureFailed, "the GPU device was lost; retrying");
+        }
+        log_error("mirror: could not rebuild after the device was lost: %s", error.c_str());
+        return;
+    }
+    mirror_.attach_capture(&capture_);
+    mirror_.set_animations(style_.animations);
+    failure_burst_ = 0;
+    next_attempt_ms_ = 0;
+    log_info("mirror: rebuilt after a device loss (%s)", why == nullptr ? "device lost" : why);
+    set_state(MirrorState::CaptureInitializing, "the GPU device was replaced");
 }
 
 bool SkinEngine::probe_on_screen(std::string* detail) {

@@ -219,10 +219,9 @@ bool MirrorRenderer::create(HINSTANCE instance, std::string* error) {
 }
 
 void MirrorRenderer::destroy() {
-    // Note the ownership contract: the *capture* is not owned here (the composition
-    // manager owns its lifetime), but the D3D11 device is - so a caller must stop the
-    // capture before destroying this object, which is what the manager's teardown
-    // path does.
+    // Note the ownership contract: the *capture* is not owned here (the skin engine
+    // owns its lifetime), but the D3D11 device is - so the caller must stop the capture
+    // before destroying this object, which every teardown path in the engine does.
     if (window_ != nullptr) {
         KillTimer(window_, kRenderTimerId);
         DestroyWindow(window_);

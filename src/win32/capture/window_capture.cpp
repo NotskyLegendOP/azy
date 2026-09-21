@@ -487,6 +487,10 @@ void WindowCapture::thread_main() {
     if (failure != CaptureStart::Started) {
         set_detail(std::string(capture_start_text(failure)) + ": " + problem);
         log_warn("overlay capture: %s - %s", capture_start_text(failure), problem.c_str());
+        // A capture that ended by itself is *not* still working: say so, so the engine
+        // tears it down and starts over instead of leaving a frozen frame on screen
+        // while every diagnostic reports the mirror as active.
+        item_closed_.store(true, std::memory_order_release);
     } else if (!problem.empty()) {
         set_detail(problem);
     } else if (running_.load(std::memory_order_acquire)) {

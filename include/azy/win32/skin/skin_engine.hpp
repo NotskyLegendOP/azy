@@ -53,11 +53,12 @@ public:
     // Full teardown: stops the capture, destroys the mirror and every GPU resource.
     void revert();
 
-    // Kept so callers do not have to change: the mirror owns the only surface now.
-    void release_surface() { revert(); }
     bool surface_visible() const { return mirror_.visible(); }
 
-    void invalidate() { has_key_ = false; }
+    // Asks for the window to be placed (and the next frame presented) again even though
+    // nothing about it changed: what "Check visibility" needs in order to have something
+    // to look at, and what a change that only affects the material uses.
+    void invalidate() { place_again_ = true; }
 
     // Puts the mirror back in front of Premiere when something raised Premiere above
     // it. A z-order walk, and only when the order is actually wrong one SetWindowPos.
@@ -83,31 +84,19 @@ public:
     bool mirror_supported() const { return !unsupported_; }
     const std::string& status_note() const { return note_; }
 
-    bool debug_visible() const { return false; }
     const std::vector<PanelRect>& panel_map() const { return panels_; }
     Rect client_origin() const { return client_origin_; }
     const std::string& last_error() const { return last_error_; }
 
 private:
-    struct VisualKey {
-        HWND hwnd = nullptr;
-        MirrorRect overlay;
-        UINT dpi = 96;
-        bool visible = false;
-        unsigned long long style_revision = 0;
-        std::string theme_id;
-
-        bool operator==(const VisualKey& other) const {
-            return hwnd == other.hwnd && overlay == other.overlay && dpi == other.dpi &&
-                   visible == other.visible && style_revision == other.style_revision &&
-                   theme_id == other.theme_id;
-        }
-    };
-
-    void sync_mirror(const SkinRequest& request, bool allowed, bool want_capture, SkinState& state_out);
+    void sync_mirror(const SkinRequest& request, bool allowed, SkinState& state_out);
     void teardown_mirror(const char* reason);
     void set_state(MirrorState state, const char* why);
     bool start_capture(const SkinRequest& request, std::string* error);
+    // The GPU device was lost (driver update, TDR, hybrid-GPU switch): rebuild the
+    // renderer, bounded, so a machine that cannot hold a device ends up in the honest
+    // Unsupported state instead of rebuilding in a loop.
+    void recover_device(const char* why);
     static MirrorRect overlay_for(const SkinTarget& target);
 
     MirrorRenderer mirror_;
@@ -128,8 +117,7 @@ private:
     std::vector<PanelRect> panels_;
     Rect client_origin_;
     HWND target_ = nullptr;
-    VisualKey last_key_;
-    bool has_key_ = false;
+    bool place_again_ = false;
 };
 
 }  // namespace win

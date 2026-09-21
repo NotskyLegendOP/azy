@@ -161,9 +161,9 @@ public:
     // one device serves the capture, the staging texture and the swap chain.
     D3dShared* shared_device() { return &shared_; }
 
-    // The capture is *not* owned here: the composition manager starts and stops it,
-    // and tells the renderer where to find it. A renderer with no capture draws the
-    // last frame it copied (or nothing at all).
+    // The capture is *not* owned here: the skin engine starts and stops it, and tells
+    // the renderer where to find it. A renderer with no capture draws the last frame it
+    // copied (or nothing at all).
     void attach_capture(WindowCapture* capture) { capture_ = capture; }
 
     void set_style(const MirrorStyle& style);
@@ -175,6 +175,10 @@ public:
     void restart_fade();  // called on show and on a theme change
 
     bool set_frame(const MirrorFrame& frame);
+    // Places the window again with the frame it already holds: one SetWindowPos, no
+    // capture work. Needed when something - activating Premiere, most often - raised
+    // Premiere above the mirror, because an unchanged frame would never be re-placed.
+    bool reassert_placement() { return update_window(); }
     bool show();
     void hide();
     bool visible() const { return visible_; }
