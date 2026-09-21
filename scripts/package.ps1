@@ -15,6 +15,12 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 
+# The mirror shader is embedded as text and only compiled at runtime, so a shader
+# that does not compile builds and packages without complaint - and then refuses
+# to start on the user's machine. Run the runtime's compiler first; a package with
+# a broken shader must not exist.
+& (Join-Path $PSScriptRoot 'check-shader.ps1')
+
 if (-not $SkipBuild) {
     & (Join-Path $PSScriptRoot 'build-windows.ps1') -Arch $Arch -Config Release -BuildDir $BuildDir
     if ($LASTEXITCODE -ne 0) { throw "Build failed" }

@@ -20,8 +20,12 @@ on a user's machine - so this script does the comparison:
   * the composition never comes from the desktop window,
   * the shader is structurally sound (no HLSL compiler exists on a Linux build
     machine, so this is the closest thing to compiling it that can run here: balanced
-    braces, both entry points, every identifier that is read declared before use, and
-    no member of the constant buffer left unused).
+    braces, both entry points, every identifier that is read declared before use, no
+    member of the constant buffer left unused, and no HLSL reserved word - `point`,
+    `line`, `sample` and friends - used where a name belongs, which fxc rejects with
+    X3000 before it compiles anything. A Windows-side fxc run over the same file
+    (scripts/check-shader.ps1) is the authoritative check; this one is the fast
+    mirror of it for the platforms that cannot run fxc).
 
 Run: python3 tools/check-mirror.py [repo root]
 """
@@ -325,6 +329,38 @@ def main() -> int:
     for match in re.finditer(r"\b(g_[A-Za-z0-9_]+)\b", shader_code):
         if match.group(1) not in declared:
             fail(f"mirror.hlsl: '{match.group(1)}' is used but not declared in the constant buffer")
+    # Reserved words cannot be names. HLSL reserves the geometry-shader primitives
+    # (`point`, `line`, `triangle`, ...) and the classic keywords (`sample`, `pass`,
+    # `texture`, ...) - words a graphics programmer reaches for daily - and fxc
+    # refuses the whole shader over one of them (X3000, "unexpected token"). 2.0.0
+    # shipped exactly that (a parameter named `point`, a local named `line`), which
+    # no structural check saw and no Linux machine could compile. Every declaration
+    # is scanned: `type name` pairs, including parameters and struct members, are
+    # where names are chosen.
+    reserved = {
+        "asm", "auto", "bool", "break", "case", "catch", "char", "class", "column_major",
+        "compile", "const", "const_cast", "continue", "default", "delete", "discard", "do",
+        "double", "dynamic_cast", "else", "enum", "explicit", "extern", "false", "filter",
+        "float", "for", "friend", "goto", "groupshared", "half", "if", "in", "inline",
+        "inout", "int", "interface", "line", "lineadj", "long", "matrix", "min10float",
+        "min16float", "min16int", "min16uint", "mutable", "namespace", "new",
+        "nointerpolation", "noperspective", "operator", "out", "packoffset", "pass",
+        "pixelfragment", "point", "precise", "private", "protected", "public", "register",
+        "reinterpret_cast", "return", "row_major", "sample", "sampler", "shared", "short",
+        "signed", "sizeof", "snorm", "static", "static_cast", "string", "struct", "switch",
+        "tbuffer", "technique", "technique10", "technique11", "template", "texture", "this",
+        "throw", "true", "triangle", "triangleadj", "try", "typedef", "uint", "uniform",
+        "union", "unsigned", "using", "vector", "virtual", "void", "volatile", "while",
+    }
+    declaration = re.compile(r"\b(?:float[234]?|int|uint|bool|void|struct|VsOut)\s+([A-Za-z_]\w*)")
+    for match in declaration.finditer(shader_code):
+        name = match.group(1)
+        if name in reserved:
+            line_number = shader_code.count("\n", 0, match.start()) + 1
+            fail(
+                f"mirror.hlsl:{line_number}: '{name}' is a reserved HLSL word used as a "
+                "name (fxc: X3000 syntax error) - rename it"
+            )
 
     report()
     return 1 if FAILURES else 0

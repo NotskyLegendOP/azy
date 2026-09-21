@@ -94,6 +94,12 @@ powershell -ExecutionPolicy Bypass -File scripts\package.ps1
 # requires Inno Setup 6 (choco install innosetup)
 ```
 
+`package.ps1` runs [`scripts\check-shader.ps1`](../scripts/check-shader.ps1) first:
+it compiles `resources\shaders\mirror.hlsl` with fxc against the same entry points
+and profiles the application uses at runtime, so a shader that does not compile
+can never be packaged (the C++ build cannot see this - the shader is embedded as
+text and only compiled by d3dcompiler at startup).
+
 Produces `dist\AzySkin-1.3.0-setup.exe` from `packaging\AzySkin.iss`.
 
 Installer properties that matter:

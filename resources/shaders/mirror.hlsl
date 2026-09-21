@@ -107,8 +107,8 @@ VsOut vs_main(uint id : SV_VertexID) {
 
 float luminance(float3 colour) { return dot(colour, kLuma); }
 
-float sd_rounded_box(float2 point, float2 half_extent, float radius) {
-    float2 q = abs(point) - half_extent + radius;
+float sd_rounded_box(float2 pos, float2 half_extent, float radius) {
+    float2 q = abs(pos) - half_extent + radius;
     return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - radius;
 }
 
@@ -224,9 +224,9 @@ float4 ps_main(VsOut input) : SV_Target {
 
         // 6. Borders: Premiere's own control lines, re-lit in the theme's border
         //    colour (accent-leaning on active surfaces).
-        const float line = saturate(gradient / max(g_transition, 0.05)) * g_highlight;
+        const float edge = saturate(gradient / max(g_transition, 0.05)) * g_highlight;
         const float3 border_ink = lerp(g_border_colour.rgb, g_accent.rgb, saturate(g_accent_mix));
-        colour += border_ink * line * ui;
+        colour += border_ink * edge * ui;
     }
 
     // ---------------------------------------------------------------- panel frame

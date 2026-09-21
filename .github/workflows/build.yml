@@ -87,6 +87,11 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      # The shader is embedded as text and compiled at runtime, so the C++ build
+      # cannot catch a shader that does not compile - fxc can (2.0.0 shipped one).
+      - name: Compile the mirror shader (fxc)
+        shell: pwsh
+        run: ./scripts/check-shader.ps1
       - name: Configure
         run: cmake -S . -B build -DAZY_BUILD_TESTS=ON
       - name: Build
@@ -116,6 +121,9 @@ jobs:
     needs: windows-msvc
     steps:
       - uses: actions/checkout@v4
+      - name: Compile the mirror shader (fxc)
+        shell: pwsh
+        run: ./scripts/check-shader.ps1
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
       - name: Configure and build
