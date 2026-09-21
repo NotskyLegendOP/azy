@@ -1,0 +1,891 @@
+{
+  "product": "Azy Skin",
+  "spec": "Azy Skin for Adobe Premiere Pro - Complete Implementation Specification",
+  "shipped": "2.0.0",
+  "note": "Single source of truth for docs/progress.html and docs/PROGRESS.md. Edit the items, run tools/progress.py, commit all three. status: done | partial | todo | blocked | impossible. class: A (done/possible), B (possible, planned), C (approximation only), D (not possible - forbidden techniques, excluded from the totals).",
+  "packaging": {
+    "title": "Packaging & distribution",
+    "status": "done",
+    "note": "Installer, portable zip and source zip built by CI on every tag and attached to the GitHub release; local copies in release/."
+  },
+  "phases": [
+    {
+      "id": "P1",
+      "title": "Research & feasibility",
+      "spec": "\u00a72, \u00a744 Phase 1",
+      "eta": "1 session",
+      "next": "Correct the panel model against one debug screenshot from your machine",
+      "items": [
+        {
+          "name": "Main window, child windows, panel hierarchy documented",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "docs/FEASIBILITY.md \u00a71: docked panels are pixels, not windows"
+        },
+        {
+          "name": "Accessibility / UI Automation coverage assessed",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "Partial and version-dependent: used as an optional rectangle source, never as the foundation"
+        },
+        {
+          "name": "Region-by-region verdict (which parts can be modified)",
+          "class": "A",
+          "status": "done",
+          "weight": 2,
+          "note": "Classes A-D for every one of the 19 inspection targets"
+        },
+        {
+          "name": "Safe composition techniques chosen and judged",
+          "class": "A",
+          "status": "done",
+          "weight": 2,
+          "note": "docs/TECHNIQUES.md: six safety tests per API, full rejected list"
+        },
+        {
+          "name": "Input behaviour designed (click-through, no hooks)",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "WS_EX_TRANSPARENT + WS_EX_NOACTIVATE, no keyboard/mouse hooks anywhere"
+        },
+        {
+          "name": "Live confirmation on a real Premiere build",
+          "class": "C",
+          "status": "partial",
+          "weight": 2,
+          "note": "Design verified and now measurable: debug mode draws the panel map over the window for one screenshot from your machine"
+        }
+      ]
+    },
+    {
+      "id": "P2",
+      "title": "Window tracking",
+      "spec": "\u00a73 Layer 1, \u00a730-32, \u00a744 Phase 2",
+      "eta": "done",
+      "next": "Fold workspace identification into the panel model (Phase 5)",
+      "items": [
+        {
+          "name": "Process start / termination detection",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "Event-driven (WMI where available, scan as fallback); no high-frequency polling"
+        },
+        {
+          "name": "Window create / destroy / foreground changes",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "WinEvent hooks on the tracked window"
+        },
+        {
+          "name": "Move / resize / maximize / minimize / fullscreen",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "Includes the maximized overhang fix and the work-area rule"
+        },
+        {
+          "name": "DPI detection and rescaling at 100-200%",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "Per-monitor DPI aware v2, values in DIPs, converted at draw time"
+        },
+        {
+          "name": "Multi-monitor following, never assuming the primary",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "Monitor from the window rect, work area per monitor"
+        },
+        {
+          "name": "Single instance, per-user session, hand-over on upgrade",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "1.1.1: installing over a running build now takes over instead of exiting silently"
+        },
+        {
+          "name": "Workspace identification (Editing / Color / Audio / Effects / Graphics)",
+          "class": "B",
+          "status": "partial",
+          "weight": 2,
+          "note": "Profile default today; published panel names when Adobe exposes them"
+        },
+        {
+          "name": "Suspend on minimize / inactivity, resume on restore",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "Performance manager with settled/suspended/perf intervals"
+        },
+        {
+          "name": "Stored window handles validated against their owning process before use (handle recycling)",
+          "class": "A",
+          "status": "done"
+        }
+      ]
+    },
+    {
+      "id": "P3",
+      "title": "Rendering prototype",
+      "spec": "\u00a74, \u00a75, \u00a744 Phase 3",
+      "eta": "1 session",
+      "next": "One region prototype: header band plus a 1px dock separator",
+      "items": [
+        {
+          "name": "Click-through layered surface",
+          "class": "A",
+          "status": "done",
+          "weight": 2,
+          "note": "The mirror window carries WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW; input_guard verifies it at runtime and tools/check-mirror.py at build time"
+        },
+        {
+          "name": "Whole-window constant-alpha layer",
+          "class": "B",
+          "status": "done",
+          "weight": 3,
+          "note": "Retired in 2.0.0: the whole frame is re-drawn through the shader instead, so no constant-alpha sheet exists any more"
+        },
+        {
+          "name": "Prove it is on screen, not just that calls succeeded",
+          "class": "A",
+          "status": "done",
+          "weight": 2,
+          "note": "Check visibility samples the desktop twice and compares"
+        },
+        {
+          "name": "Z-order re-assertion above Premiere",
+          "class": "A",
+          "status": "done",
+          "weight": 3,
+          "note": "1.1.1: the fix for 'in front of Premiere: no'"
+        },
+        {
+          "name": "Region prototype (one panel band, one hairline)",
+          "class": "B",
+          "status": "done",
+          "weight": 3,
+          "note": "The shader's panel frames: a 1px lighter bezel on every modelled panel, with the media pass-through regions never painted"
+        },
+        {
+          "name": "Efficiency harness (CPU/GPU/RAM over 30 minutes)",
+          "class": "A",
+          "status": "partial",
+          "weight": 2,
+          "note": "Budget documented and measured by hand; no scripted capture yet"
+        }
+      ]
+    },
+    {
+      "id": "P4",
+      "title": "Design system",
+      "spec": "\u00a77, \u00a78, \u00a710, \u00a712, \u00a724-27, \u00a738-40",
+      "eta": "0 sessions",
+      "next": "Region chrome (handed to P5): dock separators, header band, static lighting",
+      "items": [
+        {
+          "name": "Surface token set (charcoal, surface, highlight, shadow, bezel)",
+          "class": "A",
+          "status": "done",
+          "weight": 2,
+          "note": "include/azy/core/theme.hpp, resolved once per settings change"
+        },
+        {
+          "name": "Theme -> palette resolution, tested",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "Unit-tested colour mixing and darkness lerp"
+        },
+        {
+          "name": "Accent system (restrained blue/violet, active-only)",
+          "class": "B",
+          "status": "done",
+          "weight": 2,
+          "note": "\u00a77/\u00a725: the theme's accent token drives borders, selection, glow and focus; accent_intensity scales it. The AccentId enum went with the rebuild - a theme already names its accent"
+        },
+        {
+          "name": "One reusable glass material (base + reflection + border + shadow)",
+          "class": "B",
+          "status": "partial",
+          "weight": 2,
+          "note": "One shader pass combines surface, diffusion, borders, panel frames, glow and content protection; the constants come from mirror_style.cpp"
+        },
+        {
+          "name": "Static lighting and reflection gradients",
+          "class": "B",
+          "status": "todo",
+          "weight": 2,
+          "note": "Static in the mirror: a diagonal sheen, a vignette and fixed grain, all computed per frame with no animation"
+        },
+        {
+          "name": "Corner radius in DIPs, clamped, per element size",
+          "class": "A",
+          "status": "partial",
+          "weight": 1,
+          "note": "corner_radius_dip (clamped 0-16, scaled by DPI) drives the window corners and every panel frame - mirror_style.cpp, unit-tested"
+        },
+        {
+          "name": "Presets: Ultra / Balanced / Performance / Low Power",
+          "class": "B",
+          "status": "done",
+          "weight": 2,
+          "note": "\u00a740: four presets + Custom detection, in the Settings combo and in settings.ini. Balanced is the default and is byte-identical to the shipped 1.1.x look"
+        },
+        {
+          "name": "Configuration file covering every visual value (INI/JSON)",
+          "class": "B",
+          "status": "partial",
+          "weight": 2,
+          "note": "\u00a726/\u00a738: theme, custom_accent, glass/border/shadow/glow intensities, radius, animations, preset, ui_profile. Glass blur is Azy's own shader diffusion of the captured frame, so no key is missing"
+        },
+        {
+          "name": "Tests for the design system",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "The theme, token, style and settings maths are unit-tested; the suite stands at 747 checks over the portable core"
+        }
+      ]
+    },
+    {
+      "id": "P5",
+      "title": "Major panels",
+      "spec": "\u00a78-\u00a723, \u00a744 Phase 5",
+      "eta": "2-3 sessions",
+      "next": "Dock separators + the application-header band, drawn straight from the panel map",
+      "items": [
+        {
+          "name": "Workspace-wide edge treatment (hairline + bezel + falloff)",
+          "class": "A",
+          "status": "done",
+          "weight": 2,
+          "note": "Panel frames: a 1px lighter bezel around every modelled panel (panel_hairlines), clipped by the pass-through regions, at every DPI and window state"
+        },
+        {
+          "name": "Whole-window tint (the 'skinned' read)",
+          "class": "B",
+          "status": "done",
+          "weight": 3,
+          "note": "Subsumed by the mirror: the captured frame is re-drawn through the theme's darkness remap (darkness slider) rather than covered by a sheet"
+        },
+        {
+          "name": "Panel map: measured + published + modelled rectangles",
+          "class": "B",
+          "status": "done",
+          "weight": 4,
+          "note": "\u00a73/\u00a732/\u00a737: ratio profiles per workspace applied to the client rect at the window DPI. 11 panels, six profiles, 211 new checks. Published (UIA) rectangles remain an optional refinement"
+        },
+        {
+          "name": "Dock separators: 1px hairlines where panels meet",
+          "class": "C",
+          "status": "todo",
+          "weight": 3,
+          "note": "\u00a79-\u00a712: gives panels measurable depth and separation without touching Premiere's widgets"
+        },
+        {
+          "name": "Application header band (\u00a723)",
+          "class": "C",
+          "status": "todo",
+          "weight": 2,
+          "note": "Static top highlight + darkened header strip"
+        },
+        {
+          "name": "Timeline band, selected-track accent line (\u00a716)",
+          "class": "C",
+          "status": "todo",
+          "weight": 3,
+          "note": "Clips and playhead stay Premiere's: per-clip styling is class D"
+        },
+        {
+          "name": "Monitor / Project / Effect Controls bands (\u00a717-19)",
+          "class": "C",
+          "status": "todo",
+          "weight": 3,
+          "note": "Video pixels are never touched; only the frame around them"
+        },
+        {
+          "name": "Audio meter region (\u00a720, static only)",
+          "class": "C",
+          "status": "todo",
+          "weight": 1,
+          "note": "Container treatment only, so a moving meter never costs frames"
+        },
+        {
+          "name": "Workspace profiles (Editing / Color / Audio / Effects / Graphics)",
+          "class": "B",
+          "status": "done",
+          "weight": 3,
+          "note": "\u00a732/\u00a739: five profiles plus Auto, selectable by hand in Settings (UI profile) and in settings.ini (ui_profile)"
+        },
+        {
+          "name": "Resize/DPI re-layout straight from ratios",
+          "class": "B",
+          "status": "done",
+          "weight": 2,
+          "note": "The map is rebuilt only when the geometry it was built from changes (one comparison per apply, no repaint on a timer)"
+        }
+      ]
+    },
+    {
+      "id": "P6",
+      "title": "Secondary UI",
+      "spec": "\u00a714, \u00a715, \u00a721, \u00a722, \u00a744 Phase 6",
+      "eta": "1 session",
+      "next": "Undocked panels and dialogs - real windows, so real treatments",
+      "items": [
+        {
+          "name": "Undocked (floating) panels: dark frame + ring",
+          "class": "B",
+          "status": "todo",
+          "weight": 3,
+          "note": "Out of scope in 2.0.0: they are real top-level windows of Premiere's and stay untouched (docs/KNOWN_LIMITATIONS.md). The mirror covers the main window only"
+        },
+        {
+          "name": "Dialogs: dark title bar + subtle border",
+          "class": "B",
+          "status": "todo",
+          "weight": 2,
+          "note": "Not attempted in 2.0.0: the rebuild removed DWM frame styling entirely, so dialogs are untouched (documented limitation)"
+        },
+        {
+          "name": "Azy's own settings window and tray",
+          "class": "A",
+          "status": "done",
+          "weight": 2,
+          "note": "Dark, minimal, live-applying"
+        },
+        {
+          "name": "Premiere's own menus, dropdowns, tooltips",
+          "class": "D",
+          "status": "impossible",
+          "weight": 0,
+          "note": "Windows popup menus are drawn by the system for Premiere's process; there is no external theming hook"
+        },
+        {
+          "name": "Premiere's own buttons, sliders, checkboxes, tabs",
+          "class": "D",
+          "status": "impossible",
+          "weight": 0,
+          "note": "Not native controls and not separate windows: unreachable without injection"
+        }
+      ]
+    },
+    {
+      "id": "P7",
+      "title": "Animation",
+      "spec": "\u00a728, \u00a744 Phase 7",
+      "eta": "0-1 session, decision first",
+      "next": "Say yes/no to 100ms transitions on Azy's own layers",
+      "items": [
+        {
+          "name": "Decision recorded: Azy stays static by default",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "docs/FEASIBILITY.md \u00a76 resolves the conflict with the original no-animation rule"
+        },
+        {
+          "name": "animations switch: stored, validated and shown, but inactive (documented, disabled in the UI)",
+          "class": "B",
+          "status": "partial",
+          "weight": 2,
+          "note": "The switch exists (Settings + settings.ini, off by default, covered by tests); the fade is the mirror's appearance fade (420 ms) and honours it"
+        }
+      ]
+    },
+    {
+      "id": "P8",
+      "title": "Performance",
+      "spec": "\u00a729, \u00a744 Phase 8, \u00a745",
+      "eta": "1 session",
+      "next": "Scripted 30-minute idle capture so the budget is a number, not a promise",
+      "items": [
+        {
+          "name": "Event-driven updates, no 1ms polling loops",
+          "class": "A",
+          "status": "done",
+          "weight": 3,
+          "note": "WinEvents, shell notifications, and timers armed only while unsettled"
+        },
+        {
+          "name": "Performance mode (bezel + hairline only)",
+          "class": "A",
+          "status": "done",
+          "weight": 2,
+          "note": "Default on low-end machines; keeps the overlay, drops backdrop, rounding and shadow"
+        },
+        {
+          "name": "Idle / suspended / perf scheduling",
+          "class": "A",
+          "status": "done",
+          "weight": 2,
+          "note": "Timer intervals follow what the engine needs, not the other way round"
+        },
+        {
+          "name": "No full-screen repaints; one key per surface",
+          "class": "A",
+          "status": "done",
+          "weight": 2,
+          "note": "Repaint only when geometry, colour or style changes"
+        },
+        {
+          "name": "Measured budget on the target machine (30 min)",
+          "class": "A",
+          "status": "partial",
+          "weight": 3,
+          "note": "Targets documented (<1% idle, <2% monitoring, <100 MB); needs a capture from your machine"
+        },
+        {
+          "name": "Throttled resize, debounced detection",
+          "class": "A",
+          "status": "done",
+          "weight": 2,
+          "note": "Work happens once the window settles, not per WM_SIZE"
+        },
+        {
+          "name": "Idle-cost and resource-lifetime defects found by the deep review fixed (scan storm, desktop enumeration, GDI leak)",
+          "class": "A",
+          "status": "done"
+        }
+      ]
+    },
+    {
+      "id": "P9",
+      "title": "Compatibility & acceptance",
+      "spec": "\u00a733-37, \u00a744 Phase 9, \u00a745, \u00a746",
+      "eta": "1 session + your test run",
+      "next": "Live acceptance pass on 1080p/1440p/4K, dual monitor, 100-200%",
+      "items": [
+        {
+          "name": "Version profiles with a conservative fallback",
+          "class": "A",
+          "status": "done",
+          "weight": 2,
+          "note": "2024/2025/2026 full, unknown = reduced, never a crash"
+        },
+        {
+          "name": "Safe Mode after repeated failures",
+          "class": "A",
+          "status": "done",
+          "weight": 2,
+          "note": "Basic enhancements only, experimental features re-enabled by hand"
+        },
+        {
+          "name": "Crash isolation both ways",
+          "class": "A",
+          "status": "done",
+          "weight": 2,
+          "note": "Premiere never depends on Azy; Azy never touches Premiere's state"
+        },
+        {
+          "name": "Unplaceable region ignored, logged, never fatal",
+          "class": "A",
+          "status": "partial",
+          "weight": 2,
+          "note": "Rule written; becomes real work once the panel map exists"
+        },
+        {
+          "name": "Live acceptance run (playback, scrub, export, import, save, dock/undock)",
+          "class": "C",
+          "status": "todo",
+          "weight": 4,
+          "note": "Needs Premiere: the rows are written down in docs/TESTING.md \u00a72-\u00a79 | Round 8 adds the overlay first-run checklist and the ten scenarios (docs/AZY_OVERLAY_TEST_PLAN.md) to this run v1.3.0 adds the duplicate-window run to the same session: docs/AZY_OVERLAY_TEST_PLAN.md - first-run checklist plus ten scenarios."
+        },
+        {
+          "name": "Visual quality compared against the reference image (\u00a746)",
+          "class": "C",
+          "status": "todo",
+          "weight": 3,
+          "note": "The reference image did not arrive with the specification - attach it and the palette is read from it"
+        },
+        {
+          "name": "Undo/redo safety: no project state touched (\u00a733)",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "True by construction: Azy never opens a project or sends Premiere an edit command"
+        },
+        {
+          "name": "Implementation audit + per-feature verification status published (AZYSKIN_AUDIT.md, VERIFICATION.md, KNOWN_LIMITATIONS.md)",
+          "class": "A",
+          "status": "done"
+        }
+      ]
+    },
+    {
+      "id": "P10",
+      "title": "Duplicate window overlay (round-8 architecture)",
+      "spec": "\u00a734, \u00a743 and the round-8 brief",
+      "eta": "delivered in v1.3.0",
+      "next": "Superseded by P11: the 2.0.0 rebuild removed the ring, the sheet and the DWM frame treatment this phase measured. Kept as the record of the v1.3.0 duplicate-window design.",
+      "items": [
+        {
+          "name": "Feasibility decision on the capture and composition APIs (\u00a734)",
+          "class": "A",
+          "status": "done",
+          "weight": 3,
+          "note": "Windows Graphics Capture + D3D11 + DirectComposition chosen; Desktop Duplication, DWM thumbnails, GDI and injection rejected with reasons (AZY_OVERLAY_ARCHITECTURE.md \u00a71.3)"
+        },
+        {
+          "name": "GPU window capture with a hand-declared WinRT ABI",
+          "class": "A",
+          "status": "done",
+          "weight": 4,
+          "note": "Free-threaded frame pool, cursor capture disabled, window-only (never a monitor), owning process validated before use"
+        },
+        {
+          "name": "Composition: DirectComposition swap chain + the gloss shader",
+          "class": "A",
+          "status": "done",
+          "weight": 4,
+          "note": "Premultiplied alpha, one full-screen triangle, compiled at run time from an embedded HLSL source (SM 5.0, then 4.0)"
+        },
+        {
+          "name": "Program and Source Monitor pass-through: the footage is never darkened",
+          "class": "A",
+          "status": "done",
+          "weight": 3,
+          "note": "Rectangles come from the panel model; the shader feathers the boundary. Accuracy on a real workspace still needs one screenshot"
+        },
+        {
+          "name": "Panel separators, 1px lighter bezel, rounded corners in the duplicate",
+          "class": "A",
+          "status": "done",
+          "weight": 3,
+          "note": "Hairlines around the modelled panels (never across the picture regions), radius 8dip by default, clamped so it cannot become a pill"
+        },
+        {
+          "name": "Geometry sync: move, resize, maximize, restore, minimize, DPI, multi-monitor",
+          "class": "A",
+          "status": "done",
+          "weight": 3,
+          "note": "Visible frame intersected with the work area when maximized; swap chain resized in place, renderer never rebuilt for a resize"
+        },
+        {
+          "name": "Click-through at window level and never steal focus",
+          "class": "B",
+          "status": "done",
+          "weight": 3,
+          "note": "WS_EX_TRANSPARENT + WS_EX_NOACTIVATE + WS_EX_TOOLWINDOW, HTTRANSPARENT, MA_NOACTIVATE; no keyboard hook anywhere Enforced, not just implemented: tools/check-overlay.py fails the build if the layered/transparent styles, the non-topmost rule or HTTRANSPARENT ever change, and each rule was mutation-tested."
+        },
+        {
+          "name": "Smart pacing: idle low, editing event-driven, playback high",
+          "class": "A",
+          "status": "done",
+          "weight": 3,
+          "note": "Pacing is driven by the capture itself (frames arriving = the window is changing): 10 fps idle, 30 fps active, timer removed while hidden"
+        },
+        {
+          "name": "Recursion guard: never capture a monitor, never mirror Azy itself",
+          "class": "A",
+          "status": "done",
+          "weight": 3,
+          "note": "Window-scoped capture only; CreateForMonitor is banned by tools/check-overlay.py and the own-process guard is asserted by the same check"
+        },
+        {
+          "name": "Overlay debug fields (handles, rectangles, counters, states)",
+          "class": "A",
+          "status": "done",
+          "weight": 2,
+          "note": "Shown in debug mode and in the settings diagnostics. Capture latency and GPU memory are not measurable with this API and are not invented"
+        },
+        {
+          "name": "Failure containment: the duplicate may never be the reason the skin disappears",
+          "class": "A",
+          "status": "done",
+          "weight": 3,
+          "note": "Unsupported host = one warning and no retry storm; other failures retried with backoff; the ring and veil stay in charge throughout"
+        },
+        {
+          "name": "AZY_OVERLAY_ARCHITECTURE.md and AZY_OVERLAY_TEST_PLAN.md",
+          "class": "A",
+          "status": "done",
+          "weight": 2,
+          "note": "11 sections plus the error-recovery matrix, the ten-scenario simulation and the first-run checklist"
+        },
+        {
+          "name": "Verify the mirror on a real Premiere run (first-run checklist + ten scenarios)",
+          "class": "A",
+          "status": "todo",
+          "weight": 4,
+          "note": "User-blocked: needs Windows + Premiere. Until then every overlay claim stays IMPLEMENTED - RUNTIME UNVERIFIED"
+        }
+      ]
+    },
+    {
+      "id": "P11",
+      "title": "Round-9 rebuild: the mirror (2.0.0)",
+      "spec": "the round-9 brief, \u00a72-\u00a746",
+      "eta": "1 session (this one) + 1 real-Premiere session to close it",
+      "next": "Run the mirror against a real Premiere Pro on Windows: everything in this phase is statically verified only, and that is the open item.",
+      "items": [
+        {
+          "name": "Old skin layers deleted (ring, sheet, veil, DWM frame styling, GDI+ renderer)",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "src/win32/skin/{dwm_composer,composition_surface,gdiplus_renderer,overlay_veil}.* and core/overlay_style.* removed; capture_math.expanded, ring_layout.hpp deleted"
+        },
+        {
+          "name": "Live GPU capture of the Premiere window (WGC, one window, no CPU copies)",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "src/win32/capture/window_capture.cpp; the monitor form of the API is refused by tools/check-mirror.py"
+        },
+        {
+          "name": "Composition pass: dark glass material in one shader (mirror.hlsl)",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "surface, diffusion, clarity, borders, panel frames, shadow, sheen, grain, glow; SM4.0"
+        },
+        {
+          "name": "Panel model drives the treatment (header, panels, timeline, meters)",
+          "class": "C",
+          "status": "done",
+          "weight": 1,
+          "note": "8 panel slots + 4 media slots in the constant buffer; rectangles are a model, not segmentation"
+        },
+        {
+          "name": "Media pass-through: Program/Source Monitor pictures bit-exact",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "measured 0.0000 per-channel change inside the monitors by tools/preview_render.py"
+        },
+        {
+          "name": "Content protection for thumbnails, previews and waveforms",
+          "class": "C",
+          "status": "done",
+          "weight": 1,
+          "note": "approximation by saturation+luminance, content_keep 0.88; caveats listed in the architecture doc \u00a710"
+        },
+        {
+          "name": "Centralised theme engine: 13 tokens, 9 themes + Custom + Original",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "no colour literal in the renderer; tools/check-mirror.py enforces it; switching needs no rebuild"
+        },
+        {
+          "name": "Clearly separated component layers (capture / compose / present / policy)",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "SkinEngine state machine, MirrorRenderer, WindowCapture; no scattered booleans"
+        },
+        {
+          "name": "Honest failure states and logging (never a fake working state)",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "WAITING_FOR_PREMIERE / CAPTURE_FAILED / UNSUPPORTED / SUSPENDED / MIRROR_ACTIVE, with reasons"
+        },
+        {
+          "name": "Static verification: contract check, 747 unit assertions, cross-build, PE inspection",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "scripts/verify.sh steps 1-7, all green on this machine"
+        },
+        {
+          "name": "Design preview (CPU re-implementation of the shader) for review without Windows",
+          "class": "B",
+          "status": "done",
+          "weight": 1,
+          "note": "tools/preview_render.py + docs/images/azy_mirror_*.png; not a screenshot and says so"
+        },
+        {
+          "name": "Run it against a real Premiere Pro on Windows and report",
+          "class": "B",
+          "status": "user",
+          "weight": 2,
+          "note": "Nothing in this phase is runtime-verified; see docs/AZY_MIRROR_ARCHITECTURE.md \u00a711"
+        }
+      ]
+    }
+  ],
+  "out_of_scope": [
+    {
+      "spec": "\u00a716 Selected/unselected clip styling, playhead styling",
+      "why": "Clips and the playhead are painted by Premiere inside one window. Recolouring them means hooking its renderer - the definition of what this project does not do. Closest alternative: the timeline band, its separators and an accent line for the selected track."
+    },
+    {
+      "spec": "\u00a714-15 Dropdown and context menus as glass cards",
+      "why": "Those popups belong to Premiere's process and are themed by Windows. No supported external theming exists. They stay exactly as they are."
+    },
+    {
+      "spec": "\u00a713 Buttons, \u00a719 sliders/checkboxes/keyframes, \u00a718 search field, \u00a721 toolbar icons",
+      "why": "Premiere's own drawing, with no HWND behind them. Alternative: region chrome around them (separators, bands, accents), which is what class C delivers."
+    },
+    {
+      "spec": "\u00a79-10 Background blur behind panels",
+      "why": "Windows can blur only a process's own window. Blurring Premiere's pixels requires constant screen capture and reprojection - explicitly ruled out. Alternative: static gradients that read as depth."
+    },
+    {
+      "spec": "\u00a711 Panel hover/active/focus states on Premiere's panels",
+      "why": "Premiere's panels never tell an outside process that the pointer is over them. Alternative: focus-aware treatment of the tracked window as a whole (active window vs. inactive), which is measurable."
+    }
+  ],
+  "spec_map": [
+    {
+      "section": "\u00a73 Layer 2 Panel discovery",
+      "phase": "P5",
+      "class": "B/C",
+      "status": "partial"
+    },
+    {
+      "section": "\u00a77 Design system",
+      "phase": "P4",
+      "class": "B",
+      "status": "done"
+    },
+    {
+      "section": "\u00a78 Background layers",
+      "phase": "P4/P5",
+      "class": "C",
+      "status": "partial"
+    },
+    {
+      "section": "\u00a79-12 Glass panels, material, states, borders",
+      "phase": "P4/P5",
+      "class": "C",
+      "status": "partial"
+    },
+    {
+      "section": "\u00a713-15 Controls, dropdowns, context menus",
+      "phase": "P6",
+      "class": "D",
+      "status": "impossible"
+    },
+    {
+      "section": "\u00a716 Timeline",
+      "phase": "P5",
+      "class": "C",
+      "status": "todo"
+    },
+    {
+      "section": "\u00a717-19 Monitors, Project, Effect Controls",
+      "phase": "P5",
+      "class": "C",
+      "status": "todo"
+    },
+    {
+      "section": "\u00a720 Audio meters",
+      "phase": "P5",
+      "class": "C",
+      "status": "todo"
+    },
+    {
+      "section": "\u00a721-23 Toolbar, menu bar, application header",
+      "phase": "P5/P6",
+      "class": "C",
+      "status": "todo"
+    },
+    {
+      "section": "\u00a724-27 Radius, lighting, reflections, shadows",
+      "phase": "P4",
+      "class": "B",
+      "status": "partial"
+    },
+    {
+      "section": "\u00a728 Animation",
+      "phase": "P7",
+      "class": "B",
+      "status": "partial"
+    },
+    {
+      "section": "\u00a733 Undo/redo safety",
+      "phase": "P9",
+      "class": "A",
+      "status": "done"
+    },
+    {
+      "section": "\u00a737 Version -> UI profile system",
+      "phase": "P5",
+      "class": "B",
+      "status": "partial"
+    },
+    {
+      "section": "\u00a738 Configuration file",
+      "phase": "P4",
+      "class": "B",
+      "status": "done"
+    },
+    {
+      "section": "\u00a739-40 Settings, presets",
+      "phase": "P4",
+      "class": "B",
+      "status": "done"
+    },
+    {
+      "section": "\u00a741 Debug mode",
+      "phase": "P5",
+      "class": "B",
+      "status": "done"
+    }
+  ],
+  "acceptance": [
+    {
+      "area": "Premiere",
+      "row": "Opens / closes normally",
+      "status": "done",
+      "note": "Never a dependency: Azy attaches to a running process and detaches on exit"
+    },
+    {
+      "area": "Premiere",
+      "row": "Plays / scrubs normally",
+      "status": "user",
+      "note": "No hooks in the render path; needs one confirmation run"
+    },
+    {
+      "area": "Premiere",
+      "row": "Exports / imports / saves normally",
+      "status": "user",
+      "note": "Azy never opens, reads or writes a project"
+    },
+    {
+      "area": "Input",
+      "row": "Mouse, keyboard, shortcuts, dragging, timeline interaction",
+      "status": "done",
+      "note": "Click-through by construction; no input hooks of any kind"
+    },
+    {
+      "area": "UI",
+      "row": "No drift, no flicker, no black rectangles, no input-blocking areas",
+      "status": "partial",
+      "note": "The mirror is placed on the tracked window and re-placed in a burst after moves; confirming zero flicker needs the real Premiere pass"
+    },
+    {
+      "area": "UI",
+      "row": "Panels align correctly",
+      "status": "user",
+      "note": "The model is in and its geometry is unit-tested; confirming it against a real Premiere layout needs one debug screenshot"
+    },
+    {
+      "area": "Performance",
+      "row": "No continuous redraw, no playback FPS loss, no timeline latency",
+      "status": "partial",
+      "note": "Paced at 60/15 fps (30/8 in performance mode) and no timer at all while hidden; measuring idle CPU on a real Premiere is still pending"
+    },
+    {
+      "area": "Scaling",
+      "row": "100 / 125 / 150 / 175 / 200%",
+      "status": "user",
+      "note": "DIP-based values and per-monitor DPI v2; one pass on real hardware to confirm"
+    },
+    {
+      "area": "Displays",
+      "row": "1080p / 1440p / 4K / dual monitor",
+      "status": "user",
+      "note": "Geometry is monitor-relative and tested in unit tests; live pass pending"
+    }
+  ]
+}

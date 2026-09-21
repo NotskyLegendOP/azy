@@ -1,0 +1,172 @@
+name: release
+
+# Publishes downloadable bundles for a version: the Inno Setup installer, a portable
+# build, and the source archive. Run it from the Actions tab (or `gh workflow run
+# release`), or by pushing a v* tag.
+#
+# The assets are attached to a GitHub release, which is where users get them from -
+# no build machine needed, and no artefact expiry to worry about.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (must match AppVersion in packaging/AzySkin.iss)"
+        required: true
+        default: "2.0.0"
+      prerelease:
+        description: "Mark the release as a pre-release"
+        type: boolean
+        default: false
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: build and publish
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Work out the version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "push") {
+            $version = "${{ github.ref_name }}".TrimStart("v")
+          } else {
+            $version = "${{ inputs.version }}"
+          }
+          $declared = (Select-String -Path packaging/AzySkin.iss -Pattern '#define AppVersion "([^"]+)"').Matches[0].Groups[1].Value
+          if ($declared -ne $version) {
+            throw "release $version does not match AppVersion '$declared' in packaging/AzySkin.iss"
+          }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Output "version: $version (matches the installer script)"
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build (MSVC Release)
+        run: |
+          cmake -S . -B build
+          cmake --build build --config Release --parallel
+
+      - name: Run the tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Compile the installer
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging\AzySkin.iss
+          if (-not (Test-Path "dist/AzySkin-$version-setup.exe")) {
+            throw "the installer was not produced"
+          }
+          Get-Item "dist/AzySkin-$version-setup.exe" | Format-List Name, Length
+
+      - name: Assemble the download bundles
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+
+          # 1. The installer.
+          Copy-Item "dist/AzySkin-$version-setup.exe" "out/AzySkin-$version-setup.exe"
+
+          # 2. Source archive, straight from the repository (no build output).
+          git archive --format=zip --prefix="azy-skin-$version/" -o "out/AzySkin-$version-source.zip" HEAD
+
+          # 3. Portable build: the executable plus the documentation, for anyone who
+          #    would rather not install anything.
+          $portable = "staging/AzySkin-$version"
+          New-Item -ItemType Directory -Force -Path $portable | Out-Null
+          Copy-Item "build/Release/AzySkin.exe" "$portable/AzySkin.exe"
+          Copy-Item "release/README.txt" "$portable/README.txt"
+          Copy-Item "LICENSE", "README.md" -Destination $portable
+          Copy-Item "docs" -Destination $portable -Recurse
+          Compress-Archive -Path $portable -DestinationPath "out/AzySkin-$version-x64-portable.zip" -Force
+
+          Get-ChildItem out | Format-Table Name, Length
+
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $tag = "v$version"
+          $flags = @()
+          if ("${{ inputs.prerelease }}" -eq "true") { $flags += "--prerelease" }
+
+          $notes = @"
+          Azy Skin $version - a lightweight, native Win32 skin layer for Adobe Premiere Pro.
+
+          **Downloads**
+
+          | File | What it is |
+          |---|---|
+          | ``AzySkin-$version-setup.exe`` | The installer (per-user, no admin rights, adds Start-with-Windows and auto-apply as options) |
+          | ``AzySkin-$version-x64-portable.zip`` | The executable plus the documentation, unpack anywhere and run |
+          | ``AzySkin-$version-source.zip`` | The full source tree at this version |
+
+          **What it does:** it mirrors Premiere's own window. Azy captures the window on the
+          GPU (Windows Graphics Capture - never the desktop, never another application),
+          draws the picture back through a small shader - dark charcoal, a little glass,
+          1px separators between the panels, a 1px lighter frame, rounded corners - and
+          shows it in a click-through window placed directly above Premiere. The Program
+          and Source Monitors are passed through untouched, so footage is never darkened.
+
+          Premiere stays the application in every sense: it keeps the mouse, the keyboard,
+          the focus, the menus, the timeline, the playback and every plugin. Azy decides
+          only what the pixels look like. No plugin, no injection, no patching, nothing
+          written into an Adobe directory, no animation, and no screenshot loop (frames
+          never touch the CPU, the disk or a file).
+
+          There is no fallback skin in 2.0.0. If the mirror cannot run - an unsupported
+          Windows build, a driver that refuses the device, an elevated Premiere - Azy draws
+          **nothing** and says why. It never paints a placeholder rectangle over Premiere.
+
+          **Status of this build: implemented and statically verified, runtime unverified.**
+          The contract between the shader and the C++ that feeds it is machine-checked, 747
+          unit assertions pass, the Windows build cross-compiles and its resources are
+          inspected - and none of that has been run against a real Premiere on a real
+          machine yet. ``docs/AZY_MIRROR_ARCHITECTURE.md`` in the source archive describes
+          the design, the pixel classification and - in section 10 - exactly where the model
+          can be fooled. The checklist that closes the rest is ``docs/TESTING.md``.
+
+          **If you cannot see it:** press *Settings > Check visibility*. It reports what is
+          actually on screen and the lifecycle state it is in (``MIRROR_ACTIVE``,
+          ``WAITING_FOR_PREMIERE``, ``CAPTURE_FAILED``, ``UNSUPPORTED``, ``SUSPENDED``),
+          and the log carries the same information. It also offers *Restart as
+          Administrator*, which is the one situation Azy cannot work around: Windows never
+          lets a normal process draw above an elevated one.
+
+          Requires 64-bit Windows 10 1809 or newer (the duplicate window needs the
+          free-threaded capture frame pool from that build, and d3dcompiler_47.dll, which
+          ships with Windows). The executables are unsigned.
+          "@
+          $notes | Set-Content -Path release-notes.md -Encoding utf8
+
+          # Attach to an existing release/tag when there is one; otherwise create it.
+          # (--target only matters when the tag does not exist yet: pushing the tag
+          # first is what makes a tag-triggered run land on the right commit.)
+          gh release view $tag --repo "${{ github.repository }}" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag out/* --clobber --repo "${{ github.repository }}"
+            exit $LASTEXITCODE
+          }
+
+          git rev-parse --verify --quiet "refs/tags/$tag" *> $null
+          $tag_exists = ($LASTEXITCODE -eq 0)
+          $create = @("release", "create", $tag) + (Get-ChildItem out | ForEach-Object { $_.FullName }) +
+                    @("--title", "Azy Skin $version", "--notes-file", "release-notes.md") +
+                    @("--repo", "${{ github.repository }}") + $flags
+          if (-not $tag_exists) { $create += @("--target", "${{ github.sha }}") }
+          & gh @create

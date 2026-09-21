@@ -1,0 +1,44 @@
+// Azy Skin - Windows resources.
+//
+// Only three things: the application manifest (DPI awareness, common controls
+// v6, asInvoker), the icon, and the version block shown on the executable's
+// Properties page. No Premiere or Adobe resources are involved anywhere.
+
+#include <windows.h>
+
+// Application manifest (RT_MANIFEST = 24), id 1 = the process manifest.
+1 24 "azy_skin.manifest"
+
+// Application icon. Azy also draws this icon at runtime; the embedded one is
+// used when available so Explorer, shortcuts and the taskbar all match.
+1 ICON "azy_skin.ico"
+
+VS_VERSION_INFO VERSIONINFO
+    FILEVERSION 2, 0, 0, 0
+    PRODUCTVERSION 2, 0, 0, 0
+    FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+    FILEFLAGS 0
+    FILEOS VOS_NT_WINDOWS32
+    FILETYPE VFT_APP
+    FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "Azy Skin"
+            VALUE "FileDescription", "Azy Skin - lightweight visual skin for Adobe Premiere Pro"
+            VALUE "FileVersion", "2.0.0.0"
+            VALUE "InternalName", "AzySkin"
+            VALUE "LegalCopyright", "MIT licensed"
+            VALUE "OriginalFilename", "AzySkin.exe"
+            VALUE "ProductName", "Azy Skin"
+            VALUE "ProductVersion", "2.0.0.0"
+            VALUE "Comments", "Visual only: does not modify Adobe files, Premiere data or Premiere behaviour."
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
