@@ -21,7 +21,7 @@ class TrayIcon {
 public:
     struct Callbacks {
         std::function<void(bool enabled)> on_toggle_skin;
-        std::function<void(ThemeId theme)> on_theme;
+        std::function<void(ThemeKey theme)> on_theme;
         std::function<void()> on_settings;
         std::function<void(bool enabled)> on_start_with_windows;
         std::function<void(bool suspended)> on_suspend;
@@ -35,7 +35,7 @@ public:
         bool skin_enabled = true;
         bool suspended = false;
         bool start_with_windows = false;
-        ThemeId theme = ThemeId::AzyDarkGlass;
+        ThemeKey theme = ThemeKey::BluePurple;
         std::string status_line;  // e.g. "Premiere Pro 2025 - Azy Dark Glass active"
         // Premiere is running at a higher integrity level than Azy, so Windows will
         // not let Azy draw above it. The fix is a restart with administrator rights,

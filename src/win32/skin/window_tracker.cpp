@@ -1,7 +1,7 @@
 #include "azy/win32/skin/window_tracker.hpp"
 
 #include "azy/core/log.hpp"
-#include "azy/core/ring_layout.hpp"
+#include "azy/core/capture_math.hpp"
 #include "azy/win32/detect/premiere_probe.hpp"
 #include "azy/win32/os/win_api.hpp"
 #include "azy/win32/os/win_util.hpp"
@@ -61,7 +61,7 @@ WindowTracker::RefreshResult WindowTracker::refresh(double now) {
         return result;
     }
     // Liveness is not enough: a recycled handle is a valid window that belongs to
-    // somebody else. Without this check Azy would keep drawing its ring around -
+    // somebody else. Without this check Azy would keep drawing the mirror over -
     // and, worse, applying frame attributes to - whatever window inherited the
     // handle after Premiere's window was destroyed.
     if (!window_belongs_to(target_.hwnd, target_.pid)) {
@@ -80,7 +80,7 @@ WindowTracker::RefreshResult WindowTracker::refresh(double now) {
     RECT visible{};
     const bool have_visible = visible_frame_rect(target_.hwnd, visible);
     const Rect new_frame = to_rect(frame);
-    Rect new_visible = have_visible ? to_rect(visible) : new_frame;  // ring_frame() may replace it below
+    Rect new_visible = have_visible ? to_rect(visible) : new_frame;  // clamped to the screen below
 
     const bool minimized = is_window_minimized(target_.hwnd);
     const bool maximized = is_window_maximized(target_.hwnd);
@@ -100,17 +100,17 @@ WindowTracker::RefreshResult WindowTracker::refresh(double now) {
     const UINT dpi = win::api().get_dpi_for_window ? win::dpi_for_window(target_.hwnd)
                                                    : win::dpi_for_rect(frame);
 
-    // The ring frame: what the user can actually see of this window, which is not
-    // always what Windows reports (see ring_frame).
+    // What the user can actually see of this window, which is not always what Windows
+    // reports (see overlay_rect).
     //
     // Windows places a maximized window so that its invisible resize border hangs
-    // over the monitor edges, and the numbers we read back can therefore start at
-    // a negative coordinate. The ring is drawn inside the frame edge, so those
-    // numbers would put the entire treatment off the display - the skin would run
-    // perfectly and show nothing. Draw on what is visible instead (see ring_frame).
+    // over the monitor edges, and the numbers we read back can therefore start at a
+    // negative coordinate. The mirror is placed on the frame edge, so those numbers
+    // would put the entire treatment off the display - the skin would run perfectly
+    // and show nothing. Draw on what is visible instead.
     const bool fullscreen_raw = !minimized && !maximized && new_visible == monitor_rect;
     const Rect reported_visible = new_visible;
-    new_visible = ring_frame(new_visible, monitor_rect, work_area, maximized, fullscreen_raw);
+    new_visible = overlay_rect(new_visible, monitor_rect, work_area, maximized, fullscreen_raw);
     const bool geometry_changed = rect_changed(target_.visible_frame, new_visible, 0) ||
                                   rect_changed(target_.frame, new_frame, 0);
     const bool state_changed = minimized != target_.minimized || maximized != target_.maximized ||
@@ -132,9 +132,9 @@ WindowTracker::RefreshResult WindowTracker::refresh(double now) {
     if (geometry_changed) {
         last_geometry_change_ = now;
         // One line per geometry change (never per timer tick): the reported frame,
-        // the rect the ring will really be drawn on, and the screen it sits on.
+        // the rect the mirror will really be drawn on, and the screen it sits on.
         log_info("window frame: reported (%d,%d)-(%d,%d) [dwm], window (%d,%d)-(%d,%d) [getwindowrect], "
-                 "ring on (%d,%d)-(%d,%d), screen (%d,%d)-(%d,%d), work area top %d bottom %d, %s%s, %u dpi",
+                 "mirror on (%d,%d)-(%d,%d), screen (%d,%d)-(%d,%d), work area top %d bottom %d, %s%s, %u dpi",
                  reported_visible.left, reported_visible.top, reported_visible.right, reported_visible.bottom,
                  new_frame.left, new_frame.top, new_frame.right, new_frame.bottom, new_visible.left,
                  new_visible.top, new_visible.right, new_visible.bottom, monitor_rect.left, monitor_rect.top,
@@ -142,8 +142,8 @@ WindowTracker::RefreshResult WindowTracker::refresh(double now) {
                  maximized ? "maximized" : (fullscreen_raw ? "fullscreen" : "windowed"),
                  shown ? "" : ", hidden", dpi);
         if (new_visible != reported_visible) {
-            log_info("ring frame: the window reports (%d,%d)-(%d,%d) and is %s; drawing on the visible %s "
-                     "(%d,%d)-(%d,%d) instead - the reported rectangle would put the ring off screen",
+            log_info("visible frame: the window reports (%d,%d)-(%d,%d) and is %s; drawing on the visible %s "
+                     "(%d,%d)-(%d,%d) instead - the reported rectangle would put the skin off screen",
                      reported_visible.left, reported_visible.top, reported_visible.right, reported_visible.bottom,
                      maximized ? "maximized" : "fullscreen", maximized ? "work area" : "display area",
                      new_visible.left, new_visible.top, new_visible.right, new_visible.bottom);

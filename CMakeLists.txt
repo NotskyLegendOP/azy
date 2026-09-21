@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(AzySkin
-    VERSION 1.3.0
+    VERSION 2.0.0
     DESCRIPTION "Azy Skin - a lightweight visual skin for Adobe Premiere Pro"
     LANGUAGES CXX)
 
@@ -43,10 +43,10 @@ endif()
 # ---------------------------------------------------------------------------
 add_library(azy_core STATIC
     src/core/capture_math.cpp
-    src/core/compat.cpp
+    src/core/mirror_style.cpp
+    src/core/theme_tokens.cpp
     src/core/failure_tracker.cpp
     src/core/log.cpp
-    src/core/overlay_style.cpp
     src/core/panel_map.cpp
     src/core/product.cpp
     src/core/settings.cpp
@@ -69,19 +69,14 @@ if(WIN32)
         src/win32/detect/premiere_detector.cpp
         src/win32/detect/premiere_probe.cpp
         src/win32/detect/process_scanner.cpp
-        src/win32/gloss/gloss_overlay.cpp
+        src/win32/mirror/mirror_renderer.cpp
         src/win32/os/autostart.cpp
         src/win32/os/file_watcher.cpp
         src/win32/os/win_api.cpp
         src/win32/os/win_util.cpp
         src/win32/os/win_version.cpp
         src/win32/performance/performance_manager.cpp
-        src/win32/skin/composition_surface.cpp
-        src/win32/skin/debug_overlay.cpp
-        src/win32/skin/dwm_composer.cpp
-        src/win32/skin/gdiplus_renderer.cpp
         src/win32/skin/input_guard.cpp
-        src/win32/skin/overlay_veil.cpp
         src/win32/skin/skin_engine.cpp
         src/win32/skin/skin_types.cpp
         src/win32/skin/window_tracker.cpp
@@ -97,17 +92,17 @@ if(WIN32)
     # time, so the executable stays self-contained (no shader file to find next to
     # the .exe) while the shader is still editable as a shader. The dependency
     # makes cmake re-run when it changes.
-    set(AZY_GLOSS_HLSL "${CMAKE_CURRENT_SOURCE_DIR}/resources/shaders/gloss.hlsl")
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${AZY_GLOSS_HLSL}")
-    if(EXISTS "${AZY_GLOSS_HLSL}")
-        file(READ "${AZY_GLOSS_HLSL}" AZY_GLOSS_SOURCE)
-        file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generated/azy_gloss_shader.hpp"
-"// Generated from resources/shaders/gloss.hlsl by CMake - do not edit.
+    set(AZY_MIRROR_HLSL "${CMAKE_CURRENT_SOURCE_DIR}/resources/shaders/mirror.hlsl")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${AZY_MIRROR_HLSL}")
+    if(EXISTS "${AZY_MIRROR_HLSL}")
+        file(READ "${AZY_MIRROR_HLSL}" AZY_MIRROR_SOURCE)
+        file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generated/azy_mirror_shader.hpp"
+"// Generated from resources/shaders/mirror.hlsl by CMake - do not edit.
 #pragma once
-namespace azy { namespace win { inline constexpr const char* kGlossShaderSource = R\"AZYHLSL(${AZY_GLOSS_SOURCE})AZYHLSL\"; } }
+namespace azy { namespace win { inline constexpr const char* kMirrorShaderSource = R\"AZYHLSL(${AZY_MIRROR_SOURCE})AZYHLSL\"; } }
 ")
     else()
-        message(FATAL_ERROR "resources/shaders/gloss.hlsl is missing")
+        message(FATAL_ERROR "resources/shaders/mirror.hlsl is missing")
     endif()
     # One source of truth for the version: the installer, the executable's
     # version resource and the runtime banner all follow project(... VERSION).
@@ -118,7 +113,7 @@ namespace azy { namespace win { inline constexpr const char* kGlossShaderSource 
         advapi32     # registry (Start with Windows, system theme)
         comctl32     # settings window controls
         dwmapi       # window composition attributes + extended frame bounds
-        gdi32 gdiplus  # the single ring bitmap Azy draws
+        gdi32  # the tray icon bitmap (never the skin itself)
         ole32 oleaut32 # COM/WMI (optional process notifications)
         shlwapi      # path helpers
         user32       # window management, hooks, DPI
@@ -184,4 +179,11 @@ if(AZY_BUILD_TESTS)
         set_target_properties(azy_core_tests PROPERTIES WIN32_EXECUTABLE OFF)
     endif()
     add_test(NAME azy_core_tests COMMAND azy_core_tests)
+
+    # A tiny console tool that prints the theme tokens and the mirror style. The
+    # design preview (tools/preview_render.py) runs it so a preview can never disagree
+    # with the application about what a theme is; nothing in the shipped application
+    # uses it. Built for the host, so it also works on a machine with no Windows SDK.
+    add_executable(azy_dump_style tools/dump_style.cpp)
+    target_link_libraries(azy_dump_style PRIVATE azy_core)
 endif()

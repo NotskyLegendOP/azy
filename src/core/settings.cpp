@@ -75,15 +75,93 @@ std::vector<std::string> split_feature_list(const std::string& value) {
 
 }  // namespace
 
+const char* preset_name(PresetId preset) {
+    switch (preset) {
+        case PresetId::Ultra: return "Ultra";
+        case PresetId::Balanced: return "Balanced";
+        case PresetId::Performance: return "Performance";
+        case PresetId::LowPower: return "Low power";
+        case PresetId::Custom: return "Custom";
+    }
+    return "Balanced";
+}
+
+const char* preset_key(PresetId preset) {
+    switch (preset) {
+        case PresetId::Ultra: return "ultra";
+        case PresetId::Balanced: return "balanced";
+        case PresetId::Performance: return "performance";
+        case PresetId::LowPower: return "low_power";
+        case PresetId::Custom: return "custom";
+    }
+    return "balanced";
+}
+
+bool preset_from_key(const std::string& key, PresetId& out) {
+    const std::string k = to_lower(trim(key));
+    if (k == "ultra") { out = PresetId::Ultra; return true; }
+    if (k == "balanced" || k == "default") { out = PresetId::Balanced; return true; }
+    if (k == "performance" || k == "perf") { out = PresetId::Performance; return true; }
+    if (k == "low_power" || k == "lowpower" || k == "low-power") { out = PresetId::LowPower; return true; }
+    if (k == "custom") { out = PresetId::Custom; return true; }
+    return false;
+}
+
+PresetValues preset_values(PresetId preset) {
+    PresetValues v;
+    switch (preset) {
+        case PresetId::Ultra:
+            v.glass_intensity = 0.85;
+            v.border_intensity = 0.80;
+            v.corner_radius_dip = 12;
+            v.shadow_intensity = 0.60;
+            v.darkness = 0.58;
+            v.accent_intensity = 0.60;
+            v.glow_intensity = 0.40;
+            v.animations = true;
+            v.performance_mode = false;
+            break;
+        case PresetId::Balanced:
+        case PresetId::Custom:  // applying "Custom" means "back to the baseline values"
+            break;
+        case PresetId::Performance:
+            // Fewer effects and a lower rate: the mirror stays, because the mirror *is*
+            // the skin; the diffusion, the corner radius and the shadow are what go.
+            v.glass_intensity = 0.30;
+            v.border_intensity = 0.45;
+            v.corner_radius_dip = 0;
+            v.shadow_intensity = 0.15;
+            v.darkness = 0.50;
+            v.accent_intensity = 0.35;
+            v.glow_intensity = 0.0;
+            v.animations = false;
+            v.performance_mode = true;
+            break;
+        case PresetId::LowPower:
+            // The floor: a darkened, lightly framed mirror and nothing else.
+            v.glass_intensity = 0.15;
+            v.border_intensity = 0.30;
+            v.corner_radius_dip = 0;
+            v.shadow_intensity = 0.0;
+            v.darkness = 0.50;
+            v.accent_intensity = 0.20;
+            v.glow_intensity = 0.0;
+            v.animations = false;
+            v.performance_mode = true;
+            break;
+    }
+    return v;
+}
+
 void Settings::clamp() {
     appearance.glass_intensity = std::max(0.0, std::min(1.0, appearance.glass_intensity));
     appearance.border_intensity = std::max(0.0, std::min(1.0, appearance.border_intensity));
     appearance.shadow_intensity = std::max(0.0, std::min(1.0, appearance.shadow_intensity));
     appearance.darkness = std::max(0.0, std::min(1.0, appearance.darkness));
-    appearance.overlay_intensity = std::max(0.0, std::min(1.0, appearance.overlay_intensity));
     appearance.corner_radius_dip = std::max(0, std::min(16, appearance.corner_radius_dip));
     appearance.accent_intensity = std::max(0.0, std::min(1.0, appearance.accent_intensity));
     appearance.glow_intensity = std::max(0.0, std::min(1.0, appearance.glow_intensity));
+    if (appearance.custom_accent.a == 0) appearance.custom_accent.a = 255;
     if (schema < 1) schema = 1;
     if (failure_count < 0) failure_count = 0;
 }
@@ -95,8 +173,6 @@ void Settings::apply_preset(PresetId preset) {
     appearance.corner_radius_dip = v.corner_radius_dip;
     appearance.shadow_intensity = v.shadow_intensity;
     appearance.darkness = v.darkness;
-    appearance.overlay = v.overlay;
-    appearance.overlay_intensity = v.overlay_intensity;
     appearance.accent_intensity = v.accent_intensity;
     appearance.glow_intensity = v.glow_intensity;
     appearance.animations = v.animations;
@@ -115,8 +191,6 @@ PresetId Settings::current_preset() const {
                           appearance.corner_radius_dip == v.corner_radius_dip &&
                           std::abs(appearance.shadow_intensity - v.shadow_intensity) < 0.005 &&
                           std::abs(appearance.darkness - v.darkness) < 0.005 &&
-                          appearance.overlay == v.overlay &&
-                          std::abs(appearance.overlay_intensity - v.overlay_intensity) < 0.005 &&
                           std::abs(appearance.accent_intensity - v.accent_intensity) < 0.005 &&
                           std::abs(appearance.glow_intensity - v.glow_intensity) < 0.005 &&
                           appearance.animations == v.animations && performance_mode == v.performance_mode;
@@ -162,15 +236,13 @@ std::string Settings::to_ini() const {
     out += "apply_automatically=" + bool_str(apply_automatically) + "\n\n";
 
     out += "[appearance]\n";
-    out += std::string("theme=") + theme_key(appearance.theme) + "\n";
+    out += std::string("theme=") + theme_key_id(appearance.theme) + "\n";
+    out += "custom_accent=" + format_hex_color(appearance.custom_accent) + "\n";
     out += "glass_intensity=" + fmt_double(appearance.glass_intensity) + "\n";
     out += "border_intensity=" + fmt_double(appearance.border_intensity) + "\n";
     out += "corner_radius=" + std::to_string(appearance.corner_radius_dip) + "\n";
     out += "shadow_intensity=" + fmt_double(appearance.shadow_intensity) + "\n";
     out += "darkness=" + fmt_double(appearance.darkness) + "\n";
-    out += "overlay=" + bool_str(appearance.overlay) + "\n";
-    out += "overlay_intensity=" + fmt_double(appearance.overlay_intensity) + "\n";
-    out += std::string("accent=") + accent_key(appearance.accent) + "\n";
     out += "accent_intensity=" + fmt_double(appearance.accent_intensity) + "\n";
     out += "glow_intensity=" + fmt_double(appearance.glow_intensity) + "\n";
     out += "animations=" + bool_str(appearance.animations) + "\n";
@@ -200,8 +272,8 @@ std::string Settings::to_ini() const {
     std::set<std::string> known;
     static const char* kKnown[] = {
         "enabled", "start_with_windows", "apply_automatically", "theme", "glass_intensity",
-        "border_intensity", "corner_radius", "shadow_intensity", "darkness", "overlay",
-        "overlay_intensity", "accent", "accent_intensity", "glow_intensity", "animations", "preset",
+        "border_intensity", "corner_radius", "shadow_intensity", "darkness",
+        "custom_accent", "accent_intensity", "glow_intensity", "animations", "preset",
         "performance_mode",
         "suspend_while_minimized", "suspend_while_inactive", "experimental", "debug_mode",
         "ui_profile", "safe_mode",
@@ -237,11 +309,11 @@ Settings Settings::from_ini(const std::string& text, std::vector<std::string>* w
             bool v = false;
             if (parse_bool(value, v)) s.apply_automatically = v;
         } else if (key == "theme") {
-            ThemeId theme = ThemeId::AzyDarkGlass;
-            if (theme_from_key(value, theme)) {
+            ThemeKey theme = ThemeKey::BluePurple;
+            if (theme_key_from_id(value, theme)) {
                 s.appearance.theme = theme;
             } else if (warnings) {
-                warnings->push_back("unknown theme '" + value + "'; using Azy Dark Glass");
+                warnings->push_back("unknown theme '" + value + "'; using Blue / Purple");
             }
         } else if (key == "glass_intensity") {
             s.appearance.glass_intensity = read_double(value, s.appearance.glass_intensity);
@@ -254,17 +326,24 @@ Settings Settings::from_ini(const std::string& text, std::vector<std::string>* w
             s.appearance.shadow_intensity = read_double(value, s.appearance.shadow_intensity);
         } else if (key == "darkness") {
             s.appearance.darkness = read_double(value, s.appearance.darkness);
-        } else if (key == "overlay") {
-            bool v = false;
-            if (parse_bool(value, v)) s.appearance.overlay = v;
-        } else if (key == "overlay_intensity") {
-            s.appearance.overlay_intensity = read_double(value, s.appearance.overlay_intensity);
-        } else if (key == "accent") {
-            AccentId accent = AccentId::BlueViolet;
-            if (accent_from_key(value, accent)) {
-                s.appearance.accent = accent;
-            } else if (warnings) {
-                warnings->push_back("unknown accent '" + value + "'; using blue-violet");
+        } else if (key == "accent" || key == "custom_accent") {
+            // Pre-2.0 settings named one of four accents; the rebuild has nine themes,
+            // each with its own accent, so the old key is kept only as a *colour* for
+            // the custom theme. An old palette name is accepted and converted.
+            Rgba colour{124, 140, 255, 255};
+            if (parse_hex_color(value, colour)) {
+                s.appearance.custom_accent = colour;
+                if (key == "accent" && s.appearance.theme == ThemeKey::BluePurple) {
+                    s.appearance.theme = ThemeKey::Custom;
+                }
+            } else if (key == "accent" && value == "blueviolet") {
+                s.appearance.custom_accent = Rgba{124, 140, 255, 255};
+            } else if (key == "accent" && value == "blue") {
+                s.appearance.custom_accent = Rgba{96, 165, 250, 255};
+            } else if (key == "accent" && value == "violet") {
+                s.appearance.custom_accent = Rgba{167, 139, 250, 255};
+            } else if (key == "accent" && value == "neutral") {
+                s.appearance.accent_intensity = 0.0;  // "no hue" is still expressible
             }
         } else if (key == "accent_intensity") {
             s.appearance.accent_intensity = read_double(value, s.appearance.accent_intensity);

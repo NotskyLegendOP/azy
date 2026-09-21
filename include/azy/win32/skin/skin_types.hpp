@@ -1,12 +1,12 @@
-// Azy Skin — Win32 layer: the data the skin engine works with.
+// Azy Skin — Win32 layer: the data the composition manager works with.
 //
-// Kept free of rendering details so both composition levels (DWM window
-// attributes and Azy's own click-through surface) can consume the same struct.
+// The rebuild reduced this to what the mirror actually needs: where Premiere is,
+// what the user asked for, and what the engine is doing. The old per-layer fields
+// (a DWM frame, four ring strips, a veil) are gone with the layers themselves.
 #pragma once
 
 #include <string>
 
-#include "azy/core/compat.hpp"
 #include "azy/core/geometry.hpp"
 #include "azy/core/panel_map.hpp"
 #include "azy/core/theme.hpp"
@@ -36,30 +36,16 @@ struct SkinTarget {
 
     std::wstring window_class;
 
-    // A target is only usable when there is really something on screen to decorate:
-    // a hidden window (Premiere keeps a few) would otherwise be decorated off screen
+    // A target is only usable when there is really something on screen to mirror:
+    // a hidden window (Premiere keeps a few) would otherwise be captured off screen
     // while every status line happily reported "active".
     bool valid() const {
         return hwnd != nullptr && visible && !minimized && !cloaked && !visible_frame.empty();
     }
-
-    // Corner radius actually usable for this window: never larger than 20% of
-    // the shorter side (so a small floating dialog cannot become a pill), and
-    // zero when the window fills the monitor (rounding a fullscreen window would
-    // clip its corners for no visual gain).
-    int effective_radius_dip(int requested_dip) const {
-        if (maximized || fullscreen) return 0;
-        const int shorter = visible_frame.width() < visible_frame.height() ? visible_frame.width()
-                                                                          : visible_frame.height();
-        const int cap_px = static_cast<int>(shorter * 0.2);
-        const int requested_px = dip_to_px(requested_dip, dpi);
-        const int applied = requested_px < cap_px ? requested_px : cap_px;
-        return applied <= 0 ? 0 : static_cast<int>(px_to_dip(applied, dpi) + 0.5);
-    }
 };
 
-// Why the skin is (not) doing anything right now. Every skip reason is explicit
-// so the tray tooltip and the log can explain themselves.
+// Why the skin is (not) doing anything right now. Every skip reason is explicit so
+// the tray tooltip and the log can explain themselves.
 enum class SuspendReason {
     None = 0,
     SkinDisabled,     // master toggle off
@@ -75,41 +61,32 @@ enum class SuspendReason {
 
 const char* suspend_reason_name(SuspendReason reason);
 
-// The complete request the engine needs: target + policy + resolved visuals.
+// The complete request the composition manager needs.
 struct SkinRequest {
     SkinTarget target;
     bool skin_enabled = true;
     SuspendReason suspend = SuspendReason::NoWindow;
-    FeatureSet features;
-    ThemePalette palette;
-    // The raw sliders, for the parts of the look that are not expressible as a
-    // palette (the duplicate window's sheen, grain and vignette). The palette
-    // stays authoritative for colours.
+    // The theme and the sliders. This is the whole visual input: the renderer has no
+    // colours of its own, they all come from the theme engine.
     Appearance appearance;
     bool performance_mode = false;
-    bool experimental = false;
-
-    // Debug mode (spec §41): draw the panel map Azy believes in, plus the facts
-    // around it, so one screenshot is enough to correct the model. It is a debug
-    // aid, not a feature: it is off unless the user asks for it, and it costs
-    // nothing while it is off (no window, no paint).
+    // Debug mode (spec §38): the diagnostics report every fact the developer screen
+    // asks for. It changes nothing about the skin itself.
     bool debug_mode = false;
     WorkspaceId workspace = WorkspaceId::Auto;
 };
 
 // What the engine actually did (used for logging, tray tooltip, diagnostics).
 struct SkinState {
-    bool frame_applied = false;     // DWM window attributes are in place
-    bool surface_visible = false;   // Azy's ring is on screen
-    bool overlay_visible = false;   // ... and the whole-window overlay with it
-    // The duplicate window: a skinned copy of Premiere on screen, above it.
-    // `duplicate_active` is the one that matters - while it is true the ring and
-    // the veil are deliberately not shown, because they would be behind it.
-    bool duplicate_active = false;
-    bool duplicate_capturing = false;
-    std::string duplicate_note;
+    // The mirror is the only visual layer: `mirror_active` means the skinned copy of
+    // Premiere is on screen right now, which is exactly what "the skin is applied"
+    // means since the rebuild.
+    bool mirror_active = false;
+    bool mirror_capturing = false;
+    std::string mirror_state;  // the lifecycle state, verbatim
+    std::string mirror_note;   // one line: what it is doing, or why it is not
     SuspendReason suspend = SuspendReason::None;
-    unsigned long long applies = 0;   // number of successful applies
+    unsigned long long applies = 0;   // number of applies
     unsigned long long failures = 0;  // number of failed operations (feeds safe mode)
     std::string last_error;
 };

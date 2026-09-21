@@ -28,8 +28,8 @@ echo "== 2/7 version strings =="
 python3 "$root/tools/check-version.py"
 
 echo
-echo "== 3/7 overlay shader + constant buffer =="
-python3 "$root/tools/check-overlay.py"
+echo "== 3/7 mirror shader + constant buffer =="
+python3 "$root/tools/check-mirror.py"
 
 echo
 echo "== 4/7 core unit tests (native) =="

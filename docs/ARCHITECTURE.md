@@ -12,29 +12,28 @@
 │ win32/        capture/      WindowCapture (GPU capture of one window) ·       │
 │                             D3dShared (the device) · wgc_abi (WinRT ABI,      │
 │                             declared by hand - the toolchain has no WinRT SDK) │
-│               gloss/        GlossOverlay (the duplicate window: swap chain,    │
-│                             DirectComposition, shader, pacing)                 │
+│               mirror/       MirrorRenderer (the duplicate window: swap chain,  │
+│                             DirectComposition, mirror.hlsl, pacing)           │
 │               detect/       PremiereDetector · PremiereProbe · ProcessScanner│
 │               watch/        EventWatch (global WinEvent observer)            │
 │               performance/  PerformanceManager (suspend policy + cadence)     │
-│               skin/         WindowTracker · SkinEngine · DwmComposer ·        │
-│                             CompositionSurface · GdiPlusRenderer ·           │
-│                             OverlayVeil · InputGuard                          │
+│               skin/         WindowTracker · SkinEngine · InputGuard ·         │
+│                                                                               │
 │               os/           win_api (optional APIs) · win_util · win_version │
 │                             autostart · file_watcher                          │
 │               ui/           TrayIcon · SettingsWindow · app_icon              │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│ core/         version · product · compat · theme · geometry · settings ·      │
+│ core/         version · product · theme · theme_tokens · settings · geometry · │
 │               failure_tracker · log · strings · panel_map · capture_math ·    │
-│               overlay_style (the shader's constants, derived from the theme)  │
+│               mirror_style (the shader's constants, derived from the theme)   │
 │               portable C++17: no Windows headers, unit tested on any host     │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 The `core/` layer is deliberately free of Windows dependencies, which is what
-allows the version parsing, version-aware compatibility policy, theme derivation,
-DPI maths, settings INI and Safe-Mode logic to be covered by ordinary unit tests
-(`tests/core_tests.cpp`, 220+ assertions) on any machine.
+allows the version parsing, the theme engine, the mirror style derivation, the
+panel model, DPI maths, the settings INI and Safe-Mode logic to be covered by
+ordinary unit tests (`tests/core_tests.cpp`, 747 assertions) on any machine.
 
 Everything Azy knows about Premiere arrives through `detect/`:
 
@@ -45,9 +44,9 @@ WindowTracker ──── geometry/state/DPI ──────┼──► Ski
                                             │
 PerformanceManager ── suspend decision ─────┼──► SuspendReason
                                             │
-SkinEngine ─── consumes ────────────────────┴──► DWM frame attributes
-                                                 + the duplicate window (buffer below)
-                                                 + the ring and the sheet (fallback)
+SkinEngine ─── consumes ────────────────────┴──► the mirror window's geometry
+                                                 + the theme's style constants
+                                                 (see AZY_MIRROR_ARCHITECTURE.md)
 ```
 
 ## Data flow
@@ -57,7 +56,6 @@ SkinEngine ─── consumes ────────────────�
             │
             ├─ Logger (file + OutputDebugString)
             ├─ Single-instance mutex ──► second launch: post "open settings" to the first
-            ├─ GdiPlusSession::start
             └─ AppController::initialize
                    ├─ SettingsStore::load            (%LOCALAPPDATA%\Azy Skin\settings.ini)
                    ├─ EventWatch::start              (3 × SetWinEventHook, WINEVENT_OUTOFCONTEXT)
@@ -79,15 +77,16 @@ sync()
  2. consume_location/foreground_dirty() ──► WindowTracker::refresh()  (geometry, DPI, monitor, state)
  3. PerformanceManager::evaluate() ──► suspend? which reason? which timer cadence?
  4. SkinEngine::apply()          ──► compares the desired "visual key" with what is on screen and
-                                     calls DWM and/or repaints the surface *only* when it differs
+                                     touches the mirror window *only* when it differs
  5. arm_timer(cadence); update tray tooltip/settings status only if the line changed
 ```
 
 Step 4 is the performance-critical one: `SkinEngine::apply()` builds a
-`VisualKey` (window handle, frame colours, rounded/frame flags, surface rect, DPI,
-radius, band thickness, shadow/glass flags and every RGBA value) and compares it
-with the key it applied last time. Identical request → immediate return, with no
-DWM call, no GDI+ work and no `UpdateLayeredWindow`.
+`VisualKey` (window handle, overlay rectangle, DPI, visibility, a style revision
+counter and the theme id) and compares it with the key it applied last time.
+Identical request → immediate return: no window move, no constant buffer rebuild,
+no present. The style revision only advances when a *setting* changed, so moving
+the slider is the only thing that re-derives the whole style.
 
 ## Threading model
 
@@ -96,14 +95,16 @@ a simplification:
 
 | Work | Runs on | Why |
 |---|---|---|
-| Message loop, DWM calls, GDI+ painting, tray, settings window | the UI thread | DWM/GDI+/shell calls are cheapest there and need no synchronisation |
+| Message loop, mirror window, swap chain present, tray, settings window | the UI thread | window and shell calls are cheapest there and need no synchronisation; the GPU work is handed to the driver and does not block the message loop |
 | WinEvent callbacks | the thread that registered the hook (UI thread) via `WINEVENT_OUTOFCONTEXT` | the handler only sets atomic flags and posts one message |
 | WMI process notifications | the same STA thread, during message pumping | COM is initialised `COINIT_APARTMENTTHREADED`; callbacks arrive inside `GetMessage` and queue into a mutex-protected vector |
 | `settings.ini` change detection | a thread-pool thread owned by Windows (`RegisterWaitForSingleObject`) | the callback does nothing but `PostMessage` |
 | Process/window enumeration | the UI thread, only on state change | one toolhelp snapshot ≈ 1 ms and is needed only when something changed |
 
-There is no worker pool, no render thread, no idle callback and nothing that runs
-on a timer except the safety-net tick described in
+There is no worker pool and no render thread. The mirror's timer is the only
+periodic work, its period comes from the pacing policy (60/15 fps, 30/8 in
+performance mode) and it does not exist at all while the mirror is hidden — see
+[`AZY_MIRROR_ARCHITECTURE.md`](AZY_MIRROR_ARCHITECTURE.md) §7 and
 [`PERFORMANCE.md`](PERFORMANCE.md).
 
 ## Windows Azy owns
@@ -118,46 +119,29 @@ Exactly two, both trivial:
    It is a real top-level window rather than `HWND_MESSAGE` precisely because
    message-only windows do not receive broadcast messages.
 
-2. **Composition surfaces** — four thin strips (top, bottom, left, right) created
-   only while a skin is actually being drawn and destroyed when Premiere exits.
-   Each is `WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE |
-   WS_EX_TOOLWINDOW`, never extends beyond Premiere's visible frame, and is
-   inserted directly above the Premiere window in the z-order (so the ring never
-   covers an unrelated application). All four are painted in frame coordinates
-   with `UpdateLayeredWindow`, which is why a 1px line stays exactly one pixel
-   wide and the corners join seamlessly — and why the ring costs ~78 KB of
-   bitmaps on a 1080p window instead of a window-sized ARGB layer.
-
-3. **The duplicate window** (new in v1.3.0) — one `WS_POPUP` window with
-   `WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW |
-   WS_EX_NOREDIRECTIONBITMAP`, exactly the size of Premiere's visible frame,
-   inserted directly above Premiere (never topmost), painted entirely by
+2. **The mirror window** — one `WS_POPUP` window with
+   `WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW |
+   WS_EX_NOREDIRECTIONBITMAP`, placed on Premiere's visible frame, inserted
+   directly above Premiere (never topmost), and painted entirely by
    DirectComposition from a GPU swap chain. It has no input path at all, and it is
-   destroyed with every GPU resource it owns when the skin is suspended or
-   Premiere closes.
+   destroyed with every GPU resource it owns when the skin is suspended or Premiere
+   closes. It is the only visual element Azy creates — the ring, the sheet and the
+   DWM frame attributes of v1.0–v1.3 are gone (see
+   [`AZY_MIRROR_ARCHITECTURE.md`](AZY_MIRROR_ARCHITECTURE.md)).
 
-The settings window is a fourth window and is created lazily, hidden, and only
-when the user asks for it.
+The settings window is the only other window Azy creates, and only when the user
+asks for it. Debug mode (spec §38) is not a window: every fact it asks for lives in
+the settings window and in one grouped log line per change.
 
 ### Which layer is in charge
 
-```
-     Premiere window exists, skin enabled, style visible
-                       │
-      ┌────────────────┴─────────────────┐
-      │ capture + shader available?      │
-      └───┬──────────────────────────┬───┘
-        no│                        yes│
-          v                          v
-   ring + sheet                 duplicate window  ── the ring and the sheet are
-   (Level 1 + 2, v1.0–v1.2)     (Level 3, v1.3)     then hidden: they would be
-                                                     behind it, and drawing them
-                                                     would be paying twice
-```
-
-While the duplicate is up, the ring and the sheet are not drawn at all
-(`duplicate_now` in `SkinEngine::apply`). If the capture stops, fails, is
-unsupported, or the GPU device is lost, the next apply puts them back.
+There is exactly one path now. If the settings say the skin is visible and
+Premiere's main window is validated, the mirror is placed and fed by the capture
+session. If the capture cannot run — unsupported Windows build, a driver that
+refuses the device, an elevated Premiere — Azy draws **nothing** rather than
+falling back to a lesser skin: a rectangle painted over Premiere with no live
+picture is exactly the "fake working state" the rebuild removed. The state machine
+names that state and the diagnostics say why.
 
 ## Premiere event lifecycle
 
@@ -170,7 +154,7 @@ unsupported, or the GPU device is lost, the next apply puts them back.
                   └─────────────────────────────────────────────────────────┘
 
  Started(pid, window?)  →  WindowTracker::set_window() + EventWatch watched pid/thread
-                        →  sync()  →  SkinEngine::apply()  →  DWM frame + surface
+                        →  sync()  →  SkinEngine::apply()  →  mirror placed and fed
 
  WinEvent: EVENT_OBJECT_LOCATIONCHANGE / MOVESIZE / MINIMIZE / FOREGROUND / CLOAKED
                         →  flags  →  sync()  →  WindowTracker::refresh()
@@ -181,17 +165,24 @@ unsupported, or the GPU device is lost, the next apply puts them back.
 
 ## Premiere version compatibility
 
-`core/compat.hpp` holds the policy; `win32/os/win_version.cpp` probes what the
-host can do by *attempting* each documented DWM attribute on a throwaway window
-and checking whether DWM accepts it. The two are combined in
-`resolve_features()`:
+There is no capability policy to resolve any more. The v1.0–v1.3 releases had one
+because they styled Premiere's *frame* with DWM attributes, and which of those a
+given Windows build accepts decided what the skin could do. The mirror does not
+touch Premiere's frame: it captures the window and draws its own, so the only
+compatibility questions left are answered by trying:
 
-```
-features = f(Premiere family & channel, host capabilities, safe mode, performance mode, experimental opt-in)
-```
+* **Can this Windows build capture a window?** `WindowCapture::start` returns
+  `Unsupported` when Windows.Graphics.Capture is not available on the host, and the
+  state machine reports it instead of pretending to work.
+* **Can this Azy see this Premiere?** The window is validated against the Premiere
+  process on every important operation; an elevated Premiere cannot be covered by a
+  non-elevated Azy (UIPI), which is detected and reported rather than guessed at.
+* **Does the panel model match this workspace?** It is arithmetic, not a probe, and
+  a wrong rectangle costs a misplaced frame rather than a wrong pixel — see below.
 
-so a future Premiere release or a new Windows build changes behaviour by editing a
-table, never by editing engine code. See [`COMPATIBILITY.md`](COMPATIBILITY.md).
+`core/product.cpp` still identifies the Premiere family, channel and version from
+the executable's own metadata (never from a hardcoded path), and that identity is
+what the log and the tray show. What it no longer does is gate visual features.
 
 ## Failure handling and Safe Mode
 
@@ -200,15 +191,17 @@ table, never by editing engine code. See [`COMPATIBILITY.md`](COMPATIBILITY.md).
   300 s)`.
 * The tracker persists in `settings.ini`, so a Premiere build that made Azy fail
   before also starts in Safe Mode next time.
-* On trip: `enter_safe_mode()` logs the one-line explanation, notifies in the
-  tray, restores the frame, and re-applies with the Safe-Mode feature set (dark
-  frame only).
-* The user can leave Safe Mode from Settings → Advanced ("Re-enable features"),
-  which is also the opt-in for experimental features.
+* On trip: `enter_safe_mode()` logs the explanation, notifies in the tray, releases
+  the mirror and its GPU resources, and **stops applying the skin** until it is
+  re-enabled. There is no reduced "basic" skin in 2.0.0 to fall back to: the honest
+  reduced state is nothing on screen with the reason recorded, never a static
+  approximation of Premiere.
+* The user leaves Safe Mode from Settings → Advanced ("Re-enable features"),
+  which is also the opt-in for experimental features; the next `sync()` re-applies
+  the mirror.
 * Azy itself crashing cannot affect Premiere: Azy holds no handles into Premiere
-  and installs nothing into it. A crash simply means the window keeps whatever
-  DWM attributes it already had (a dark frame is a static appearance, not a
-  behaviour).
+  and installs nothing into it. A crash simply takes the mirror window with the
+  process, and Premiere never learns Azy existed.
 * Premiere crashing cannot affect Azy: the tracker notices the window is gone,
   reverts, releases the surface and returns to the idle state with the observer
   watching for the next launch.
@@ -234,15 +227,16 @@ Three properties make it safe to build on:
   it holds and only logs/redraws when something actually moved - no timer, no
   per-frame work.
 
-Debug mode (spec §41) draws it: one screenshot of that overlay is enough to
-correct a profile for a Premiere version or a custom workspace.
+Debug mode (spec §38) reports it: the settings window lists the rectangles and the
+log carries the same numbers, which is enough to correct a profile for a Premiere
+version or a custom workspace.
 
 ## Extension points
 
 | To add… | Touch |
 |---|---|
-| A new theme | `core/theme.hpp` (`ThemeId`), `make_palette()`, tray menu, settings combo |
-| Support for a new Premiere release | `core/product.cpp` (`family_from_major`), `core/compat.cpp` |
-| A new host capability | `win32/os/win_version.cpp` probe + `core/compat.hpp` fields |
-| A new visual element | a new renderer under `win32/skin/`, wired through `SkinEngine::VisualKey` — the key must gain the fields that make it distinct, or the element will never be redrawn |
+| A new theme key | `core/theme_tokens.cpp` (tokens), `theme_key_name/id/from_id`, the settings combo and the tray menu's theme list |
+| Support for a new Premiere release | `core/product.cpp` (`family_from_major`) and, if the workspace changed, the profiles in `core/panel_map.cpp` |
+| A new theme | `core/theme_tokens.cpp` (the key table and its 13 tokens); nothing in the renderer |
+| A new visual element | `resources/shaders/mirror.hlsl` plus a member in `MirrorParams`, and the same member in the cbuffer — `tools/check-mirror.py` enforces the pair |
 | A new setting | `core/settings.hpp`, `Settings::clamp()`, `to_ini()/from_ini()`, `tests/core_tests.cpp`, settings window |

@@ -1,7 +1,7 @@
 {
   "product": "Azy Skin",
   "spec": "Azy Skin for Adobe Premiere Pro - Complete Implementation Specification",
-  "shipped": "1.3.0",
+  "shipped": "2.0.0",
   "note": "Single source of truth for docs/progress.html and docs/PROGRESS.md. Edit the items, run tools/progress.py, commit all three. status: done | partial | todo | blocked | impossible. class: A (done/possible), B (possible, planned), C (approximation only), D (not possible - forbidden techniques, excluded from the totals).",
   "packaging": {
     "title": "Packaging & distribution",
@@ -142,14 +142,14 @@
           "class": "A",
           "status": "done",
           "weight": 2,
-          "note": "Four ring strips via UpdateLayeredWindow(ULW_ALPHA)"
+          "note": "The mirror window carries WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW; input_guard verifies it at runtime and tools/check-mirror.py at build time"
         },
         {
           "name": "Whole-window constant-alpha layer",
           "class": "B",
           "status": "done",
           "weight": 3,
-          "note": "One solid colour per window, no bitmap; the cheapest possible answer to \u00a75"
+          "note": "Retired in 2.0.0: the whole frame is re-drawn through the shader instead, so no constant-alpha sheet exists any more"
         },
         {
           "name": "Prove it is on screen, not just that calls succeeded",
@@ -170,7 +170,7 @@
           "class": "B",
           "status": "done",
           "weight": 3,
-          "note": "Superseded in v1.3.0: the duplicate window treats regions through its own shader - Program and Source Monitors passed through untouched, 1px panel separators, edge vignette (see P10)."
+          "note": "The shader's panel frames: a 1px lighter bezel on every modelled panel, with the media pass-through regions never painted"
         },
         {
           "name": "Efficiency harness (CPU/GPU/RAM over 30 minutes)",
@@ -207,28 +207,28 @@
           "class": "B",
           "status": "done",
           "weight": 2,
-          "note": "\u00a77/\u00a725: AccentId blue-violet|blue|violet|neutral, 35% by default, reaches the 1px lit edge, the frame border and ~12% of the tint. Neutral reproduces the pre-accent look exactly (tested)"
+          "note": "\u00a77/\u00a725: the theme's accent token drives borders, selection, glow and focus; accent_intensity scales it. The AccentId enum went with the rebuild - a theme already names its accent"
         },
         {
           "name": "One reusable glass material (base + reflection + border + shadow)",
           "class": "B",
           "status": "partial",
           "weight": 2,
-          "note": "Resolved in one place (theme.cpp) and exposed as accent/glow/accent_strength tokens for the region chrome; the reflection gradient arrives with the panels"
+          "note": "One shader pass combines surface, diffusion, borders, panel frames, glow and content protection; the constants come from mirror_style.cpp"
         },
         {
           "name": "Static lighting and reflection gradients",
           "class": "B",
           "status": "todo",
           "weight": 2,
-          "note": "\u00a725-26: top-left blue, bottom-right violet, diagonal reflection - static, rendered once"
+          "note": "Static in the mirror: a diagonal sheen, a vignette and fixed grain, all computed per frame with no animation"
         },
         {
           "name": "Corner radius in DIPs, clamped, per element size",
           "class": "A",
           "status": "partial",
           "weight": 1,
-          "note": "Ring: done. 12-16px panel radii (\u00a724) arrive with the region chrome"
+          "note": "corner_radius_dip (clamped 0-16, scaled by DPI) drives the window corners and every panel frame - mirror_style.cpp, unit-tested"
         },
         {
           "name": "Presets: Ultra / Balanced / Performance / Low Power",
@@ -242,14 +242,14 @@
           "class": "B",
           "status": "partial",
           "weight": 2,
-          "note": "\u00a738: accent, accent_intensity, glow_intensity, animations and preset added. Blur is the one key that cannot exist - Windows has no supported blur for a foreign window"
+          "note": "\u00a726/\u00a738: theme, custom_accent, glass/border/shadow/glow intensities, radius, animations, preset, ui_profile. Glass blur is Azy's own shader diffusion of the captured frame, so no key is missing"
         },
         {
           "name": "Tests for the design system",
           "class": "A",
           "status": "done",
           "weight": 1,
-          "note": "61 new checks: accent keys and hues, neutral == pre-accent, glow bounds, preset values/distinctness, Custom detection, INI round-trip. 367 checks total"
+          "note": "The theme, token, style and settings maths are unit-tested; the suite stands at 747 checks over the portable core"
         }
       ]
     },
@@ -265,14 +265,14 @@
           "class": "A",
           "status": "done",
           "weight": 2,
-          "note": "The ring, at every DPI and window state"
+          "note": "Panel frames: a 1px lighter bezel around every modelled panel (panel_hairlines), clipped by the pass-through regions, at every DPI and window state"
         },
         {
           "name": "Whole-window tint (the 'skinned' read)",
           "class": "B",
           "status": "done",
           "weight": 3,
-          "note": "45% default, strength slider, off switch"
+          "note": "Subsumed by the mirror: the captured frame is re-drawn through the theme's darkness remap (darkness slider) rather than covered by a sheet"
         },
         {
           "name": "Panel map: measured + published + modelled rectangles",
@@ -344,14 +344,14 @@
           "class": "B",
           "status": "todo",
           "weight": 3,
-          "note": "They are top-level windows, so the Level-1 treatment applies exactly as it does to the main window"
+          "note": "Out of scope in 2.0.0: they are real top-level windows of Premiere's and stay untouched (docs/KNOWN_LIMITATIONS.md). The mirror covers the main window only"
         },
         {
           "name": "Dialogs: dark title bar + subtle border",
           "class": "B",
           "status": "todo",
           "weight": 2,
-          "note": "DWM attributes on the dialog HWND; reversible, non-client only"
+          "note": "Not attempted in 2.0.0: the rebuild removed DWM frame styling entirely, so dialogs are untouched (documented limitation)"
         },
         {
           "name": "Azy's own settings window and tray",
@@ -395,7 +395,7 @@
           "class": "B",
           "status": "partial",
           "weight": 2,
-          "note": "The switch exists (Settings + settings.ini, off by default, covered by tests). The fade itself is a two-keyframe alpha ramp in OverlayVeil, still to be written"
+          "note": "The switch exists (Settings + settings.ini, off by default, covered by tests); the fade is the mirror's appearance fade (420 ms) and honours it"
         }
       ]
     },
@@ -523,7 +523,7 @@
       "title": "Duplicate window overlay (round-8 architecture)",
       "spec": "\u00a734, \u00a743 and the round-8 brief",
       "eta": "delivered in v1.3.0",
-      "next": "Run the test plan against a real Premiere: that is the only open item in this phase.",
+      "next": "Superseded by P11: the 2.0.0 rebuild removed the ring, the sheet and the DWM frame treatment this phase measured. Kept as the record of the v1.3.0 duplicate-window design.",
       "items": [
         {
           "name": "Feasibility decision on the capture and composition APIs (\u00a734)",
@@ -615,6 +615,99 @@
           "status": "todo",
           "weight": 4,
           "note": "User-blocked: needs Windows + Premiere. Until then every overlay claim stays IMPLEMENTED - RUNTIME UNVERIFIED"
+        }
+      ]
+    },
+    {
+      "id": "P11",
+      "title": "Round-9 rebuild: the mirror (2.0.0)",
+      "spec": "the round-9 brief, \u00a72-\u00a746",
+      "eta": "1 session (this one) + 1 real-Premiere session to close it",
+      "next": "Run the mirror against a real Premiere Pro on Windows: everything in this phase is statically verified only, and that is the open item.",
+      "items": [
+        {
+          "name": "Old skin layers deleted (ring, sheet, veil, DWM frame styling, GDI+ renderer)",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "src/win32/skin/{dwm_composer,composition_surface,gdiplus_renderer,overlay_veil}.* and core/overlay_style.* removed; capture_math.expanded, ring_layout.hpp deleted"
+        },
+        {
+          "name": "Live GPU capture of the Premiere window (WGC, one window, no CPU copies)",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "src/win32/capture/window_capture.cpp; the monitor form of the API is refused by tools/check-mirror.py"
+        },
+        {
+          "name": "Composition pass: dark glass material in one shader (mirror.hlsl)",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "surface, diffusion, clarity, borders, panel frames, shadow, sheen, grain, glow; SM4.0"
+        },
+        {
+          "name": "Panel model drives the treatment (header, panels, timeline, meters)",
+          "class": "C",
+          "status": "done",
+          "weight": 1,
+          "note": "8 panel slots + 4 media slots in the constant buffer; rectangles are a model, not segmentation"
+        },
+        {
+          "name": "Media pass-through: Program/Source Monitor pictures bit-exact",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "measured 0.0000 per-channel change inside the monitors by tools/preview_render.py"
+        },
+        {
+          "name": "Content protection for thumbnails, previews and waveforms",
+          "class": "C",
+          "status": "done",
+          "weight": 1,
+          "note": "approximation by saturation+luminance, content_keep 0.88; caveats listed in the architecture doc \u00a710"
+        },
+        {
+          "name": "Centralised theme engine: 13 tokens, 9 themes + Custom + Original",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "no colour literal in the renderer; tools/check-mirror.py enforces it; switching needs no rebuild"
+        },
+        {
+          "name": "Clearly separated component layers (capture / compose / present / policy)",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "SkinEngine state machine, MirrorRenderer, WindowCapture; no scattered booleans"
+        },
+        {
+          "name": "Honest failure states and logging (never a fake working state)",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "WAITING_FOR_PREMIERE / CAPTURE_FAILED / UNSUPPORTED / SUSPENDED / MIRROR_ACTIVE, with reasons"
+        },
+        {
+          "name": "Static verification: contract check, 747 unit assertions, cross-build, PE inspection",
+          "class": "A",
+          "status": "done",
+          "weight": 1,
+          "note": "scripts/verify.sh steps 1-7, all green on this machine"
+        },
+        {
+          "name": "Design preview (CPU re-implementation of the shader) for review without Windows",
+          "class": "B",
+          "status": "done",
+          "weight": 1,
+          "note": "tools/preview_render.py + docs/images/azy_mirror_*.png; not a screenshot and says so"
+        },
+        {
+          "name": "Run it against a real Premiere Pro on Windows and report",
+          "class": "B",
+          "status": "user",
+          "weight": 2,
+          "note": "Nothing in this phase is runtime-verified; see docs/AZY_MIRROR_ARCHITECTURE.md \u00a711"
         }
       ]
     }
@@ -768,7 +861,7 @@
       "area": "UI",
       "row": "No drift, no flicker, no black rectangles, no input-blocking areas",
       "status": "partial",
-      "note": "Probe + z-order guard; the region chrome still has to earn this"
+      "note": "The mirror is placed on the tracked window and re-placed in a burst after moves; confirming zero flicker needs the real Premiere pass"
     },
     {
       "area": "UI",
@@ -780,7 +873,7 @@
       "area": "Performance",
       "row": "No continuous redraw, no playback FPS loss, no timeline latency",
       "status": "partial",
-      "note": "Event-driven and static; measurement script still to come"
+      "note": "Paced at 60/15 fps (30/8 in performance mode) and no timer at all while hidden; measuring idle CPU on a real Premiere is still pending"
     },
     {
       "area": "Scaling",

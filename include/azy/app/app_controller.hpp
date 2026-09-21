@@ -5,7 +5,7 @@
 //
 //   EventWatch / WMI  ->  PremiereDetector  ->  WindowTracker
 //                                                  |
-//                             PerformanceManager  ->  SkinEngine  ->  DWM + surface
+//                             PerformanceManager  ->  SkinEngine  ->  the mirror
 //
 // Everything is driven by Windows notifications; the timer is a backstop only.
 #pragma once
@@ -76,8 +76,6 @@ private:
     void on_settings_changed_on_disk();
 
     void compute_request(win::SkinRequest& request, win::SuspendReason& reason) const;
-    FeatureSet effective_features(const ProductInfo& product) const;
-    ThemePalette effective_palette(bool dark_frame_supported) const;
 
     void merge_user_settings(const Settings& incoming);
     void persist_failure_state();
@@ -103,15 +101,17 @@ private:
     // the engine really did.
     std::string state_summary() const;
     std::string premiere_summary() const;
-    // Compact, current facts about the target window and the ring, shown in the
-    // settings window: "the skin does nothing" can then be reported with a
+    // Every fact the debug screen asks for (spec §38), shown in the settings window
+    // and logged on request: "the skin does nothing" can then be reported with a
     // screenshot instead of a log file.
     std::vector<std::string> diagnostics_lines() const;
     std::string process_cpu_line() const;
     // Frames per second actually observed, from two diagnostics reads. Honest
     // about the first read, which has nothing to compare against.
     std::string measured_rates_line(unsigned long long frames, unsigned long long presents) const;
-    std::string treatment_summary(const FeatureSet& features) const;
+    // The one-line description of what the skin is doing, for the tooltip and the
+    // settings window headline.
+    std::string treatment_summary() const;
 
     // Sampling interval for window geometry while the user is dragging/resizing
     // Premiere (the surface is hidden during a drag, so ~10 Hz is plenty).
@@ -139,12 +139,12 @@ private:
     win::SkinState engine_state_;
     // The duplicate window's state, remembered only so that a change is logged
     // once (the same "log transitions, not ticks" rule as everywhere else).
-    bool duplicate_active_ = false;
-    bool duplicate_capturing_ = false;
+    bool mirror_active_ = false;
+    bool mirror_capturing_ = false;
     unsigned long long failures_seen_ = 0;
     bool safe_mode_ = false;
     bool premiere_elevated_ = false;  // Premiere runs at a higher integrity level than Azy
-    bool ring_warning_shown_ = false;  // the "the ring is not on screen" notice was already shown
+    bool mirror_warning_shown_ = false;  // the "nothing is on screen" notice was already shown
     bool manual_apply_ = false;      // user asked for the skin although autostart is off
     bool suspended_manual_ = false;  // tray "Suspend Skin"
     bool skin_active_last_ = false;

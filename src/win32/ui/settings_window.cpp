@@ -42,13 +42,10 @@ enum ControlId : int {
     kDarkness,
     kDarknessLabel,
     kPresetCombo,
-    kAccentCombo,
+    kCustomAccentEdit,
     kGlow,
     kGlowLabel,
     kAnimationsCheck,
-    kOverlayCheck,
-    kOverlay,
-    kOverlayLabel,
     kPerformanceMode,
     kSuspendMinimized,
     kSuspendInactive,
@@ -148,7 +145,7 @@ void SettingsWindow::set_dark_theme() {
     SetWindowTheme(hwnd_, L"DarkMode_Explorer", nullptr);
     const int controls[] = {kEnableSkin,     kStartWithWindows,  kApplyAutomatically, kThemeCombo,
                             kGlass,          kBorder,            kRadius,         kShadow,
-                            kDarkness,       kOverlayCheck,      kOverlay,         kPerformanceMode,
+                            kDarkness,       kGlow,              kCustomAccentEdit, kPerformanceMode,
                             kSuspendMinimized, kSuspendInactive,
                             kExperimental,   kReenableButton,    kResetButton,    kOpenLogButton,
                             kCheckButton,    kCloseButton};
@@ -237,7 +234,7 @@ void SettingsWindow::layout(int dpi) {
     y += kRowHeight - 4;
     label(kTreatmentText, kMargin, y, width, kRowHeight - 4, SS_ENDELLIPSIS, L"", font_small_);
     y += kRowHeight - 4;
-    // Diagnostics: the two or three facts that decide whether the ring can be
+    // Diagnostics: the two or three facts that decide whether the mirror can be
     // seen at all. Small, read-only, and always visible - it turns a "nothing
     // happens" report into a screenshot with the answer in it.
     label(kDiagnosticsText, kMargin, y, width, kRowHeight * 3, SS_LEFT, L"", font_small_);
@@ -274,40 +271,38 @@ void SettingsWindow::layout(int dpi) {
         }
     }
     y += kRowHeight + 4;
-    label(-1, kMargin, y, kLabelWidth, kRowHeight, SS_CENTERIMAGE, L"&Theme", font_);
+    label(-1, kMargin, y, kLabelWidth, kRowHeight, SS_CENTERIMAGE, L"T&heme", font_);
     {
         HWND combo = CreateWindowExW(0, L"COMBOBOX", L"",
                                      WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST,
-                                     px(kMargin + kLabelWidth), px(y), px(200), px(200), hwnd_,
+                                     px(kMargin + kLabelWidth), px(y), px(200), px(230), hwnd_,
                                      id_of(kThemeCombo), nullptr, nullptr);
         if (combo != nullptr) {
             if (font_ != nullptr) SendMessageW(combo, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
-            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Azy Dark Glass"));
-            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Azy Dark"));
-            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Original"));
+            // Every theme the engine defines, in the engine's own order: adding a
+            // theme is a table entry, not a change here (spec §27, §28).
+            for (int i = 0; i < azy::kThemeCount; ++i) {
+                const std::wstring name = to_wide(azy::theme_key_name(azy::theme_key_at(i)));
+                SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(name.c_str()));
+            }
         }
     }
     y += kRowHeight + 4;
-    label(-1, kMargin, y, kLabelWidth, kRowHeight, SS_CENTERIMAGE, L"&Accent", font_);
+    label(-1, kMargin, y, kLabelWidth, kRowHeight, SS_CENTERIMAGE, L"Custom accent", font_);
     {
-        HWND combo = CreateWindowExW(0, L"COMBOBOX", L"",
-                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST,
-                                     px(kMargin + kLabelWidth), px(y), px(200), px(200), hwnd_,
-                                     id_of(kAccentCombo), nullptr, nullptr);
-        if (combo != nullptr) {
-            if (font_ != nullptr) SendMessageW(combo, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
-            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Blue-violet"));
-            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Blue"));
-            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Violet"));
-            SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"Neutral"));
+        // The custom theme's accent colour, as #RRGGBB (spec §27: custom colours are
+        // part of the architecture, not a later addition). It is read whenever the
+        // Custom theme is chosen; with any other theme it is remembered but unused.
+        HWND edit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
+                                    WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
+                                    px(kMargin + kLabelWidth), px(y), px(96), px(22), hwnd_,
+                                    id_of(kCustomAccentEdit), nullptr, nullptr);
+        if (edit != nullptr && font_ != nullptr) {
+            SendMessageW(edit, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
+            SendMessageW(edit, EM_SETLIMITTEXT, 7, 0);
         }
     }
     y += kRowHeight + 4;
-
-    // The whole-window overlay: the one setting that changes the look of the entire
-    // application rather than its edge, so it gets its own row and its own strength.
-    checkbox(kOverlayCheck, y, width, L"Cover the whole window (overlay)");
-    y += kRowHeight;
 
     struct SliderRow {
         int slider_id;
@@ -321,7 +316,6 @@ void SettingsWindow::layout(int dpi) {
         {kRadius, kRadiusLabel, L"Corner &radius", 16},
         {kShadow, kShadowLabel, L"&Shadow intensity", 100},
         {kDarkness, kDarknessLabel, L"Overall dar&kness", 100},
-        {kOverlay, kOverlayLabel, L"&Overlay strength", 100},
         {kGlow, kGlowLabel, L"Accent &glow", 100},
     };
     const int slider_width = 150;
@@ -343,14 +337,10 @@ void SettingsWindow::layout(int dpi) {
     }
     y += kSectionGap;
 
-    // Spec §28 in one checkbox - and the one row that is honest about being
-    // inactive. Azy's layers are static by design (the brief asked for no
-    // animation and nothing outside Premiere could animate its widgets anyway),
-    // so there is no code path behind this switch. The key is still stored and
-    // round-tripped so an existing configuration is never rewritten, and the
-    // control is disabled rather than hidden so the setting can be found, not
-    // guessed at. See docs/KNOWN_LIMITATIONS.md.
-    checkbox(kAnimationsCheck, y, width, L"Fade Azy's own layers (not available - Azy is static)", false);
+    // Animations (spec §31): the mirror's appearance transition. A real switch now:
+    // "on" eases the skin in when it appears and cross-fades a theme change, "off"
+    // makes every change instant. Nothing animates continuously.
+    checkbox(kAnimationsCheck, y, width, L"Animate appearance (fade in, theme cross-fade)");
     y += kRowHeight + kSectionGap;
 
     // --- Performance -------------------------------------------------------
@@ -435,7 +425,6 @@ void SettingsWindow::sync_controls() {
     check(kSuspendMinimized, settings_.suspend_when_minimized);
     check(kSuspendInactive, settings_.suspend_when_inactive);
     check(kExperimental, settings_.experimental);
-    check(kOverlayCheck, settings_.appearance.overlay);
     check(kAnimationsCheck, settings_.appearance.animations);
     check(kDebugMode, settings_.debug_mode);
 
@@ -460,19 +449,14 @@ void SettingsWindow::sync_controls() {
                                                             : 4;
         SendMessageW(combo, CB_SETCURSEL, index, 0);
     }
-    if (HWND combo = GetDlgItem(hwnd_, kAccentCombo)) {
-        const int index = settings_.appearance.accent == AccentId::Blue   ? 1
-                          : settings_.appearance.accent == AccentId::Violet ? 2
-                          : settings_.appearance.accent == AccentId::Neutral ? 3
-                                                                            : 0;
-        SendMessageW(combo, CB_SETCURSEL, index, 0);
-    }
+
 
     if (HWND combo = GetDlgItem(hwnd_, kThemeCombo)) {
-        const int index = settings_.appearance.theme == ThemeId::AzyDark      ? 1
-                          : settings_.appearance.theme == ThemeId::Original   ? 2
-                                                                             : 0;
-        SendMessageW(combo, CB_SETCURSEL, index, 0);
+        SendMessageW(combo, CB_SETCURSEL, azy::theme_key_index(settings_.appearance.theme), 0);
+    }
+    if (HWND edit = GetDlgItem(hwnd_, kCustomAccentEdit)) {
+        const std::wstring text = to_wide(format_hex_color(settings_.appearance.custom_accent));
+        SetWindowTextW(edit, text.c_str());
     }
 
     slider(kGlass, static_cast<int>(settings_.appearance.glass_intensity * 100.0 + 0.5));
@@ -480,13 +464,7 @@ void SettingsWindow::sync_controls() {
     slider(kRadius, settings_.appearance.corner_radius_dip);
     slider(kShadow, static_cast<int>(settings_.appearance.shadow_intensity * 100.0 + 0.5));
     slider(kDarkness, static_cast<int>(settings_.appearance.darkness * 100.0 + 0.5));
-    slider(kOverlay, static_cast<int>(settings_.appearance.overlay_intensity * 100.0 + 0.5));
     slider(kGlow, static_cast<int>(settings_.appearance.glow_intensity * 100.0 + 0.5));
-
-    // The strength only means anything while the overlay is on.
-    if (HWND control = GetDlgItem(hwnd_, kOverlay)) {
-        EnableWindow(control, settings_.appearance.overlay);
-    }
 
     if (HWND control = GetDlgItem(hwnd_, kReenableButton)) {
         EnableWindow(control, settings_.safe_mode || !settings_.experimental);
@@ -506,7 +484,6 @@ void SettingsWindow::update_slider_labels() {
     set(kRadiusLabel, std::to_wstring(settings_.appearance.corner_radius_dip) + L" px");
     set(kShadowLabel, format_percent(settings_.appearance.shadow_intensity));
     set(kDarknessLabel, format_percent(settings_.appearance.darkness));
-    set(kOverlayLabel, format_percent(settings_.appearance.overlay_intensity));
     set(kGlowLabel, format_percent(settings_.appearance.glow_intensity));
 }
 
@@ -516,7 +493,7 @@ void SettingsWindow::update_status(const Status& status, bool skin_enabled, bool
     suspended_ = suspended;
     if (hwnd_ == nullptr) return;
 
-    // "active" here means the ring is on screen, not merely that the settings
+    // "active" here means the mirror is on screen, not merely that the settings
     // allow it: the state comes from the skin engine itself.
     std::wstring headline = L"Azy Skin - ";
     if (!skin_enabled) {
@@ -558,6 +535,14 @@ void SettingsWindow::push_settings() {
     if (creating_) return;
     settings_.clamp();
     if (callbacks_.on_change) callbacks_.on_change(settings_);
+}
+
+void SettingsWindow::preview_settings() {
+    if (creating_) return;
+    // The preview is a *look*, not a commitment: the application applies it to the
+    // running mirror without saving anything, so closing the window without saving
+    // cannot leave the skin on a setting the user never confirmed.
+    if (callbacks_.on_preview) callbacks_.on_preview(settings_);
 }
 
 void SettingsWindow::show(const Settings& settings, const Status& status) {
@@ -633,7 +618,7 @@ LRESULT SettingsWindow::handle(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
                                    control_id == kSectionAdvanced || control_id == kGlassLabel ||
                                    control_id == kBorderLabel || control_id == kRadiusLabel ||
                                    control_id == kShadowLabel || control_id == kDarknessLabel ||
-                                   control_id == kOverlayLabel || control_id == kGlowLabel;
+                                   control_id == kGlowLabel;
             SetTextColor(dc, secondary ? kDimTextColor : kTextColor);
             SetBkColor(dc, kBackgroundColor);
             return reinterpret_cast<LRESULT>(background_);
@@ -657,11 +642,13 @@ LRESULT SettingsWindow::handle(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
                 case kRadius: settings_.appearance.corner_radius_dip = value; break;
                 case kShadow: settings_.appearance.shadow_intensity = value / 100.0; break;
                 case kDarkness: settings_.appearance.darkness = value / 100.0; break;
-                case kOverlay: settings_.appearance.overlay_intensity = value / 100.0; break;
                 case kGlow: settings_.appearance.glow_intensity = value / 100.0; break;
                 default: return 0;
             }
             update_slider_labels();
+            // Live preview while dragging: the running mirror follows the slider, so
+            // the choice is made by looking at Premiere (spec §28).
+            preview_settings();
             push_settings();
             return 0;
         }
@@ -684,18 +671,10 @@ LRESULT SettingsWindow::handle(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
                         SendMessageW(GetDlgItem(hwnd_, id), BM_GETCHECK, 0, 0) == BST_CHECKED;
                     push_settings();
                     return 0;
-                case kOverlayCheck: {
-                    settings_.appearance.overlay =
-                        SendMessageW(GetDlgItem(hwnd_, id), BM_GETCHECK, 0, 0) == BST_CHECKED;
-                    if (HWND slider = GetDlgItem(hwnd_, kOverlay)) {
-                        EnableWindow(slider, settings_.appearance.overlay);
-                    }
-                    push_settings();
-                    return 0;
-                }
                 case kPerformanceMode:
                     settings_.performance_mode =
                         SendMessageW(GetDlgItem(hwnd_, id), BM_GETCHECK, 0, 0) == BST_CHECKED;
+                    preview_settings();
                     push_settings();
                     return 0;
                 case kSuspendMinimized:
@@ -726,16 +705,6 @@ LRESULT SettingsWindow::handle(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
                         }
                     }
                     return 0;
-                case kAccentCombo:
-                    if (notification == CBN_SELCHANGE) {
-                        const int index = static_cast<int>(SendMessageW(GetDlgItem(hwnd_, id), CB_GETCURSEL, 0, 0));
-                        settings_.appearance.accent = index == 1   ? AccentId::Blue
-                                                      : index == 2 ? AccentId::Violet
-                                                      : index == 3 ? AccentId::Neutral
-                                                                   : AccentId::BlueViolet;
-                        push_settings();
-                    }
-                    return 0;
                 case kDebugMode:
                     settings_.debug_mode =
                         SendMessageW(GetDlgItem(hwnd_, id), BM_GETCHECK, 0, 0) == BST_CHECKED;
@@ -757,6 +726,7 @@ LRESULT SettingsWindow::handle(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
                 case kAnimationsCheck:
                     settings_.appearance.animations =
                         SendMessageW(GetDlgItem(hwnd_, id), BM_GETCHECK, 0, 0) == BST_CHECKED;
+                    preview_settings();
                     push_settings();
                     return 0;
                 case kExperimental:
@@ -771,11 +741,33 @@ LRESULT SettingsWindow::handle(HWND hwnd, UINT message, WPARAM wparam, LPARAM lp
                     return 0;
                 case kThemeCombo:
                     if (notification == CBN_SELCHANGE) {
+                        // The picker's order *is* the engine's order: nothing here has
+                        // to know what the themes are called (spec §27, §28).
                         const int index = static_cast<int>(SendMessageW(GetDlgItem(hwnd_, id), CB_GETCURSEL, 0, 0));
-                        settings_.appearance.theme = index == 1   ? ThemeId::AzyDark
-                                                     : index == 2 ? ThemeId::Original
-                                                                  : ThemeId::AzyDarkGlass;
+                        settings_.appearance.theme = azy::theme_key_at(index);
+                        // Instant feedback matters most here: a theme switch is the one
+                        // change whose whole point is to be looked at.
+                        preview_settings();
                         push_settings();
+                    }
+                    return 0;
+                case kCustomAccentEdit:
+                    if (notification == EN_CHANGE) {
+                        std::wstring text(64, L'\0');
+                        const int length = GetWindowTextW(GetDlgItem(hwnd_, id), text.data(),
+                                                          static_cast<int>(text.size()));
+                        text.resize(length > 0 ? static_cast<std::size_t>(length) : 0);
+                        Rgba colour{};
+                        if (parse_hex_color(win::to_utf8(text), colour)) {
+                            settings_.appearance.custom_accent = colour;
+                            // Typing a colour is an explicit request for the custom
+                            // theme: the field would otherwise look inert.
+                            settings_.appearance.theme = ThemeKey::Custom;
+                            if (HWND combo = GetDlgItem(hwnd_, kThemeCombo)) {
+                                SendMessageW(combo, CB_SETCURSEL, azy::theme_key_index(ThemeKey::Custom), 0);
+                            }
+                            push_settings();
+                        }
                     }
                     return 0;
                 case kReenableButton:

@@ -69,6 +69,13 @@ struct PanelRect {
     // False when the client area was too small for this panel: the caller must
     // skip it entirely rather than draw something degenerate.
     bool usable = false;
+
+    // Value comparison: the renderer decides whether a frame needs to be rebuilt by
+    // comparing the panel model it was given with the one it is being given now.
+    bool operator==(const PanelRect& other) const {
+        return id == other.id && rect == other.rect && usable == other.usable;
+    }
+    bool operator!=(const PanelRect& other) const { return !(*this == other); }
 };
 
 // One workspace's proportions. Every field is a fraction of the client area (or a

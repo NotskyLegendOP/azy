@@ -15,17 +15,39 @@
 
 namespace azy {
 
-// Feature keys that can be individually disabled from the Advanced page.
+// Feature keys that can be individually disabled from the Advanced page
+// ("disabled_features=glass,glow" in settings.ini). Since the rebuild these are the
+// four strengths the mirror's material is built from, and each one really does
+// remove that part of the picture. The pre-rebuild keys (frame_colors, edge_surface,
+// the veil, ...) named layers that no longer exist; they are still round-tripped
+// verbatim as unknown keys, and docs/KNOWN_LIMITATIONS.md lists them.
 namespace feature_key {
-constexpr const char* kFrameColors = "frame_colors";
-constexpr const char* kRoundedFrame = "rounded_frame";
-constexpr const char* kFrameBackdrop = "frame_backdrop";
-constexpr const char* kEdgeSurface = "edge_surface";
-constexpr const char* kRoundedSurface = "rounded_surface";
-constexpr const char* kShadow = "shadow";
 constexpr const char* kGlass = "glass";
-constexpr const char* kOverlay = "window_overlay";
+constexpr const char* kBorder = "border";
+constexpr const char* kShadow = "shadow";
+constexpr const char* kGlow = "glow";
 }  // namespace feature_key
+
+// The quality presets. They set several sliders at once; the individual appearance
+// values stay authoritative.
+enum class PresetId { Ultra, Balanced, Performance, LowPower, Custom };
+
+struct PresetValues {
+    double glass_intensity = 0.55;
+    double border_intensity = 0.60;
+    int corner_radius_dip = 8;
+    double shadow_intensity = 0.40;
+    double darkness = 0.50;
+    double accent_intensity = 0.55;
+    double glow_intensity = 0.25;
+    bool animations = false;   // no animation by default (see Appearance)
+    bool performance_mode = false;
+};
+
+const char* preset_name(PresetId preset);
+const char* preset_key(PresetId preset);
+bool preset_from_key(const std::string& key, PresetId& out);
+PresetValues preset_values(PresetId preset);
 
 struct Settings {
     int schema = 1;

@@ -13,7 +13,6 @@
 #include "azy/core/strings.hpp"
 #include "azy/win32/os/autostart.hpp"
 #include "azy/win32/os/win_api.hpp"
-#include "azy/win32/skin/input_guard.hpp"
 #include "azy/win32/os/win_util.hpp"
 #include "azy/win32/os/win_version.hpp"
 
@@ -119,10 +118,10 @@ bool AppController::initialize(HINSTANCE instance, const CommandLine& command_li
             update_tray();
             update_settings_window_status();
         };
-        callbacks.on_theme = [this](ThemeId theme) {
+        callbacks.on_theme = [this](ThemeKey theme) {
             store_.settings().appearance.theme = theme;
             store_.save();
-            log_info("theme changed to %s", theme_name(theme));
+            log_info("theme changed to %s", theme_key_name(theme));
             sync("theme");
             update_tray();
             update_settings_window_status();
@@ -178,6 +177,24 @@ bool AppController::initialize(HINSTANCE instance, const CommandLine& command_li
     };
     window_callbacks.on_open_log = [this]() { open_log_file(); };
     window_callbacks.on_check_visibility = [this]() { return check_visibility(); };
+    // Live preview (spec §28): while the Appearance page is open, a slider or a theme
+    // change is applied to the running mirror immediately, so the user is choosing by
+    // looking at Premiere rather than at a description. Nothing is saved until the
+    // page's own Save/OK, which is what keeps "preview" from meaning "committed".
+    window_callbacks.on_preview = [this](const Settings& incoming) {
+        win::SkinRequest request;
+        win::SuspendReason reason = win::SuspendReason::NoWindow;
+        compute_request(request, reason);
+        request.appearance = incoming.appearance;
+        request.performance_mode = incoming.performance_mode;
+        request.suspend = suspended_manual_ ? win::SuspendReason::SkinDisabled : reason;
+        win::SkinState preview_state;
+        engine_.apply(request, preview_state);
+        // The preview is applied to the live mirror only: the settings object is not
+        // saved here, so closing the page without saving cannot leave the skin on a
+        // look the user never confirmed.
+        (void)preview_state;
+    };
     std::string window_error;
     if (!settings_window_.create(instance_, window_callbacks, &window_error)) {
         log_warn("settings window unavailable: %s", window_error.c_str());
@@ -381,7 +398,7 @@ void AppController::on_premiere_event(const win::PremiereDetector::Event& event)
             }
             // Windows never lets a window of a lower integrity process be drawn
             // above one of a higher integrity process (UIPI). If Premiere runs
-            // elevated and Azy does not, the ring is composed behind it: every
+            // elevated and Azy does not, the mirror is composed behind it: every
             // call succeeds and nothing is ever visible. Worth saying out loud.
             if (event.pid != 0) {
                 const int premiere_level = win::process_integrity_level(event.pid);
@@ -405,18 +422,17 @@ void AppController::on_premiere_event(const win::PremiereDetector::Event& event)
             break;
         }
         case win::PremiereDetector::EventKind::Stopped: {
-            // Premiere is gone: restore the frame, hide and destroy Azy's
-            // surface, stop looking at anything. No handles stay open on a dead
-            // process, and no resources stay allocated.
+            // Premiere is gone (spec §34): stop the capture, release every GPU
+            // resource, reset the lifecycle and keep waiting. No handles stay open on
+            // a dead process, and nothing keeps running.
             engine_.revert();
-            engine_.release_surface();
             tracker_.clear();
             watch_.set_watched_pid(0);
             watch_.set_watched_thread(0);
             watch_.clear_move_size_loop();
             manual_apply_ = false;
             premiere_elevated_ = false;
-            ring_warning_shown_ = false;
+            mirror_warning_shown_ = false;
             product_ = ProductInfo{};
             log_info("skin resources released");
             break;
@@ -455,11 +471,15 @@ std::string AppController::check_visibility() {
     std::string text = "Azy Skin " + std::string(kAppVersion) + "\n";
     text += "Premiere Pro: " + premiere_summary() + "\n\n";
     text += report + "\n\n";
-    text += on_screen ? "The skin is reaching the screen. If you cannot see it, the effect itself is too "
-                        "subtle for your display: raise Overall darkness and Border intensity in "
+    text += on_screen ? "The mirror is on screen. If Premiere still looks untouched, the theme is too "
+                        "restrained for your display: raise Overall darkness, Border intensity and Glow in "
                         "Appearance."
-                      : "Nothing Azy draws is on screen. The details below go into the log file as well - "
-                        "please report them together with what the window above Premiere should look like.";
+                      : engine_.last_error().empty()
+                            ? std::string("Nothing is on screen yet. The lifecycle line above says which stage "
+                                          "it is waiting at; the log file has the same information.")
+                            : ("Nothing is on screen: " + engine_.last_error() +
+                               "  Press Check visibility again after fixing that, or use Tray > Theme > "
+                               "Original to turn the skin off entirely.");
     return text;
 }
 
@@ -473,49 +493,28 @@ void AppController::on_settings_changed_on_disk() {
     update_settings_window_status();
 }
 
-FeatureSet AppController::effective_features(const ProductInfo& product) const {
-    const Settings& settings = store_.settings();
-    FeatureSet features = resolve_features(product, win::host_info().capabilities, safe_mode_,
-                                                settings.performance_mode, settings.experimental);
-    // Per-feature overrides (Advanced, hand-edited in settings.ini).
-    if (settings.feature_disabled(feature_key::kFrameColors)) features.frame_colors = false;
-    if (settings.feature_disabled(feature_key::kRoundedFrame)) features.rounded_frame = false;
-    if (settings.feature_disabled(feature_key::kFrameBackdrop)) features.frame_backdrop = false;
-    if (settings.feature_disabled(feature_key::kEdgeSurface)) features.edge_surface = false;
-    if (settings.feature_disabled(feature_key::kRoundedSurface)) features.edge_surface_rounded = false;
-    // The overlay also has a switch in Appearance (and a strength); this override
-    // exists so it can be turned off from settings.ini without touching the theme.
-    if (settings.feature_disabled(feature_key::kOverlay)) features.window_overlay = false;
-    return features;
-}
-
-ThemePalette AppController::effective_palette(bool dark_frame_supported) const {
-    const Settings& settings = store_.settings();
-    ThemePalette palette = make_palette(settings.appearance.theme, settings.appearance, dark_frame_supported);
-    if (settings.feature_disabled(feature_key::kShadow)) {
-        palette.shadow_enabled = false;
-        palette.surface_shadow.a = 0;
-    }
-    if (settings.feature_disabled(feature_key::kGlass)) {
-        palette.surface_fill.a = 255;  // fully opaque: no translucency at all
-    }
-    return palette;
-}
-
 void AppController::compute_request(win::SkinRequest& request, win::SuspendReason& reason) const {
     const Settings& settings = store_.settings();
     request.target = tracker_.target();
-    request.skin_enabled = settings.enabled && (settings.apply_automatically || manual_apply_);
-    request.features = effective_features(product_);
-    request.palette = effective_palette(win::host_info().capabilities.dark_titlebar);
-    // The duplicate window needs the raw sliders as well as the palette: the
-    // sheen, the grain and the vignette are not colours, so they are not in it.
+    // Safe mode means *stopped*, not "a lesser skin": 2.0.0 has no reduced visual
+    // set to fall back to, so the honest reduced state is nothing on screen until the
+    // user says otherwise (Settings > Advanced > Re-enable features).
+    request.skin_enabled =
+        settings.enabled && !safe_mode_ && (settings.apply_automatically || manual_apply_);
+    // The theme and the sliders are the whole visual input: every colour the renderer
+    // uses comes from the theme engine, and nothing is hardcoded in the renderer.
     request.appearance = settings.appearance;
+    // The Advanced page's per-feature overrides ("disabled_features=glass,glow" in
+    // settings.ini): each one removes that part of the material rather than hiding a
+    // control, so a disabled feature is really absent from the picture.
+    if (settings.feature_disabled(feature_key::kGlass)) request.appearance.glass_intensity = 0.0;
+    if (settings.feature_disabled(feature_key::kBorder)) request.appearance.border_intensity = 0.0;
+    if (settings.feature_disabled(feature_key::kShadow)) request.appearance.shadow_intensity = 0.0;
+    if (settings.feature_disabled(feature_key::kGlow)) request.appearance.glow_intensity = 0.0;
     request.performance_mode = settings.performance_mode;
-    request.experimental = settings.experimental && !safe_mode_;
-    // Debug mode is deliberately not gated behind `experimental`: it draws a
-    // diagnostic picture and changes nothing about the skin itself, and it is
-    // the tool a user needs when something *is* wrong.
+    // Debug mode is deliberately not gated behind `experimental`: it reports facts
+    // and changes nothing about the skin itself, and it is the tool a user needs when
+    // something *is* wrong.
     request.debug_mode = settings.debug_mode;
     request.workspace = settings.ui_profile;
     reason = win::SuspendReason::NoWindow;
@@ -573,7 +572,7 @@ void AppController::sync(const char* reason_name) {
     // --- 3. Decide whether anything should be on screen -------------------
     win::PerformanceManager::Inputs inputs;
     inputs.skin_enabled = store_.settings().enabled && !suspended_manual_;
-    inputs.original_theme = store_.settings().appearance.theme == ThemeId::Original;
+    inputs.original_theme = store_.settings().appearance.theme == ThemeKey::Original;
     inputs.has_window = tracker_.has_window();
     inputs.window_minimized = tracker_.target().minimized;
     inputs.window_cloaked = tracker_.target().cloaked;
@@ -593,13 +592,13 @@ void AppController::sync(const char* reason_name) {
         reason = win::SuspendReason::SkinDisabled;
     } else if (!store_.settings().enabled) {
         reason = win::SuspendReason::SkinDisabled;
-    } else if (store_.settings().appearance.theme == ThemeId::Original) {
+    } else if (store_.settings().appearance.theme == ThemeKey::Original) {
         reason = win::SuspendReason::OriginalTheme;
     } else if (!tracker_.has_window()) {
         reason = win::SuspendReason::NoWindow;
     } else if (!tracker_.target().visible) {
         // Premiere keeps a handful of hidden top-level windows; decorating one of
-        // them would mean drawing a ring around nothing.
+        // them would mean drawing a mirror around nothing.
         reason = win::SuspendReason::Hidden;
     } else {
         reason = decision.reason;
@@ -611,22 +610,21 @@ void AppController::sync(const char* reason_name) {
     // the settings window always explain the current state.
     engine_state_.suspend = reason;
     const unsigned long long failures_before = engine_state_.failures;
-    const bool changed = request.target.valid() || engine_.frame_applied() || engine_.surface_visible()
+    const bool changed = request.target.hwnd != nullptr || engine_.surface_visible()
                              ? engine_.apply(request, engine_state_)
                              : false;
     if (request.target.valid()) tracker_.mark_applied();
 
-    // One log line per transition, never per tick: this is the line that says
-    // whether the duplicate window is the layer the user is looking at.
-    if (engine_state_.duplicate_active != duplicate_active_ ||
-        engine_state_.duplicate_capturing != duplicate_capturing_) {
-        duplicate_active_ = engine_state_.duplicate_active;
-        duplicate_capturing_ = engine_state_.duplicate_capturing;
-        if (duplicate_active_) {
-            log_info("duplicate: on screen (%s)", engine_state_.duplicate_note.c_str());
+    // One log line per transition, never per tick: this is the line that says whether
+    // the mirror is on screen.
+    if (engine_state_.mirror_active != mirror_active_ || engine_state_.mirror_capturing != mirror_capturing_) {
+        mirror_active_ = engine_state_.mirror_active;
+        mirror_capturing_ = engine_state_.mirror_capturing;
+        if (mirror_active_) {
+            log_info("mirror: on screen (%s)", engine_state_.mirror_note.c_str());
         } else {
-            log_info("duplicate: off (%s)%s", engine_state_.duplicate_note.c_str(),
-                     duplicate_capturing_ ? " - still capturing" : "");
+            log_info("mirror: off (%s)%s", engine_state_.mirror_note.c_str(),
+                     mirror_capturing_ ? " - still capturing" : "");
         }
     }
 
@@ -641,9 +639,8 @@ void AppController::sync(const char* reason_name) {
     }
 
     if (changed) {
-        log_debug("skin updated (%s): frame=%d surface=%d | detector: %llu scan(s), %llu process event(s)",
-                  reason_name, engine_state_.frame_applied ? 1 : 0, engine_state_.surface_visible ? 1 : 0,
-                  detector_.stats().scans, detector_.stats().events_from_wmi);
+        log_debug("skin updated (%s): state=%s | detector: %llu scan(s), %llu process event(s)", reason_name,
+                  engine_state_.mirror_state.c_str(), detector_.stats().scans, detector_.stats().events_from_wmi);
     }
 
     // --- 4c. Keep Azy's surfaces in front of Premiere ----------------------
@@ -661,20 +658,16 @@ void AppController::sync(const char* reason_name) {
         engine_.reassert_stacking();
     }
 
-    // --- 4b. Say something when the ring cannot be seen -------------------
-    // A utility whose entire purpose is to be visible must not fail silently.
-    // When everything says the ring should be on screen and it is not (the strips
-    // could not be placed in front of Premiere, the bitmap came out empty, the
-    // surface refused to present), tell the user once, with the reason, instead of
-    // leaving them to wonder.
-    const win::RingReport& ring = engine_.ring_report();
-    const bool ring_expected = request.features.edge_surface && request.suspend == win::SuspendReason::None &&
-                               request.target.valid();
-    const bool ring_attempted = engine_.surface_presents() > 0 || !ring.error.empty();
-    const bool ring_visible = ring.presented && ring.above && ring.max_alpha > 0;
-    if (ring_expected && ring_attempted && !ring_visible && !ring_warning_shown_) {
-        ring_warning_shown_ = true;
-        const std::string reason = !ring.error.empty() ? ring.error : std::string("the ring bitmap was empty");
+    // --- 4b. Say something when the mirror cannot be seen -----------------
+    // A utility whose entire purpose is to be visible must not fail silently. When the
+    // skin is meant to be applying and the mirror is not on screen, tell the user once,
+    // with the reason, instead of leaving them to wonder (spec §40).
+    const bool mirror_expected = request.skin_enabled && request.suspend == win::SuspendReason::None &&
+                                 request.target.valid() && engine_.mirror_supported();
+    const bool mirror_visible = engine_state_.mirror_active;
+    if (mirror_expected && !mirror_visible && !mirror_warning_shown_) {
+        mirror_warning_shown_ = true;
+        const std::string reason = engine_.last_error().empty() ? engine_state_.mirror_note : engine_.last_error();
         log_warn("the skin is not visible: %s", reason.c_str());
         if (tray_.exists()) {
             tray_.notify(L"Azy Skin - skin not visible",
@@ -683,7 +676,7 @@ void AppController::sync(const char* reason_name) {
                          NIIF_WARNING);
         }
     }
-    if (ring_visible) ring_warning_shown_ = false;
+    if (mirror_visible) mirror_warning_shown_ = false;
 
     // --- 5. Housekeeping --------------------------------------------------
     arm_timer(decision.timer_interval_ms);
@@ -751,10 +744,11 @@ void AppController::enter_safe_mode(const std::string& reason) {
     store_.save();
 
     log_warn("Azy Skin detected an issue with this Premiere version.");
-    log_warn("Safe Mode has been enabled: only basic visual enhancements will be used. (%s)", reason.c_str());
+    log_warn("Safe Mode has been enabled: the skin will not be applied until it is re-enabled in Settings. (%s)",
+             reason.c_str());
     const std::wstring message =
         L"Azy Skin hit a problem with " + win::to_wide(product_.display_name()) +
-        L" and switched to Safe Mode (basic visuals only). Re-enable the full treatment in Settings > Advanced.";
+        L" and switched to Safe Mode: it has stopped applying the skin. Re-enable it in Settings > Advanced.";
     tray_.notify(L"Azy Skin - Safe Mode", message, NIIF_WARNING);
     watch_.clear_move_size_loop();
     engine_.revert();
@@ -806,17 +800,24 @@ std::string AppController::premiere_summary() const {
     return product_.display_name() + " " + product_.version_string();
 }
 
-std::string AppController::treatment_summary(const FeatureSet& features) const {
+std::string AppController::treatment_summary() const {
     if (!store_.settings().enabled) return "off";
     if (safe_mode_) return "safe mode";
-    if (store_.settings().appearance.theme == ThemeId::Original) return "original (no changes)";
-    std::string summary = feature_summary(features);
-    if (store_.settings().performance_mode) summary += ", performance mode";
-    if (!features.reasons.empty()) {
-        summary += " (" + features.reasons.front();
-        if (features.reasons.size() > 1) summary += str_format(", +%d more", (int)features.reasons.size() - 1);
-        summary += ")";
+    if (store_.settings().appearance.theme == ThemeKey::Original) return "original (no skin)";
+    std::string summary = "live mirror of Premiere";
+
+    // The lifecycle, when it is the interesting part: naming the mirror for what it
+    // actually is beats a generic "active" that hides a stalled capture.
+    if (engine_.state() == win::MirrorState::Unsupported) {
+        summary = "no mirror on this host (" + engine_.status_note() + ")";
+    } else if (!engine_state_.mirror_active) {
+        if (engine_.state() == win::MirrorState::Suspended) {
+            summary += ", suspended (" + engine_.status_note() + ")";
+        } else {
+            summary += ", " + engine_.status_note();
+        }
     }
+    if (store_.settings().performance_mode) summary += ", performance mode";
     return summary;
 }
 
@@ -881,126 +882,112 @@ std::string AppController::measured_rates_line(unsigned long long frames, unsign
 
 std::vector<std::string> AppController::diagnostics_lines() const {
     std::vector<std::string> lines;
+    const Settings& settings = store_.settings();
     const win::SkinTarget& target = tracker_.target();
+    const win::CaptureStatus capture = engine_.capture_status();
+    const win::MirrorRenderer::Stats& stats = engine_.mirror_stats();
 
+    // --- the debug screen the brief asks for (spec §38), one line per group -----
+    lines.push_back(str_format("Azy Skin %s - lifecycle: %s", kAppVersion, engine_.state_name()));
+
+    // Premiere
+    if (target.hwnd != nullptr) {
+        lines.push_back(str_format("Premiere: detected YES | pid %lu | hwnd 0x%p | thread %lu | %s %s",
+                                   tracker_.pid(), (void*)target.hwnd, target.thread_id,
+                                   product_.display_name().c_str(), product_.version_string().c_str()));
+    } else if (detector_.has_target()) {
+        lines.push_back("Premiere: detected YES (process found, no usable window yet)");
+    } else {
+        lines.push_back("Premiere: detected NO - waiting for Premiere Pro...");
+    }
+
+    // Window
     if (target.hwnd != nullptr) {
         std::string shape = "windowed";
         if (target.minimized) shape = "minimized";
         else if (target.maximized) shape = "maximized";
         else if (target.fullscreen) shape = "fullscreen";
         if (!target.visible) shape += ", hidden";
-        lines.push_back(str_format("Azy Skin %s - window '%s' %dx%d at (%d,%d) | %s | screen (%d,%d)-(%d,%d) | %d%%", kAppVersion,
-                                   win::to_utf8(target.window_class).c_str(), target.visible_frame.width(),
-                                   target.visible_frame.height(), target.visible_frame.left, target.visible_frame.top,
-                                   shape.c_str(), target.monitor.left, target.monitor.top, target.monitor.right,
-                                   target.monitor.bottom, static_cast<int>(target.dpi * 100u / 96u)));
+        lines.push_back(str_format("Window: x=%d y=%d w=%d h=%d | %s | class '%s' | monitor (%d,%d)-(%d,%d)",
+                                   target.visible_frame.left, target.visible_frame.top,
+                                   target.visible_frame.width(), target.visible_frame.height(), shape.c_str(),
+                                   win::to_utf8(target.window_class).c_str(), target.monitor.left,
+                                   target.monitor.top, target.monitor.right, target.monitor.bottom));
     } else {
-        lines.push_back(str_format("Azy Skin %s - no Premiere window attached yet", kAppVersion));
+        lines.push_back("Window: none");
     }
 
-    // The overlay is reported on its own: it can be on screen when the edge
-    // treatment is not (a window too small for a ring, for example), and "the skin
-    // does nothing" is exactly the report this line has to settle.
-    const Settings& settings = store_.settings();
-    if (engine_.overlay_visible()) {
-        lines.push_back(str_format("Overlay: %d%% tint over the whole window",
-                                   static_cast<int>(engine_.overlay_alpha()) * 100 / 255));
-    } else if (settings.appearance.overlay && settings.appearance.overlay_intensity > 0.001) {
-        const FeatureSet features = effective_features(product_);
-        lines.push_back(features.window_overlay ? "Overlay: not on screen yet"
-                                                : "Overlay: off on this build (safe mode or no layered windows)");
-    }
+    // DPI
+    lines.push_back(str_format("DPI: %u%% (%.2f physical pixels per DIP)", target.dpi * 100u / 96u,
+                               static_cast<double>(target.dpi) / 96.0));
 
-    const win::RingReport& ring = engine_.ring_report();
-    if (ring.presented) {
-        lines.push_back(str_format("Ring %dpx at (%d,%d)-(%d,%d) | brightest pixel %u/255 | in front of Premiere: %s",
-                                   ring.thickness_px, ring.frame.left, ring.frame.top, ring.frame.right,
-                                   ring.frame.bottom, static_cast<unsigned>(ring.max_alpha),
-                                   ring.above ? "yes" : "no"));
-        if (ring.misplaced_strips > 0) {
-            lines.push_back(str_format(
-                "Note: %d of the 4 ring strips are not where Windows was asked to put them.",
-                ring.misplaced_strips));
-        }
-    } else if (!ring.error.empty()) {
-        lines.push_back("Ring: not on screen - " + ring.error);
-    } else {
-        lines.push_back("Ring: not drawn yet");
-    }
-
-    // --- the duplicate window (round 8) --------------------------------------
-    // The facts the overlay debug screen asks for, as far as a process can honestly
-    // know them. The capture latency is reported as the age of the newest captured
-    // frame (the part Azy can measure); GPU *memory* use is not reported at all,
-    // because the API being used exposes no counter for it and a number nobody can
-    // measure would be worse than a missing line. Everything that reads "measured"
-    // in these lines comes from two samples, and says so on the first one.
-    const win::SkinEngine::OverlayReport& report = engine_.overlay_report();
-    const win::CaptureStatus capture = engine_.capture_status();
-    const win::GlossOverlay::Stats& ostats = engine_.overlay_stats();
-    lines.push_back(str_format("Duplicate window: %s | capturing: %s | %s",
-                               report.active ? "on screen" : report.note.c_str(),
-                               report.capturing ? "yes" : "no",
-                               report.supported ? "supported on this host" : "NOT supported on this host"));
-    if (engine_.overlay_window() != nullptr) {
-        const Rect& frame = tracker_.target().visible_frame;
-        lines.push_back(str_format("  handles: duplicate 0x%p (Azy pid %lu), Premiere 0x%p (pid %lu) | monitor "
-                                   "(%d,%d)-(%d,%d) | %u dpi",
-                                   (void*)engine_.overlay_window(), GetCurrentProcessId(),
-                                   (void*)tracker_.target().hwnd, tracker_.pid(), tracker_.target().monitor.left,
-                                   tracker_.target().monitor.top, tracker_.target().monitor.right,
-                                   tracker_.target().monitor.bottom, tracker_.target().dpi));
-        // Both rectangles, side by side: this is the line that answers "does the
-        // duplicate actually sit where Premiere is".
-        lines.push_back(str_format("  geometry: Premiere %d,%d %dx%d | duplicate %d,%d %dx%d | offset %d,%d",
-                                   frame.left, frame.top, frame.width(), frame.height(), ostats.window_x,
-                                   ostats.window_y, ostats.window_w, ostats.window_h,
-                                   ostats.window_x - frame.left, ostats.window_y - frame.top));
-        lines.push_back(str_format("  capture: %ux%u content | %llu frames | %llu copies | %llu empty polls | "
-                                   "%llu failures | %llu pool resizes | newest frame %llu ms old | state: %s",
-                                   capture.content_width, capture.content_height, capture.frames, capture.copies,
-                                   capture.empty_polls, capture.failures, capture.pool_resizes,
+    // Capture
+    if (engine_.mirror_window() != nullptr) {
+        lines.push_back(str_format("Capture: %s | source: the Premiere window 0x%p (never the desktop) | "
+                                   "content %ux%u | %llu frames | %llu copies | %llu empty polls | %llu failures | "
+                                   "%llu pool resizes | newest frame %llu ms old | cursor %s",
+                                   capture.running ? (capture.item_closed ? "item closed" : "running") : "stopped",
+                                   (void*)target.hwnd, capture.content_width, capture.content_height, capture.frames,
+                                   capture.copies, capture.empty_polls, capture.failures, capture.pool_resizes,
                                    capture.frame_age_ms,
-                                   capture.running ? (capture.item_closed ? "item closed" : "running")
-                                                   : "stopped"));
-        lines.push_back(str_format("  rendering: %llu presents | %d pass-through regions | %d panel hairlines | "
-                                   "%u fps (%s) | uv %.3f,%.3f-%.3f,%.3f | capture size matches window: %s | "
-                                   "swap chain 2 x %dx%d BGRA8 premultiplied while shown, released while hidden, "
-                                   "capture texture %dx%d (sizes only, no VRAM number is claimed)",
-                                   ostats.presents, ostats.pass_regions, ostats.panel_lines, ostats.paced_fps,
-                                   ostats.active ? "active" : "idle", ostats.uv[0], ostats.uv[1], ostats.uv[2],
-                                   ostats.uv[3], ostats.capture_size_agrees ? "yes" : "no", ostats.width,
-                                   ostats.height, capture.content_width, capture.content_height));
-        lines.push_back("  rates: " + measured_rates_line(capture.frames, ostats.presents));
-        lines.push_back("  process cpu: " + process_cpu_line());
+                                   capture.cursor_disabled ? "excluded" : "captured (a second pointer may show)"));
+    } else {
+        lines.push_back("Capture: not created" + (engine_.last_error().empty()
+                                                       ? std::string()
+                                                       : " - " + engine_.last_error()));
     }
-    if (capture.cursor_disabled) {
-        lines.push_back("  capture notes: the mouse cursor is excluded; it is drawn by the compositor, not by "
-                        "Premiere, so mirroring it would show two.");
-    } else if (capture.running) {
-        lines.push_back("  capture notes: cursor capture could not be switched off on this host (a second cursor "
-                        "may appear inside the mirror).");
-    }
+
+    // Renderer
+    lines.push_back(str_format("Renderer: %s | %llu presents | %u fps (%s) | uv %.3f,%.3f-%.3f,%.3f | "
+                               "size agrees: %s | fade %.2f",
+                               stats.visible ? "drawing" : "idle", stats.presents, stats.paced_fps,
+                               stats.active ? "active" : "idle", stats.uv[0], stats.uv[1], stats.uv[2], stats.uv[3],
+                               stats.capture_size_agrees ? "yes" : "no", stats.fade));
+
+    // Composition
+    lines.push_back(str_format("Composition: mirror window 0x%p (Azy pid %lu) at %d,%d %dx%d | offset from "
+                               "Premiere %d,%d | DirectComposition swap chain 2 x %dx%d BGRA8 premultiplied | "
+                               "%d media regions untouched | %d panel frames",
+                               (void*)engine_.mirror_window(), GetCurrentProcessId(), stats.window_x, stats.window_y,
+                               stats.window_w, stats.window_h, stats.window_x - target.visible_frame.left,
+                               stats.window_y - target.visible_frame.top, stats.width, stats.height,
+                               stats.media_regions, stats.panel_rects));
+
+    // Theme
+    lines.push_back(str_format("Theme: %s | darkness %.0f%% | glass %.0f%% | border %.0f%% | shadow %.0f%% | "
+                               "corner %d dip | glow %.0f%% | animations %s",
+                               theme_key_name(settings.appearance.theme), settings.appearance.darkness * 100.0,
+                               settings.appearance.glass_intensity * 100.0,
+                               settings.appearance.border_intensity * 100.0,
+                               settings.appearance.shadow_intensity * 100.0, settings.appearance.corner_radius_dip,
+                               settings.appearance.glow_intensity * 100.0,
+                               settings.appearance.animations ? "on" : "off"));
+    lines.push_back(str_format("  note: the skin classifies pixels by luminance and by the panel model, and the "
+                               "media regions are passed through exactly. It is not per-control segmentation: "
+                               "docs/AZY_MIRROR_ARCHITECTURE.md section 10 lists where that can be fooled."));
+
+    // Rates and cost, measured between two reads
+    lines.push_back("Rates: " + measured_rates_line(capture.frames, stats.presents));
+    lines.push_back("Process cpu: " + process_cpu_line());
 
     if (premiere_elevated_) {
-        lines.push_back("Note: Premiere runs as administrator, Azy Skin does not - Windows blocks drawing above "
-                        "it. Tray menu -> Restart as Administrator fixes that.");
+        lines.push_back("Note: Premiere runs as administrator, Azy Skin does not - Windows blocks placing a window "
+                        "above it. Tray menu -> Restart as Administrator fixes that.");
+    }
+    if (!engine_.last_error().empty()) {
+        lines.push_back("Last error: " + engine_.last_error());
     }
     return lines;
 }
 
 // One word for "what is on screen right now". The settings window shows this
 // verbatim in its headline, so it must never be more optimistic than the engine:
-// "active" means the ring is on screen, not merely that the settings allow it.
+// "active" means the mirror is on screen, not merely that the settings allow it.
 std::string AppController::state_summary() const {
-    // "active" means something of Azy's is really on screen - the ring or the
-    // overlay. The overlay alone is a complete answer to "is the skin applying?",
-    // so it must not be reported as merely partial.
-    const bool surface_on_screen = engine_.surface_visible() || engine_.overlay_visible() ||
-                                   engine_state_.duplicate_active;
-    if (engine_.frame_applied() && surface_on_screen) return "active";
-    if (engine_.frame_applied()) return "partial";
+    // "active" means the mirror is really on screen - not that the settings allow it.
+    if (engine_state_.mirror_active) return "active";
     if (!detector_.has_target()) return "idle";
+    if (engine_.state() == win::MirrorState::Unsupported) return "unsupported";
     return win::suspend_reason_name(engine_state_.suspend);
 }
 
@@ -1010,19 +997,14 @@ std::string AppController::status_line() const {
 
     if (!settings.enabled) return "Azy Skin: off | Premiere Pro: " + premiere;
     if (suspended_manual_) return "Azy Skin: suspended | Premiere Pro: " + premiere;
-    if (settings.appearance.theme == ThemeId::Original) {
-        return "Azy Skin: original (no changes) | Premiere Pro: " + premiere;
+    if (settings.appearance.theme == ThemeKey::Original) {
+        return "Azy Skin: original (no skin) | Premiere Pro: " + premiere;
     }
 
-    const FeatureSet features = effective_features(product_);
-    const std::string treatment = treatment_summary(features);
-
-    // What is on screen right now, in one word: this is the string the tray
-    // tooltip and the log use, so a problem is diagnosable at a glance.
-    const std::string state = state_summary();
-
-    return str_format("Azy Skin: %s, %s - %s | Premiere Pro: %s", theme_name(settings.appearance.theme),
-                      treatment.c_str(), state.c_str(), premiere.c_str());
+    // What is on screen right now, in one word, plus the theme: this is the string the
+    // tray tooltip and the log use, so a problem is diagnosable at a glance.
+    return str_format("Azy Skin: %s, %s - %s | Premiere Pro: %s", theme_key_name(settings.appearance.theme),
+                      treatment_summary().c_str(), state_summary().c_str(), premiere.c_str());
 }
 
 void AppController::update_tray() {
@@ -1042,15 +1024,15 @@ void AppController::update_settings_window_status() {
     win::SettingsWindow::Status status;
     status.host = win::host_info().os_name;
     status.premiere = premiere_summary();
-    // The headline reports the engine's own state, not the configuration: a
-    // window that says "active" while nothing is on screen is worse than useless.
+    // The headline reports the engine's own state, not the configuration: a window
+    // that says "active" while nothing is on screen is worse than useless.
     status.state = state_summary();
     status.lines = diagnostics_lines();
-    status.treatment = treatment_summary(effective_features(product_));
+    status.treatment = treatment_summary();
     status.safe_mode = safe_mode_;
     status.safe_mode_note = safe_mode_
                                 ? "Safe mode is active: " + store_.settings().safe_mode_reason +
-                                      ". Only basic enhancements are used."
+                                      ". The skin is not applied until you re-enable it in Settings > Advanced."
                                 : std::string();
     settings_window_.refresh(store_.settings(), status, store_.settings().enabled,
                              suspended_manual_ || performance_.suspended());
@@ -1059,8 +1041,7 @@ void AppController::update_settings_window_status() {
 void AppController::restart_elevated() {
     // Premiere running at a higher integrity level than Azy is the one situation Azy
     // cannot work around: Windows does not let a lower-integrity process place a
-    // window above a higher-integrity one, so the ring and the overlay would sit
-    // behind Premiere. Running Azy elevated as well is the fix, and it needs the
+    // window above a higher-integrity one, so the mirror would sit behind Premiere. Running Azy elevated as well is the fix, and it needs the
     // user's consent - one UAC prompt, then this instance steps aside.
     const std::wstring exe = win::executable_path().wstring();
     const HINSTANCE started = ShellExecuteW(nullptr, L"runas", exe.c_str(), L"--tray", nullptr, SW_SHOWNORMAL);
@@ -1091,13 +1072,13 @@ void AppController::stop_observers() {
 void AppController::shutdown() {
     if (shutting_down_) return;
     shutting_down_ = true;
-    log_info("Azy Skin shutting down - restoring Premiere's frame and releasing resources");
+    log_info("Azy Skin shutting down - stopping the capture and releasing every GPU resource");
 
     stop_observers();
     if (window_ != nullptr) KillTimer(window_, kSyncTimerId);
 
-    // Restore everything: Premiere must look exactly as it did before Azy ran,
-    // and closing Azy must never require closing Premiere.
+    // Release everything: Premiere must be unaffected by Azy having run, and closing
+    // Azy must never require closing Premiere.
     engine_.shutdown();
     tracker_.clear();
 
@@ -1113,10 +1094,10 @@ void AppController::shutdown() {
     }
     // One line of session statistics: how much work the skin actually did. A high
     // number here without user activity would mean the event filtering is broken.
-    log_debug("session totals: %llu skin applies, %llu surface presentation(s), %llu detector scan(s), "
-              "%llu surface hit test(s)",
-              engine_state_.applies, engine_.surface_presents(), detector_.stats().scans,
-              win::input_guard::hit_test_count());
+    log_debug("session totals: %llu skin applies, %llu mirror presentation(s), %llu captured frame(s), "
+              "%llu detector scan(s)",
+              engine_state_.applies, engine_.mirror_stats().presents, engine_.capture_status().frames,
+              detector_.stats().scans);
     log_info("Azy Skin stopped");
     Logger::instance().flush_pending();
 }

@@ -26,6 +26,10 @@ public:
         // the presentation (a message box, so the text can be copied), the
         // application owns the measurement.
         std::function<std::string()> on_check_visibility;
+        // Live preview (spec §28): the Appearance page applies an incoming settings
+        // object to the running mirror as the user moves a slider or picks a theme,
+        // without saving it. Nothing is committed until on_change fires.
+        std::function<void(const Settings&)> on_preview;
         std::function<void()> on_hidden;
     };
 
@@ -68,7 +72,8 @@ private:
     void rebuild_controls();
     void layout(int dpi);
     void sync_controls();
-    void push_settings();       // user edit -> callbacks_.on_change
+    void push_settings();       // user edit -> callbacks_.on_change (saved)
+    void preview_settings();    // user edit -> callbacks_.on_preview (not saved)
     void update_slider_labels();
     void set_dark_theme();
 

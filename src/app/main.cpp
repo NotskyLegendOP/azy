@@ -21,7 +21,6 @@
 #include "azy/win32/os/win_api.hpp"
 #include "azy/win32/os/win_util.hpp"
 #include "azy/win32/os/win_version.hpp"
-#include "azy/win32/skin/gdiplus_renderer.hpp"
 #include "azy/core/version_string.hpp"
 #include "azy/win32/skin/input_guard.hpp"
 #include "azy/win32/ui/app_icon.hpp"
@@ -182,16 +181,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int) {
     controls.dwICC = ICC_STANDARD_CLASSES | ICC_BAR_CLASSES | ICC_WIN95_CLASSES;
     InitCommonControlsEx(&controls);
 
-    // 5. GDI+: Azy's only renderer, started once and shut down at exit.
-    std::string gdi_error;
-    if (!win::GdiPlusSession::start(&gdi_error)) {
-        log_error("could not start GDI+: %s", gdi_error.c_str());
-        MessageBoxW(nullptr,
-                    L"Azy Skin could not start the Windows graphics library (GDI+).\n"
-                    L"Premiere Pro is not affected; Azy Skin will now exit.",
-                    L"Azy Skin", MB_OK | MB_ICONERROR);
-        return 1;
-    }
+    // (Step 5 used to start GDI+, which was the static skin's renderer. The rebuild
+    // draws through the GPU instead, so there is nothing to start here: the tray icon
+    // is the only GDI user left, and GDI needs no session.)
 
     log_startup_banner(command_line);
 
@@ -212,7 +204,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR, int) {
         }
     }
 
-    win::GdiPlusSession::stop();
     win::destroy_app_icon();
     CoUninitialize();
     Logger::instance().close();

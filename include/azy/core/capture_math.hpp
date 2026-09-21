@@ -48,6 +48,15 @@ struct UvRect {
 // stretched or mirrored image.
 UvRect map_overlay_to_capture(const Rect& overlay, const Rect& captured);
 
+// How much of a monitor panel is its own chrome rather than its picture: Premiere
+// puts a toolbar (playback controls, zoom, quality menu) across the top of both
+// monitors, and a few pixels of its own frame around the rest. Only the picture area
+// is passed through untouched; the strip above it is styled like every other panel,
+// which is what makes a monitor read as a glass panel holding a raw picture rather
+// than as a hole in the skin. Approximate on purpose: the panel model is a model.
+constexpr int kMonitorToolbarDip = 34;
+constexpr int kMonitorPaddingDip = 3;
+
 // A rectangle of the display left untouched by the skin (pass-through), in
 // window-local pixels.
 struct LocalRect {
@@ -74,7 +83,7 @@ LocalRect clip_to_overlay(const Rect& source, const Rect& overlay);
 // picture content, so a shader with a small fixed array always gets the two that
 // matter most first.
 std::vector<LocalRect> monitor_pass_through(const std::vector<PanelRect>& panels, const Rect& overlay,
-                                            const Rect& client_origin);
+                                            const Rect& client_origin, unsigned dpi);
 
 // The panel borders to draw, converted for the shader, most useful first (the
 // menu bar, the header, the timeline, the docks), clipped and de-duplicated

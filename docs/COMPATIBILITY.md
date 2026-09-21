@@ -1,5 +1,12 @@
 # Azy Skin — Compatibility
 
+> **Superseded in 2.0.0.** This document is the record of the round-8 (v1.3.0)
+> implementation: DWM frame styling, the four-strip ring, the translucent sheet and
+> the duplicate window built on top of them. All of that was deleted in the round-9
+> rebuild — the skin is now a live GPU mirror of the Premiere window, described in
+> [`AZY_MIRROR_ARCHITECTURE.md`](AZY_MIRROR_ARCHITECTURE.md). Kept because knowing
+> what was tried, and why it was replaced, is part of the project's record.
+
 Two things decide what Azy Skin is allowed to do:
 
 1. **What the host Windows build can do** — probed at runtime, never guessed from

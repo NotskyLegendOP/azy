@@ -1,5 +1,18 @@
 # Azy Skin — Settings reference
 
+## Round 9 (2.0.0) note
+
+The appearance settings now drive one thing: the mirror's material. `theme`,
+`custom_accent`, `glass_intensity`, `border_intensity`, `corner_radius_dip`,
+`shadow_intensity`, `darkness`, `accent_intensity` and `glow_intensity` are
+converted into the shader constants by `core/mirror_style.cpp`, and `animations`
+(default **off**) controls the only transition in the product: a short fade when the
+mirror appears and a cross-fade on a theme change. `performance_mode` swaps the
+material for a cheaper one (no diffusion, no gloss, no grain) without touching
+readability or content protection. Keys that described the deleted ring/sheet/DWM
+layers (`overlay_intensity`, `overlay_*`, `accent`) are read for compatibility and
+then ignored — see the round-9 section of `docs/ARCHITECTURE.md`.
+
 Configuration lives in `%LOCALAPPDATA%\Azy Skin\settings.ini`. It is plain INI,
 safe to edit by hand, and Azy reloads it automatically about a second after you
 save. Unknown keys are preserved when Azy rewrites the file, so a newer build's
@@ -89,7 +102,7 @@ schema=1
 | Key | Default | Notes |
 |---|---|---|
 | `experimental` | `0` | Enables features that need field verification on real hardware (currently the Windows 11 Mica backdrop on the window frame). Setting it also clears Safe Mode |
-| `safe_mode` | `0` | Set to `1` automatically after 3 failures within 5 minutes. While on: dark frame only, no composition surfaces, no experimental features |
+| `safe_mode` | `0` | Set to `1` automatically after 3 failures within 5 minutes. While on: the skin is not applied at all (the mirror and its GPU resources are released) and experimental features stay off, until *Settings → Advanced → Re-enable features* |
 | `safe_mode_reason` | | Human-readable reason, shown in Settings |
 | `failures`, `failure_window_start`, `failure_last`, `failure_tripped` | | Failure-tracker state, persisted so a build that failed before also starts in Safe Mode next time |
 | `last_premiere_version` | | Last detected Premiere version (diagnostics only) |

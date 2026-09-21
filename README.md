@@ -1,13 +1,14 @@
 # Azy Skin
 
-A lightweight Windows utility that makes Adobe Premiere Pro look cleaner, darker
-and slightly glassy — **without touching Premiere**.
+A lightweight Windows utility that gives Adobe Premiere Pro a dark, glassy,
+futuristic interface — **without touching Premiere**.
 
 Premiere Pro keeps doing exactly what it did before. Azy Skin is not a plugin, not
-a panel, not an overlay, and not an editing tool. It is a native Win32 companion
-that sits in the system tray, notices when Premiere starts, and applies a
-restrained dark treatment to the *window* Premiere already draws — then gets out
-of the way.
+a panel, and not an editing tool. It is a native Win32 companion that sits in the
+system tray and, while Premiere is running, **mirrors Premiere's own window on the
+GPU and draws it back wearing a skin**: near-black panel surfaces, 1px lit borders,
+faint reflections, a localised accent glow. The real Premiere window underneath
+keeps the keyboard, the mouse, and every pixel of its behaviour.
 
 ```
 “This is still Premiere Pro, but the interface looks more polished.”
@@ -19,13 +20,13 @@ of the way.
 
 | | |
 |---|---|
-| **Is** | A ~610 KB native C++/Win32 application, event-driven, no dependencies, no installer requirements, no Adobe integration |
-| **Is** | A dark charcoal + subtle glass treatment applied through documented Windows window composition, and a *duplicate window* that shows a skinned copy of Premiere's own pixels above it |
+| **Is** | A ~600 KB native C++/Win32 application, event-driven, no dependencies, no installer requirements, no Adobe integration |
+| **Is** | A live mirror of the Premiere window: the window is captured on the GPU and drawn back skinned, so the whole interface — header, panels, timeline, meters — wears the theme, while the Program/Source Monitor pictures are passed through untouched |
 | **Is not** | A UXP / CEP / ExtendScript extension, a Premiere API consumer, or a plugin of any kind |
 | **Is not** | Process injection, memory patching, file patching, resource replacement, or hooking of Premiere's internals |
-| **Is not** | An alternative UI, a replacement timeline or a second toolbar. The duplicate window carries no controls at all — it is click-through, it never takes focus, and the real Premiere window underneath stays the application you are using |
+| **Is not** | An alternative UI, a replacement timeline or a second toolbar. The mirror carries no controls at all — it is click-through, it never takes focus, and the real Premiere window underneath stays the application you are using |
 | **Never** | Takes focus, eats a click, a key, a scroll, a drag, or a shortcut |
-| **Never** | Animates anything — no transitions, no glow, no particles, no FPS-dependent work |
+| **Never** | Animates anything by default — the only transition in the product is an optional fade you switch on yourself |
 
 Azy Skin does not know or care where Premiere is installed. It never opens an
 Adobe file. If Azy Skin is closed, paused or crashed, Premiere is completely
@@ -35,28 +36,30 @@ unaffected — it never becomes a dependency.
 
 ## How it works in one paragraph
 
-Windows gives an external process a small number of *supported* ways to restyle
-another application's window, and Azy Skin uses only those. It identifies the
-Premiere process from the Windows process list (matched on the executable
-*name*, never a hardcoded path) and reads its version from the executable's
-version resource. It learns about everything else from Windows notifications:
-process creation/deletion, window creation/destruction, moves, resizes,
-minimisation, foreground changes, DPI and display changes. When something
-actually changes, it applies the theme through documented Windows window
-composition: DWM attributes on Premiere's own top-level frame, a click-through ring
-and a translucent sheet as the lightweight path, and — when the host supports it —
-a **duplicate window** placed directly above Premiere that mirrors the real window
-through a GPU capture and draws it back skinned. Between events it does nothing at
-all; while the duplicate is up, its rendering follows the capture, not a clock.
+Azy identifies the Premiere process from the Windows process list (matched on the
+executable *name*, never a hardcoded path) and reads its version from the
+executable's version resource. It learns about everything else from Windows
+notifications: process creation/deletion, window creation/destruction, moves,
+resizes, minimisation, foreground changes, DPI and display changes — no polling for
+position, no screenshots. Windows Graphics Capture then hands it the live pixels of
+that one window on the GPU; a single shader pass rebuilds those pixels as dark
+glass and presents them in a click-through window placed exactly on Premiere's
+visible frame, directly in front of Premiere and never on top of anything else.
+The monitor pictures inside that frame are copied through untouched, thumbnails and
+previews are protected from the treatment, and everything else — panel surfaces,
+separators, text, the timeline, the meters — is re-lit in the active theme. Between
+events Azy does nothing; while an idle Premiere is on screen the mirror presents at
+a slow, fixed rate and the same frame is not redrawn.
 
-Detailed design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Detailed design: [`docs/AZY_MIRROR_ARCHITECTURE.md`](docs/AZY_MIRROR_ARCHITECTURE.md) ·
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 Every technique and why it is safe: [`docs/TECHNIQUES.md`](docs/TECHNIQUES.md).
 
 ---
 
 ## Installing
 
-1. Run `AzySkin-1.0.2-setup.exe`.
+1. Run `AzySkin-2.0.0-setup.exe`.
 2. Choose whether Azy Skin should start with Windows and whether it should skin
    Premiere automatically (both recommended).
 3. Start Premiere Pro.
@@ -82,10 +85,11 @@ Premiere simply goes back to its original look.
 Everything lives in the tray icon (single left click toggles the skin on/off):
 
 ```
-Azy Skin: Azy Dark Glass, full - active | Premiere Pro: Premiere Pro 2025 25.6.0.58
+Azy Skin: active | Premiere Pro: Premiere Pro 2025 25.6.0.58
 ────────────────────────────────────────────────────────────────────────────────
 Skin Enabled                                    ✓
-Theme                ▸  Azy Dark Glass / Azy Dark / Original
+Theme                ▸  Blue / Purple · Cyan · Purple · Magenta · Red · Orange ·
+                        Green · Pink · Custom · Original
 Settings…                                          (double-click the icon)
 Start with Windows
 Suspend Skin
@@ -95,18 +99,18 @@ Restart as Administrator                           (only when Premiere runs elev
 Exit
 ```
 
-**ON / OFF is instant.** With the skin off, Premiere's window frame is restored to
-the exact values DWM had before Azy touched it, and Azy's own surface is hidden
-immediately. No Premiere restart is ever needed.
+**ON / OFF is instant.** With the skin off (or with the theme set to *Original*),
+the mirror window is hidden on the next message and Premiere is exactly its own.
+No Premiere restart is ever needed.
 
 ### Settings window
 
 | Group | Options |
 |---|---|
 | **Skin** | Enable skin · Start with Windows · Apply automatically to Premiere Pro |
-| **Appearance** | Theme · Glass intensity · Border intensity · Corner radius · Shadow intensity · Overall darkness |
+| **Appearance** | Theme · Custom accent · Glass intensity · Border intensity · Corner radius · Shadow intensity · Overall darkness · Accent glow · Animate appearance |
 | **Performance** | Performance mode · Suspend while minimized · Suspend while inactive |
-| **Advanced** | Experimental visual features · Re-enable features after Safe Mode · Reset configuration · Open log file |
+| **Advanced** | Layout profile (Auto/Editing/Color/Audio/Effects/Graphics) · Debug mode · Re-enable features after Safe Mode · Reset configuration · Open log file |
 
 Every change applies live — there is no OK/Apply step. Settings are stored in
 `%LOCALAPPDATA%\Azy Skin\settings.ini`, which is plain INI and safe to edit by
@@ -118,25 +122,29 @@ The status area of the settings window reports what Azy is actually doing, on th
 machine it is doing it on — including the version that is running:
 
 ```
-Azy Skin 1.3.0 - window 'Premiere Pro' 1920x1040 at (0,0) | maximized | screen (0,0)-(1920,1080) | 100%
-Ring 12px at (0,0)-(1920,1040) | brightest pixel 199/255 | in front of Premiere: yes
-Overlay: 30% tint over the whole window
+Azy Skin 2.0.0
+Premiere Pro: Premiere Pro 2025 25.6.0.58
+
+the skin is on screen
+  mirror: on screen, 81213 presents, 909 captured frames, 1920x1040, 15 fps (structural, not a pixel check: the mirror is painted by the compositor)
+  lifecycle: MIRROR_ACTIVE
 ```
 
-0. **Press *Check visibility*** (next to *Open log file*). Azy hides its
-   layers for a single frame, reads the same pixels back from the desktop, and
-   tells you what actually changed — the difference between "every Windows call
-   returned success" and "you can see it". Copy the text with Ctrl+C if you report
-   a problem.
+0. **Press *Check visibility*** (next to *Open log file*). It reports what is
+   actually on screen — the difference between "every Windows call returned
+   success" and "something is visible". Copy the text with Ctrl+C if you report a
+   problem.
 1. **Check the version on the first line** — it is the build you installed.
-2. `Ring: not on screen - ...` names the reason (nothing attached yet, the strips
-   could not be placed in front of Premiere, an empty bitmap).
-3. `brightest pixel 0/255` would mean the ring rendered nothing; `in front of
-   Premiere: no` means something is stacked above the strips.
-4. If both lines look right, the ring *is* on screen: it is drawn just inside the
-   rectangle named in the second line. The default look is deliberately subtle —
-   raise **Border intensity** and **Overall darkness** to make it unmistakable, then
-   dial back. On a maximized window the ring follows the monitor's work area.
+2. `the skin is NOT on screen` names the reason: waiting for Premiere, capture
+   initialization failed, the window changed and Azy is reconnecting, or the
+   settings say the skin is off.
+3. The lifecycle line is the honest one: `WAITING_FOR_PREMIERE`, `CAPTURE_FAILED`,
+   `UNSUPPORTED`, `SUSPENDED` (minimized, hidden, inactive) or `MIRROR_ACTIVE`.
+   Azy never shows a placeholder rectangle while it waits — an empty state means
+   nothing is drawn, not that something failed silently.
+4. If it says `MIRROR_ACTIVE` and Premiere looks untouched, the theme is too
+   restrained for your display: raise **Overall darkness**, **Border intensity** and
+   **Accent glow** in Appearance, then dial back.
 5. If Premiere Pro runs as administrator, start Azy Skin as administrator too:
    Windows does not allow a lower-integrity process to draw above a higher-integrity
    one, and Azy says so in the panel and in a tray notification.
@@ -148,49 +156,43 @@ file*), where `docs/TESTING.md` explains every field.
 
 ## The look
 
-**Azy Dark Glass** (default) — a near-black charcoal frame with a slightly
-lighter panel wash, a 1px hairline border at 4–13% white, a barely visible top
-highlight, a soft low-opacity inner shadow on the window's outer band, and around
-8px corner radius where Windows supports it. Surfaces stay 78–94% opaque, so what
-shows through is a hint of context, not a see-through panel.
+Azy does not put a border around Premiere: it renders Premiere's own interface as
+dark glass. The base is never flat black — a near-black charcoal with depth between
+surfaces — and on top of it:
 
-Darker, more saturated or more translucent than that is not the goal:
-`premium dark glass`, not `RGB gaming UI`. The defaults are intentionally
-restrained; the sliders exist for people who want to push them.
+* **panel surfaces** take the theme's surface colour, so panels separate by
+  brightness steps rather than by outlines;
+* **1px borders** re-light Premiere's own control lines, and every modelled panel
+  gets a thin rounded frame with a soft interior shadow;
+* **glass**: a diffusion of the pixels behind each panel, kept subtle enough that
+  text stays crisp (a local-contrast term restores the detail the darkening costs);
+* **accent light**: a localised glow around frames and active elements, in the
+  theme's accent colour — never a screen-wide neon wash;
+* **footage is untouched**: the Program and Source Monitor pictures are copied
+  through exactly, and so are bright, vividly coloured regions inside panels, which
+  is what keeps thumbnails and previews faithful (see the caveats in
+  [`docs/AZY_MIRROR_ARCHITECTURE.md`](docs/AZY_MIRROR_ARCHITECTURE.md) §10).
 
-The other two themes are **Azy Dark** (the same treatment, fully opaque — no
-translucency anywhere) and **Original** (Azy applies nothing at all).
+Ten themes ship with it: **Blue/Purple** (default), **Cyan**, **Purple**,
+**Magenta**, **Red**, **Orange**, **Green**, **Pink**, **Custom** (pick your own
+accent colour) and **Original** (Azy draws nothing at all — the instant ON/OFF).
+Switching a theme is instant and needs no restart; the base dark UI is the same in
+every theme, only borders, glow, selection and highlights move.
 
-On top of that edge treatment comes the part that actually skins the window: the
-**duplicate window**. Azy captures Premiere's window on the GPU (Windows Graphics
-Capture — never the desktop, never another application), draws it back through a
-small shader that darkens and glazes everything except the **Program and Source
-Monitors, whose footage is passed through untouched**, adds 1px separators between
-the panels, a 1px lighter frame and ~8px rounded corners, and presents it in a
-click-through window sitting directly above Premiere. Premiere keeps every mouse
-click and every keystroke; Azy only says what the pixels look like.
+![Before and after](docs/images/azy_mirror_before_after.png)
 
-The earlier, cheaper layers — the 1px ring and the translucent sheet — remain as the
-fallback for hosts where the GPU path cannot run, and they stand down while the
-duplicate is on screen so nothing is drawn twice.
+*Top: the real window, untouched. Bottom: the same pixels through the skin, in the
+default Blue/Purple theme. Bright monitor content, the timeline clips' colours and
+the audio meters keep their own colours; the interface around them becomes glass.*
 
-Where the pages below say *overlay*, they mean that final window. It is adjustable
-(*Cover the whole window* + *Overlay strength*, 0% = edge only), and because the
-skin is applied around the video rather than over it, grading footage is unaffected —
-the picture regions are excluded from the shader by rectangle.
+![Themes](docs/images/azy_mirror_themes.png)
 
-![The ring in the three treatments](docs/images/ring-preview.png)
+*The same frame in each theme.*
 
-*Left: Azy Dark Glass (default). Middle: Azy Dark (opaque). Right: Performance
-mode. Above, a schematic of the edge treatment; below, the actual corner at 4×
-zoom — a 1px hairline on the frame edge, a 1px raised bezel inside it, then a soft
-falloff inward. Reproduced from the renderer's own maths by
-`tools/preview_render.py`, so it can be reviewed without a Windows machine.*
-
-Why a *lighter* line inside the frame edge rather than a darker one: a purely dark
-edge treatment is invisible over Premiere's own near-black panels. The bezel is
-what makes the boundary read as a boundary, at 5–17% white — separation, not an
-outline.
+These two images are produced by `tools/preview_render.py`, which re-implements the
+shader on the CPU over a synthetic Premiere picture — a picture of the maths, so the
+design can be reviewed without a Windows machine. They are **not** screenshots: no
+part of this repository has been run against a real Premiere yet.
 
 ---
 
@@ -241,14 +243,14 @@ Measured numbers and the method: [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md).
 | Property | How it is guaranteed |
 |---|---|
 | Never steals focus | Azy's surface window is created with `WS_EX_NOACTIVATE`; Azy has no focusable window at all while idle |
-| Never eats input | `WS_EX_LAYERED` + `WS_EX_TRANSPARENT` (the pair that passes a click through *across processes*) + `WS_EX_TOOLWINDOW` on every window of Azy's, including the duplicate; the contract is re-checked on every surface creation and by `tools/check-overlay.py` |
+| Never eats input | `WS_EX_LAYERED` + `WS_EX_TRANSPARENT` (the pair that passes a click through *across processes*) + `WS_EX_TOOLWINDOW` on every window of Azy's, including the mirror; the contract is re-checked on every creation and by `tools/check-mirror.py` |
 | Never takes a keystroke | No keyboard hook, no hotkey registration, nowhere in the codebase. The duplicate cannot be activated (`WS_EX_NOACTIVATE`) |
-| Never captures anything but Premiere | The capture is created for the tracked window and re-validated against its owning process id before use; the *monitor* form of the capture API appears nowhere in `src/` and `tools/check-overlay.py` fails the build if it ever does |
+| Never captures anything but Premiere | The capture is created for the tracked window and re-validated against its owning process id before use; the *monitor* form of the capture API appears nowhere in `src/` and `tools/check-mirror.py` fails the build if it ever does |
 | Never mirrors itself | Window capture, not screen capture: Azy's own windows cannot appear in the captured image, and the capture refuses to attach to Azy's own process |
 | Never blocks the timeline | The surface is never larger than Premiere's own visible frame, and it is hidden the instant a move/resize loop starts |
-| Never breaks on a new Premiere | Version-aware policy; unknown or newer builds get a conservative treatment instead of guessing |
-| Never retries forever | Repeated failures trip **Safe Mode**: dark frame only, no composition surfaces, with a one-line explanation and a manual way back |
-| Never leaves Premiere modified | Every DWM attribute is read first and restored on OFF, on suspend, on Premiere exit and on Azy exit |
+| Never breaks on a new Premiere | Nothing about Premiere is assumed beyond "it is a window": the panel rectangles are a model, and a wrong rectangle costs a misplaced frame rather than a wrong pixel |
+| Never retries forever | Repeated capture failures stop and report; **Safe Mode** keeps the skin off after repeated visual failures, with a one-line explanation and a manual way back |
+| Never leaves Premiere modified | There is nothing to restore: Azy reads the window and draws its own. No DWM attribute is set, no window of Premiere's is touched, and quitting Azy leaves Premiere as it was |
 | Never a dependency | Azy can be closed, paused or killed mid-session; Premiere is unaffected in every case |
 
 The full stability and compatibility reasoning, including what is deliberately
@@ -273,7 +275,7 @@ ctest --test-dir build -C Release --output-on-failure
 ```
 
 Packaging: `powershell -File scripts\package.ps1` (needs Inno Setup 6) produces
-`dist\AzySkin-1.3.0-setup.exe`.
+`dist\AzySkin-2.0.0-setup.exe`.
 
 Full instructions, including what the cross build can and cannot verify:
 [`docs/BUILDING.md`](docs/BUILDING.md).
@@ -283,8 +285,8 @@ Full instructions, including what the cross build can and cannot verify:
 ## Repository layout
 
 ```
-include/azy/core/      portable logic: version, product, compat, theme, settings, log
-include/azy/win32/     Win32 layer headers (detect, os, performance, skin, ui, watch)
+include/azy/core/      portable logic: version, product, theme, mirror style, settings, log
+include/azy/win32/     Win32 layer headers (capture, mirror, detect, os, performance, skin, ui, watch)
 include/azy/app/       application layer headers
 src/                   implementations, mirroring the header tree
 tests/core_tests.cpp   unit tests for the portable core (no Windows needed)
@@ -305,9 +307,9 @@ docs/                  architecture, techniques, compatibility, performance, tes
 
 | Document | Contents |
 |---|---|
-| [`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md) | The whole mechanism in one page: detection, the visual layers, click-through, stacking, teardown |
-| [`docs/AZY_OVERLAY_ARCHITECTURE.md`](docs/AZY_OVERLAY_ARCHITECTURE.md) | The duplicate window: capture, composition, input, synchronisation, performance, error recovery, DPI, multi-monitor, limitations, and every claim's verification status |
-| [`docs/AZY_OVERLAY_TEST_PLAN.md`](docs/AZY_OVERLAY_TEST_PLAN.md) | The first-run checklist and the ten scenarios that close the overlay's open questions |
+| [`docs/AZY_MIRROR_ARCHITECTURE.md`](docs/AZY_MIRROR_ARCHITECTURE.md) | The mirror, end to end: capture, classification, the shader contract, window rules, synchronisation, pacing, honesty about approximation, and what is verified vs not |
+| [`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md) | The whole mechanism in one page: detection, the mirror, click-through, stacking, teardown |
+| [`docs/AZY_OVERLAY_ARCHITECTURE.md`](docs/AZY_OVERLAY_ARCHITECTURE.md) · [`docs/AZY_OVERLAY_TEST_PLAN.md`](docs/AZY_OVERLAY_TEST_PLAN.md) | The v1.3.0 duplicate-window design and its test plan. Historical: the ring/sheet/DWM layers it built on were removed in the 2.0.0 rebuild |
 | [`docs/AZYSKIN_AUDIT.md`](docs/AZYSKIN_AUDIT.md) | The full implementation audit: what was found, what was fixed, what remains, and the readiness verdict |
 | [`docs/ARCHITECTURE_REVIEW.md`](docs/ARCHITECTURE_REVIEW.md) | Second-pass review: is this the right architecture, what alternatives were rejected and why |
 | [`docs/DEEP_BUG_REPORT.md`](docs/DEEP_BUG_REPORT.md) | Every defect the deep review found, with root cause, impact, fix and how it was checked |

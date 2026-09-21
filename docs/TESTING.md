@@ -1,5 +1,31 @@
 # Azy Skin — Testing
 
+## Round 9 (2.0.0): the mirror
+
+The skin is now a live mirror of the Premiere window (see
+[`AZY_MIRROR_ARCHITECTURE.md`](AZY_MIRROR_ARCHITECTURE.md)). That changes what the
+manual pass has to look at, and adds one thing to check first:
+
+1. **Statically verified before you start** (`./scripts/verify.sh`, 7 steps): the
+   shader's constant buffer and `MirrorParams` agree member by member, the window
+   styles and capture guards are present, the core maths passes 747 unit assertions,
+   and the Windows build cross-compiles and its PE resources are intact.
+2. **The first thing to look at is the lifecycle line.** Settings → *Check
+   visibility* prints `lifecycle: MIRROR_ACTIVE` when the skin is really on screen;
+   `WAITING_FOR_PREMIERE`, `CAPTURE_FAILED`, `UNSUPPORTED` and `SUSPENDED` are not
+   failures to work around, they are the honest states (§40).
+3. **The panel model is the first thing to correct.** If panel frames sit in the
+   wrong place for your workspace, one screenshot with **Debug mode** on is what
+   fixes it — that is a model correction, not a bug hunt.
+4. Everything the older sections below describe about the ring, the sheet and DWM
+   attributes is historical; the equivalent checks now are: does the mirror follow
+   move/resize/maximise, does it hide on minimise, does it stay click-through, and
+   does the footage stay untouched.
+
+The ten scenarios that matter (one real-Premiere session): capture start, move,
+resize, maximise/restore, minimise/restore, monitor change, DPI change, theme
+switch, Premiere close, Premiere restart.
+
 Automated tests cover the portable core (`tests/core_tests.cpp`, 280+ assertions
 run by `ctest`) and CI compiles the complete Windows application (MSVC with the
 resource compiler, plus a cross-compile gate). What cannot be automated is the
@@ -177,7 +203,7 @@ ring on (0,0)-(1920,1040), screen (0,0)-(1920,1080), work area top 0 bottom 1040
 | 7.3 | Corrupt `settings.ini` (e.g. `garbage===!!!`) and start Azy | Azy starts with defaults, logs a warning, and rewrites a valid file |
 | 7.4 | Set `theme=rgb_gaming` in `settings.ini` | Warning logged, defaults used, no crash |
 | 7.5 | Edit `settings.ini` by hand while Azy runs | Reload within ~1 s; log: `settings file changed on disk; reloading` |
-| 7.6 | Enter Safe Mode (set `safe_mode=1` + `failures=3` in the INI, or simulate failures) | Tray notification appears; Treatment shows `safe mode`; only the dark frame is applied; log contains `Safe Mode has been enabled` |
+| 7.6 | Enter Safe Mode (set `safe_mode=1` + `failures=3` in the INI, or simulate failures) | Tray notification appears; Treatment shows `safe mode`; nothing is drawn over Premiere (the mirror is released); log contains `Safe Mode has been enabled`; *Re-enable features* clears it and the mirror returns on the next change |
 | 7.7 | Settings → *Re-enable features* | Safe mode cleared, full treatment returns, log notes the change |
 | 7.8 | Restart Windows with Premiere open in the session | Azy starts with Windows (if enabled), detects Premiere, applies the skin, nothing blocks the shutdown |
 | 7.9 | Manually delete the HKCU Run entry while *Start with Windows* is checked | Tray still shows it checked until toggled; unchecking/rechecking recreates it correctly (documented behaviour, no crash) |

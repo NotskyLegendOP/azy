@@ -1,5 +1,11 @@
 # Deep bug report
 
+> **Historical (v1.3.0).** Written against the round-8 implementation, whose skin
+> layers were deleted in the round-9 rebuild (see
+> [`AZY_MIRROR_ARCHITECTURE.md`](AZY_MIRROR_ARCHITECTURE.md)). Findings about the
+> engine, detection, settings and lifecycle still apply; anything about the ring,
+> the sheet, DWM frame attributes or the GDI+ renderer does not.
+
 Every defect found by the deep second-pass review, with root cause, impact, fix
 and how the fix was checked. Ordered by severity, then by the order they were
 found.

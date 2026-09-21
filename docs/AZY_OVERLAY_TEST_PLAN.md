@@ -1,5 +1,12 @@
 # Azy Skin — duplicate window overlay: test plan
 
+> **Superseded in 2.0.0.** This document is the record of the round-8 (v1.3.0)
+> implementation: DWM frame styling, the four-strip ring, the translucent sheet and
+> the duplicate window built on top of them. All of that was deleted in the round-9
+> rebuild — the skin is now a live GPU mirror of the Premiere window, described in
+> [`AZY_MIRROR_ARCHITECTURE.md`](AZY_MIRROR_ARCHITECTURE.md). Kept because knowing
+> what was tried, and why it was replaced, is part of the project's record.
+
 **Everything in this file is written for a machine that can run Windows and
 Premiere Pro. Nothing in it has been executed.** The overlay's own status is
 **IMPLEMENTED — RUNTIME UNVERIFIED**; the checks that *have* been run are in

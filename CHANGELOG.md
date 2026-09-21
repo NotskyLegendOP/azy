@@ -4,6 +4,65 @@ All notable changes to Azy Skin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] — 2026-09-21
+
+The rebuild. The previous skin implementation was removed and replaced: Azy is now a
+**live visual mirroring, rendering and composition system for the real Premiere Pro
+window**, and nothing else. It captures the Premiere window on the GPU with Windows
+Graphics Capture, rebuilds those pixels as dark glass in a single shader pass, and
+presents the result in a click-through window placed exactly on Premiere's visible
+frame. Premiere keeps the mouse, the keyboard, the focus, the render path and every
+plugin; Azy only decides what its pixels look like.
+
+**Status: IMPLEMENTED - STATICALLY VERIFIED - RUNTIME UNVERIFIED.** No part of the
+mirror has been run against a real Premiere Pro yet. What *has* been checked is
+listed in `docs/AZY_MIRROR_ARCHITECTURE.md` §11: the shader/constant-buffer contract
+(including a mutation test), 747 native unit assertions, the Windows cross-compile
+and the executable's resources, plus a CPU design preview of the material.
+
+### Removed
+
+* The DWM frame treatment (`dwm_composer.*`) — Azy no longer sets any attribute on
+  Premiere's window, so there is nothing to restore.
+* The four-strip ring (`ring_layout.hpp`, `composition_surface.*`,
+  `core/overlay_style.*`) and the translucent sheet (`overlay_veil.*`).
+* The GDI+ renderer (`gdiplus_renderer.*`) and the version-aware compatibility
+  policy (`core/compat.hpp`, `core/compat.cpp`): with nothing applied to Premiere,
+  there is nothing to gate. The host probe now reports the OS name and build only.
+* The `tools/check-overlay.py` contract check, replaced by `tools/check-mirror.py`.
+
+### Added
+
+* **The mirror.** `MirrorRenderer` + `resources/shaders/mirror.hlsl`: one
+  full-screen pass that lifts Premiere's own pixels into a themed material — panel
+  surfaces, a mip-level diffusion for glass, a four-tap clarity term that keeps text
+  crisp, re-lit 1px control borders, rounded panel frames with an interior shadow, a
+  diagonal sheen, static grain and a localised accent glow.
+* **Media pass-through.** The Program and Source Monitor picture areas are copied
+  through exactly (no tint, no blur, no grading); the design preview measures a
+  per-channel change of 0.0000 inside them.
+* **Content protection.** Bright, vividly coloured pixels inside a panel —
+  thumbnails, previews, waveform overlays — escape most of the treatment. It is a
+  heuristic, and §10 of the architecture document says where it is wrong.
+* **A centralised theme engine over 13 tokens** (`theme_tokens.*`) with ten theme
+  keys: Blue/Purple, Cyan, Purple, Magenta, Red, Orange, Green, Pink, Custom and
+  Original (pass-through). No colour literal exists in the renderer; switching a
+  theme updates the constant buffer on the next frame and needs no restart.
+* **A paced present loop** (60 fps active / 15 idle, half in performance mode) with
+  no timer at all while the mirror is hidden, and one `MirrorParams` buffer reused
+  for every frame.
+* **A design preview** (`tools/preview_render.py` + `tools/dump_style.cpp`): the
+  shader re-implemented on the CPU so the look can be reviewed without Windows, and
+  the `azy_dump_style` host tool that feeds it.
+
+### Changed
+
+* `docs/AZY_MIRROR_ARCHITECTURE.md` is new and is the document the code points at.
+* `docs/ARCHITECTURE.md`, `docs/HOW_IT_WORKS.md` and the README describe the mirror.
+* Animations are **off by default** (`animations` in settings): the skin appears
+  fully formed, and the Ultra preset is where a fade belongs.
+* The progress board gained phase P11 for this rebuild.
+
 ## [1.3.0] — 2026-09-20
 
 The architecture changed. Instead of decorating Premiere from the outside, Azy now

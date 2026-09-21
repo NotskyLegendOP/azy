@@ -1,5 +1,20 @@
 # Azy Skin — Performance
 
+## Round 9 (2.0.0) budget
+
+The mirror is paced, not free-running: 60 fps while the window is being interacted
+with (30 in performance mode), 15 fps when idle (8 in performance mode), and no
+timer at all while the mirror is hidden — which is the state Azy sits in whenever
+Premiere is minimized, hidden or (optionally) inactive. Capture is event-driven:
+Windows produces a frame when the source produces one, so an idle Premiere produces
+no capture work, and the renderer does not re-present an unchanged frame.
+
+One GPU pass per presented frame, no readback, no staging copy and no per-frame
+allocation. The Windows-side cost measurements in the sections below were made
+against the v1.3.0 ring/sheet implementation and no longer describe this code; a
+measurement pass against the mirror is an open item (see
+[`AZY_MIRROR_ARCHITECTURE.md`](AZY_MIRROR_ARCHITECTURE.md) §7 and §11).
+
 Performance is treated as a correctness requirement, not a tuning exercise. The
 rule used throughout the codebase is:
 

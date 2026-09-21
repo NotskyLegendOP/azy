@@ -23,19 +23,6 @@ bool intersects(const LocalRect& a, const LocalRect& b) {
     return !a.empty() && !b.empty() && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 }
 
-// True when the two rectangles share an edge closely enough that drawing one of
-// them would paint over the other's border.
-bool touches(const LocalRect& a, const LocalRect& b) {
-    const float tolerance = 1.5f;
-    const bool horizontal = (a.right >= b.left - tolerance && a.right <= b.left + tolerance) ||
-                            (b.right >= a.left - tolerance && b.right <= a.left + tolerance);
-    const bool vertical = (a.bottom >= b.top - tolerance && a.bottom <= b.top + tolerance) ||
-                          (b.bottom >= a.top - tolerance && b.bottom <= a.top + tolerance);
-    const bool overlaps_y = a.top < b.bottom && b.top < a.bottom;
-    const bool overlaps_x = a.left < b.right && b.left < a.right;
-    return (horizontal && overlaps_y) || (vertical && overlaps_x);
-}
-
 }  // namespace
 
 UvRect map_overlay_to_capture(const Rect& overlay, const Rect& captured) {
@@ -90,17 +77,22 @@ LocalRect clip_to_overlay(const Rect& source, const Rect& overlay) {
 Rect overlay_rect(const Rect& visible_frame, const Rect& monitor, const Rect& work_area, bool maximized,
                   bool fullscreen) {
     if (visible_frame.empty()) return Rect{};
-    const Rect band = fullscreen ? monitor : (maximized ? work_area : visible_frame);
+    // Maximized: the work area, because that is what the user can see of it. Fullscreen
+    // and normal: the monitor, because a window whose frame hangs over the display
+    // edge is not a window anyone can see the outside of - drawing on the reported
+    // rectangle would put part of the skin off screen (or, for a maximized window
+    // before the work area is known, off the desktop entirely).
+    const Rect band = fullscreen ? monitor : (maximized ? work_area : monitor);
     if (band.empty()) return visible_frame;
     const Rect overlap = intersect_rect(visible_frame, band);
     // A window that is entirely outside its own monitor band (mid-move between
-    // displays) keeps its own rectangle: showing the duplicate where the window is
+    // displays) keeps its own rectangle: showing the mirror where the window is
     // beats showing it nowhere while the geometry settles.
     return overlap.empty() ? visible_frame : overlap;
 }
 
 std::vector<LocalRect> monitor_pass_through(const std::vector<PanelRect>& panels, const Rect& overlay,
-                                            const Rect& client_origin) {
+                                            const Rect& client_origin, unsigned dpi) {
     std::vector<LocalRect> out;
     if (overlay.empty()) return out;
 
@@ -113,11 +105,21 @@ std::vector<LocalRect> monitor_pass_through(const std::vector<PanelRect>& panels
                                                                                        panel.id !=
                                                                                            PanelId::ProgramMonitor;
             if (!wanted) continue;
+            // The picture area, not the whole panel: the monitor's own toolbar strip
+            // and its thin frame stay skinned, the picture does not (see the comment on
+            // kMonitorToolbarDip). Clamped so a tiny panel cannot produce a nonsense
+            // rectangle.
+            const int toolbar = dip_to_px(kMonitorToolbarDip, dpi);
+            const int padding = dip_to_px(kMonitorPaddingDip, dpi);
+            const int inset_top = std::min(toolbar, panel.rect.height() / 2);
+            const Rect picture = Rect::from_size(panel.rect.left + padding, panel.rect.top + inset_top,
+                                                 panel.rect.width() - padding * 2,
+                                                 panel.rect.height() - inset_top - padding);
+            if (picture.empty()) continue;
             // The panel map describes the client area; the overlay covers the
             // window frame. Adding the client origin puts both in screen space.
-            const Rect screen = Rect::from_size(panel.rect.left + client_origin.left,
-                                                panel.rect.top + client_origin.top, panel.rect.width(),
-                                                panel.rect.height());
+            const Rect screen = Rect::from_size(picture.left + client_origin.left, picture.top + client_origin.top,
+                                                picture.width(), picture.height());
             const LocalRect local = clip_to_overlay(screen, overlay);
             if (local.empty()) continue;
             // A sliver of a monitor is not worth a pass-through slot: leaving it
@@ -145,14 +147,33 @@ std::vector<LocalRect> panel_hairlines(const std::vector<PanelRect>& panels, con
         if (local.empty()) continue;
         // A hairline around a pass-through region would draw the skin *on* the
         // video edge, which is exactly what the pass-through exists to prevent.
+        // Only a real overlap blocks: a panel that merely *shares an edge* with a
+        // pass-through region is exactly the case where a border should be drawn (the
+        // boundary between the timeline and a monitor, for instance). The region is
+        // inset by a pixel first, so a frame centred on the shared edge can never paint
+        // over the picture itself.
         bool blocked = false;
         for (const LocalRect& region : exclude) {
-            if (intersects(local, region) || touches(local, region)) {
+            const LocalRect tightened{region.left + 1.0f, region.top + 1.0f, region.right - 1.0f,
+                                      region.bottom - 1.0f};
+            if (intersects(local, tightened)) {
                 blocked = true;
                 break;
             }
         }
         if (blocked) continue;
+        // The panel model can describe the same band twice (Premiere's application
+        // header and its toolbar are one strip). Drawing the same frame twice doubles
+        // its brightness and spends a slot, so identical rectangles are folded.
+        bool duplicate = false;
+        for (const LocalRect& existing : out) {
+            if (std::abs(existing.left - local.left) < 0.5f && std::abs(existing.top - local.top) < 0.5f &&
+                std::abs(existing.right - local.right) < 0.5f && std::abs(existing.bottom - local.bottom) < 0.5f) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (duplicate) continue;
         out.push_back(local);
         if (out.size() >= limit) break;
     }

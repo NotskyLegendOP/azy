@@ -2,7 +2,7 @@
 //
 // Requirement: every pixel Azy puts on screen must be invisible to the mouse and
 // keyboard. That is achieved structurally rather than by filtering events after
-// the fact — the composition surface is created with WS_EX_TRANSPARENT (hit
+// the fact — every Azy surface is created with WS_EX_TRANSPARENT (hit
 // testing passes through), WS_EX_NOACTIVATE (it can never be activated or take
 // focus) and WS_EX_TOOLWINDOW (no taskbar entry, no Alt+Tab entry).
 //

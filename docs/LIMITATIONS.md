@@ -1,5 +1,11 @@
 # Azy Skin — What it cannot do, and why that is deliberate
 
+> **Historical (v1.3.0).** Written against the round-8 implementation, whose skin
+> layers were deleted in the round-9 rebuild (see
+> [`AZY_MIRROR_ARCHITECTURE.md`](AZY_MIRROR_ARCHITECTURE.md)). Findings about the
+> engine, detection, settings and lifecycle still apply; anything about the ring,
+> the sheet, DWM frame attributes or the GDI+ renderer does not.
+
 The design brief contains a rule that shapes this entire project:
 
 > Do not assume that Windows provides a universal API for changing the internal

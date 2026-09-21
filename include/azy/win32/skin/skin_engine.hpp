@@ -1,166 +1,133 @@
-// Azy Skin — Win32 layer: SkinEngine.
+// Azy Skin — Win32 layer: SkinEngine (the composition manager).
 //
-// The engine owns both composition levels and decides when either of them has to
-// do anything. It keeps a "visual key" of what is currently on screen; when the
-// incoming request describes the same state, `apply()` returns false immediately
-// without a single DWM call or repaint. That is what makes a static Premiere
-// window cost nothing.
+// One place decides what the skin is doing right now. The rebuild replaced the old
+// per-layer bookkeeping (DWM attributes, a ring of layered strips, a veil, and a
+// pile of booleans describing them) with a single lifecycle state machine and one
+// visual layer: the mirror of the real Premiere window.
+//
+//   WAITING_FOR_PREMIERE -> PREMIERE_FOUND -> WINDOW_VALIDATED
+//      -> CAPTURE_INITIALIZING -> CAPTURE_ACTIVE -> MIRROR_ACTIVE
+//
+// Every failure moves to a recovery state (RETRY_WAIT, UNSUPPORTED) and never takes
+// the process down with it (spec §33, §34, §40).
 #pragma once
 
 #include <string>
 
-#include "azy/core/overlay_style.hpp"
+#include "azy/core/mirror_style.hpp"
 #include "azy/core/panel_map.hpp"
 #include "azy/win32/capture/window_capture.hpp"
-#include "azy/win32/gloss/gloss_overlay.hpp"
-#include "azy/win32/skin/composition_surface.hpp"
-#include "azy/win32/skin/debug_overlay.hpp"
-#include "azy/win32/skin/dwm_composer.hpp"
-#include "azy/win32/skin/overlay_veil.hpp"
+#include "azy/win32/mirror/mirror_renderer.hpp"
 #include "azy/win32/skin/skin_types.hpp"
 
 namespace azy {
 namespace win {
 
+// The lifecycle the spec asks for, in one enum. It is reported verbatim in the
+// diagnostics and drives the transitions; nothing else in the engine keeps state.
+enum class MirrorState {
+    WaitingForPremiere,  // nothing to mirror
+    PremiereFound,       // a process is there, no usable window yet
+    WindowValidated,     // a window that belongs to that process, validated
+    CaptureInitializing, // the capture is being created
+    CaptureActive,       // frames are arriving
+    MirrorActive,        // the skinned mirror is on screen
+    CaptureFailed,       // the last attempt failed; a retry is scheduled
+    Unsupported,         // this host cannot do it at all; do not keep trying
+    Suspended,           // the user or the window state asked the skin to stand down
+};
+
+const char* mirror_state_name(MirrorState state);
+
 class SkinEngine {
 public:
-    struct VisualKey {
-        HWND hwnd = nullptr;
-
-        // Level 1 (window frame)
-        bool dark_frame = false;
-        bool frame_colors = false;
-        bool rounded_frame = false;
-        bool frame_backdrop = false;
-        Rgba frame_caption;
-        Rgba frame_border;
-        Rgba frame_text;
-
-        // Level 2 (composition surface)
-        bool surface = false;
-        Rect surface_rect;
-        UINT dpi = 96;
-        int radius_px = 0;
-        int band_px = 0;
-        bool shadow = false;
-        bool glass = false;
-        Rgba bezel;
-        Rgba fill;
-        Rgba border;
-        Rgba highlight;
-        Rgba shadow_color;
-
-        // Whole-window overlay (veil).
-        bool overlay = false;
-        Rgba veil;
-
-        bool operator==(const VisualKey& other) const;
-    };
-
     ~SkinEngine() { shutdown(); }
 
     bool initialize(std::string* error);
     void shutdown();
 
-    // Applies (or removes) the skin for this request. Returns true when the
-    // on-screen result actually changed.
+    // Applies (or removes) the skin for this request. Returns true when the on-screen
+    // result actually changed.
     bool apply(const SkinRequest& request, SkinState& state_out);
 
-    // Full teardown: restores the frame and hides the surface.
+    // Full teardown: stops the capture, destroys the mirror and every GPU resource.
     void revert();
 
-    // Destroys the composition surface window and its bitmap. Called when
-    // Premiere exits, so Azy holds no GDI/DWM resources while nothing is being
-    // skinned.
-    void release_surface();
+    // Kept so callers do not have to change: the mirror owns the only surface now.
+    void release_surface() { revert(); }
+    bool surface_visible() const { return mirror_.visible(); }
 
-    bool frame_applied() const { return composer_.is_applied(); }
-    bool surface_visible() const { return surface_.visible(); }
-
-    // Forces the next apply() to rebuild everything (used after the user asks for a
-    // fresh look at the screen: nothing has changed, so nothing would be presented).
     void invalidate() { has_key_ = false; }
 
-    // Puts the surfaces back in front of Premiere when something raised it above
-    // them - activating Premiere is enough, because Azy's surfaces are ordinary
-    // windows and an active window goes to the top of the band. A z-order walk and,
-    // only when the order is actually wrong, one SetWindowPos per surface - so the
-    // usual call (window events, and the low-frequency settle timer) costs a few
-    // GetWindow calls and nothing else.
+    // Puts the mirror back in front of Premiere when something raised Premiere above
+    // it. A z-order walk, and only when the order is actually wrong one SetWindowPos.
     void reassert_stacking();
 
-    // Checks with the desktop itself that the skin is really reaching the screen:
-    // the overlay first (it covers everything, so it is the easiest to detect),
-    // then the ring. `detail` always describes what was measured, so the answer can
-    // be pasted into a bug report. Returns true when at least one layer is on
-    // screen; the detail says which.
+    // Checks with the desktop that the mirror is really reaching the screen. The
+    // mirror has no redirection bitmap (the compositor paints it), so a pixel read is
+    // not a trustworthy answer about it: what is reported is everything the process
+    // itself knows, and the text says plainly that it is structural.
     bool probe_on_screen(std::string* detail);
-    bool overlay_visible() const { return veil_.visible(); }
-    bool debug_visible() const { return debug_.visible(); }
-    // The panel map of the last apply: what Azy currently believes about the
-    // tracked window's layout (spec §41 shows it; the region work will draw with
-    // it). Empty until a window is attached.
-    const std::vector<PanelRect>& panel_map() const { return panels_; }
-    // Where the panel map's client area sits on screen (its origin), so a caller
-    // can translate panel rectangles into screen coordinates.
-    Rect client_origin() const { return client_origin_; }
 
-    // --- the duplicate window (the captured mirror of Premiere) ---------------
-    //
-    // The overlay is the fourth layer and the only one that draws Premiere's own
-    // content: it is a window placed directly above Premiere that shows a skinned
-    // copy of what the capture sees. While it is on screen the ring and the veil
-    // are switched off - they would be hidden behind it, and drawing them would be
-    // paying twice for the same pixels.
-    struct OverlayReport {
-        bool supported = true;   // false when this host cannot do it at all
-        bool created = false;    // the GPU resources exist
-        bool active = false;     // a skinned copy is on screen
-        bool capturing = false;  // the capture worker is running
-        std::string note;        // one line: what it is doing, or why it is not
-    };
-    const OverlayReport& overlay_report() const { return overlay_report_; }
-    const GlossOverlay::Stats& overlay_stats() const { return gloss_.stats(); }
-    CaptureStatus capture_status() const { return capture_.status(); }
-    HWND overlay_window() const { return gloss_.window(); }
     // Clears a previous failure so the next apply() tries again (the manual retry
-    // behind the "Check visibility" button in the settings window).
+    // behind "Check visibility").
     void retry_overlay();
-    unsigned char overlay_alpha() const { return veil_.alpha(); }
-    const RingReport& ring_report() const { return surface_.report(); }
-    HWND surface_window() const { return surface_.hwnd(); }
-    const VisualKey& last_key() const { return last_key_; }
-    bool has_key() const { return has_key_; }
-    unsigned long long surface_presents() const { return surface_.presents(); }
+
+    MirrorState state() const { return state_; }
+    // The lifecycle state's name, exactly as the log writes it (spec §38 reports it
+    // verbatim, so the debug screen and the log cannot disagree).
+    const char* state_name() const { return mirror_state_name(state_); }
+    const MirrorRenderer::Stats& mirror_stats() const { return mirror_.stats(); }
+    CaptureStatus capture_status() const { return capture_.status(); }
+    HWND mirror_window() const { return mirror_.window(); }
+    bool mirror_supported() const { return !unsupported_; }
+    const std::string& status_note() const { return note_; }
+
+    bool debug_visible() const { return false; }
+    const std::vector<PanelRect>& panel_map() const { return panels_; }
+    Rect client_origin() const { return client_origin_; }
+    const std::string& last_error() const { return last_error_; }
 
 private:
-    VisualKey build_key(const SkinRequest& request) const;
-    // Creates/places/updates the duplicate window and starts or stops the capture.
-    // `allowed` says whether the duplicate should be on screen at all; `want_capture`
-    // additionally says whether the capture may keep running. Both are false while
-    // the skin is suspended for a reason that has nothing on screen.
-    void sync_overlay(const SkinRequest& request, bool allowed, bool want_capture, SkinState& state_out);
-    void teardown_overlay();
+    struct VisualKey {
+        HWND hwnd = nullptr;
+        MirrorRect overlay;
+        UINT dpi = 96;
+        bool visible = false;
+        unsigned long long style_revision = 0;
+        std::string theme_id;
 
-    DwmComposer composer_;
-    GlossOverlay gloss_;
+        bool operator==(const VisualKey& other) const {
+            return hwnd == other.hwnd && overlay == other.overlay && dpi == other.dpi &&
+                   visible == other.visible && style_revision == other.style_revision &&
+                   theme_id == other.theme_id;
+        }
+    };
+
+    void sync_mirror(const SkinRequest& request, bool allowed, bool want_capture, SkinState& state_out);
+    void teardown_mirror(const char* reason);
+    void set_state(MirrorState state, const char* why);
+    bool start_capture(const SkinRequest& request, std::string* error);
+    static MirrorRect overlay_for(const SkinTarget& target);
+
+    MirrorRenderer mirror_;
     WindowCapture capture_;
-    OverlayReport overlay_report_;
-    OverlayStyle overlay_style_;
-    bool overlay_created_ = false;
-    bool overlay_disabled_ = false;   // this host cannot: stop asking
-    bool duplicate_active_ = false;   // the ring and the veil stand down while true
-    int overlay_failure_burst_ = 0;
-    unsigned long long overlay_next_attempt_ms_ = 0;
-    unsigned long long overlay_attempts_ = 0;
-    HWND overlay_attached_ = nullptr;      // the window the capture was started on
-    unsigned long overlay_attached_pid_ = 0;
-    CompositionSurface surface_;
-    OverlayVeil veil_;
-    DebugOverlay debug_;
+    MirrorStyle style_;
+
+    MirrorState state_ = MirrorState::WaitingForPremiere;
+    bool unsupported_ = false;
+    bool capture_attempted_ = false;
+    bool frames_seen_ = false;
+    unsigned failure_burst_ = 0;
+    unsigned long long next_attempt_ms_ = 0;
+    unsigned long long attached_pid_ = 0;
+    HWND attached_hwnd_ = nullptr;
+    std::string note_ = "waiting for Premiere Pro";
+    std::string last_error_;
+
     std::vector<PanelRect> panels_;
     Rect client_origin_;
-    HWND target_ = nullptr;  // the Premiere window the surfaces were placed against
+    HWND target_ = nullptr;
     VisualKey last_key_;
     bool has_key_ = false;
 };

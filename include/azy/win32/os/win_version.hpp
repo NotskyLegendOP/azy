@@ -1,20 +1,21 @@
-// Azy Skin — Win32 layer: host capability probe.
+// Azy Skin — Win32 layer: the host probe.
 //
-// Resolves what THIS Windows build can actually do (DWM composition, dark
-// title bars, rounded frames, system backdrop) so the compatibility policy in
-// azy/core/compat.hpp can decide what is safe to apply to Premiere.
+// What is left of the old capability probing: the OS name and build number, used
+// for the log and the diagnostics line. The mirror does not need to be *told* what
+// the host can do - it asks Windows by trying: the capture session either starts or
+// returns a reason, and the window is either composited or it is not. Probing DWM
+// attributes would be measuring a path Azy no longer takes.
 #pragma once
 
 #include <string>
 
-#include "azy/core/compat.hpp"
 #include "azy/win32/os/win_compat.hpp"
 
 namespace azy {
 namespace win {
 
 struct HostInfo {
-    HostCapabilities capabilities;
+    int windows_build = 0;     // e.g. 19045 (Win10 22H2), 22631 (Win11 23H2)
     std::string os_name;       // "Windows 11 23H2", "Windows 10 22H2 (build 19045)"
     std::string host_summary;  // one-line description for the log
 };

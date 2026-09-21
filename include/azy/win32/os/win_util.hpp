@@ -53,7 +53,7 @@ private:
 
 // The handle to pass as `hWndInsertAfter` to SetWindowPos so that a new window
 // ends up *directly above* `below` in the z-order - and above nothing else. Used
-// by both composition layers so the ring and the overlay always stack the same way.
+// by every window Azy places relative to Premiere, so they all stack the same way.
 HWND z_order_anchor(HWND below);
 
 // True when `window` really sits above `other` in the z-order (walks down from
@@ -68,14 +68,14 @@ bool window_is_above(HWND window, HWND other);
 // values, so a handle that belonged to Premiere a moment ago can name an unrelated
 // window now. IsWindow() cannot tell the difference - it answers "yes" for the
 // recycled handle - which is why every path that *acts* on a stored handle
-// (styling a frame, drawing a ring around it) checks this first. A pid of 0 means
+// (drawing a surface over it) checks this first. A pid of 0 means
 // "owner unknown", and then only liveness can be checked.
 bool window_belongs_to(HWND hwnd, unsigned long pid);
 
 // Reads pixels straight out of the composited desktop (physical screen pixels).
 // Used only by the on-demand visibility check - never in a loop, and never to
 // capture anything but a handful of points - so that Azy can tell "the user can
-// see the ring" from "every API returned success", which are not the same thing:
+// see the mirror" from "every API returned success", which are not the same thing:
 // a layered window composed behind an opaque, maximized window looks exactly like
 // one that is not there. Returns false when the screen cannot be read at all
 // (locked session, no access to that monitor).
@@ -96,7 +96,7 @@ constexpr int kPixelChangeThreshold = 4;
 //
 // This matters because Windows does not let a window of a lower integrity
 // process be placed above a window of a higher one (UIPI). If Premiere runs
-// elevated and Azy does not, Azy's ring is composed *behind* Premiere - every
+// elevated and Azy does not, Azy's mirror is composed *behind* Premiere - every
 // call succeeds and nothing is ever visible.
 int process_integrity_level(unsigned long pid);
 int own_integrity_level();

@@ -13,7 +13,7 @@ on:
       version:
         description: "Version to release (must match AppVersion in packaging/AzySkin.iss)"
         required: true
-        default: "1.3.0"
+        default: "2.0.0"
       prerelease:
         description: "Mark the release as a pre-release"
         type: boolean
@@ -129,24 +129,24 @@ jobs:
           written into an Adobe directory, no animation, and no screenshot loop (frames
           never touch the CPU, the disk or a file).
 
-          On a machine where the GPU path cannot run, the earlier thin ring (1px hairline,
-          1px raised bezel, soft inner falloff) plus a translucent sheet carry the skin
-          instead - that path is unchanged from 1.2.x.
+          There is no fallback skin in 2.0.0. If the mirror cannot run - an unsupported
+          Windows build, a driver that refuses the device, an elevated Premiere - Azy draws
+          **nothing** and says why. It never paints a placeholder rectangle over Premiere.
 
-          **Status of this build:** the static layers have been shipped and reviewed since
-          1.0. The duplicate window is new in 1.3.0 and has not been run against a real
-          Premiere on a real machine yet - it is "implemented, runtime unverified". If it
-          does not appear, nothing breaks and the static layers are already doing their
-          job. ``docs/AZY_OVERLAY_ARCHITECTURE.md`` and ``docs/AZY_OVERLAY_TEST_PLAN.md`` in
-          the source archive explain the design, every open risk, and how to close them in
-          one session.
+          **Status of this build: implemented and statically verified, runtime unverified.**
+          The contract between the shader and the C++ that feeds it is machine-checked, 747
+          unit assertions pass, the Windows build cross-compiles and its resources are
+          inspected - and none of that has been run against a real Premiere on a real
+          machine yet. ``docs/AZY_MIRROR_ARCHITECTURE.md`` in the source archive describes
+          the design, the pixel classification and - in section 10 - exactly where the model
+          can be fooled. The checklist that closes the rest is ``docs/TESTING.md``.
 
-          **If you cannot see it:** press *Settings > Check visibility*. It reports each
-          layer separately - the duplicate window (structurally: it has no bitmap to read
-          back), the translucent sheet and the ring - and the log carries the same
-          information. It also offers *Restart as Administrator*, which is the one
-          situation Azy cannot work around: Windows never lets a normal process draw above
-          an elevated one.
+          **If you cannot see it:** press *Settings > Check visibility*. It reports what is
+          actually on screen and the lifecycle state it is in (``MIRROR_ACTIVE``,
+          ``WAITING_FOR_PREMIERE``, ``CAPTURE_FAILED``, ``UNSUPPORTED``, ``SUSPENDED``),
+          and the log carries the same information. It also offers *Restart as
+          Administrator*, which is the one situation Azy cannot work around: Windows never
+          lets a normal process draw above an elevated one.
 
           Requires 64-bit Windows 10 1809 or newer (the duplicate window needs the
           free-threaded capture frame pool from that build, and d3dcompiler_47.dll, which

@@ -1,5 +1,20 @@
 # Known limitations
 
+## Round 9 (2.0.0) limitations, in one place
+
+* **The skin classifies pixels; it does not know what a control is.** Panel
+  rectangles are a model, the surface/text split is a luminance threshold, and
+  content protection is a saturation heuristic. [`AZY_MIRROR_ARCHITECTURE.md`](AZY_MIRROR_ARCHITECTURE.md)
+  §10 lists the eight ways this can look wrong.
+* **Undocked panels are not covered.** A panel floating outside the main window is a
+  real window of Premiere's and stays untouched.
+* **No per-widget styling.** Menus, dialogs and tooltips that Windows or Premiere
+  draw outside the main window are outside the mirror.
+* **An elevated Premiere cannot be covered** by a non-elevated Azy (UIPI). Azy says
+  so instead of failing silently.
+* **Not verified against a real Premiere.** Every runtime claim in this repository
+  is UNVERIFIED until the first Windows session with Premiere Pro.
+
 Everything Azy Skin cannot do, does not do yet, or has not been proven to do.
 Nothing in this file is a bug report — the bugs found by the audit are in
 [`AZYSKIN_AUDIT.md`](AZYSKIN_AUDIT.md). This is the honest boundary of the

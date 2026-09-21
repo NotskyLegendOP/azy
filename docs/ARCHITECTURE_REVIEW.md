@@ -1,5 +1,11 @@
 # Architecture review
 
+> **Historical (v1.3.0).** Written against the round-8 implementation, whose skin
+> layers were deleted in the round-9 rebuild (see
+> [`AZY_MIRROR_ARCHITECTURE.md`](AZY_MIRROR_ARCHITECTURE.md)). Findings about the
+> engine, detection, settings and lifecycle still apply; anything about the ring,
+> the sheet, DWM frame attributes or the GDI+ renderer does not.
+
 A second-pass engineering review of Azy Skin: is this the right architecture, and
 if not, what should replace it?
 

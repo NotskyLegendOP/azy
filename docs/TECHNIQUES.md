@@ -1,5 +1,12 @@
 # Azy Skin — Techniques, and why they are safe
 
+> **Superseded in 2.0.0.** This document is the record of the round-8 (v1.3.0)
+> implementation: DWM frame styling, the four-strip ring, the translucent sheet and
+> the duplicate window built on top of them. All of that was deleted in the round-9
+> rebuild — the skin is now a live GPU mirror of the Premiere window, described in
+> [`AZY_MIRROR_ARCHITECTURE.md`](AZY_MIRROR_ARCHITECTURE.md). Kept because knowing
+> what was tried, and why it was replaced, is part of the project's record.
+
 The project rule is that any technique which touches another process or its
 rendering must pass six tests before it is used:
 
@@ -20,7 +27,7 @@ the end, with the reason.
 
 ---
 
-## Level 1 — Native window composition (used)
+## Level 1 — Native window composition (v1.3.0 — no longer used)
 
 ### 1.1 `DwmSetWindowAttribute(DWMWA_USE_IMMERSIVE_DARK_MODE)` — dark title bar
 
@@ -95,12 +102,12 @@ Azy uses the extended frame bounds for everything the user can see, and
 
 ---
 
-## Level 2 — Targeted lightweight visual surfaces (used)
+## Level 2 — Targeted lightweight visual surfaces (v1.3.0 — no longer used)
 
 ### 2.1 One click-through layered window (`UpdateLayeredWindow`)
 
-Azy's visual element is a single ring around the window edge, built from four
-1px-stroke layers:
+Before 2.0.0, Azy's visual element was a single ring around the window edge, built
+from four 1px-stroke layers:
 
 | Layer | Purpose |
 |---|---|
@@ -110,7 +117,7 @@ Azy's visual element is a single ring around the window edge, built from four
 | subtle translucent wash behind the first few pixels | the "glass" hint: a fade to nothing within 2–6px, never a solid strip |
 | 1px top inner highlight | light falling on glass, not a glow |
 
-![The ring, drawn from the renderer's own maths](images/ring-preview.png)
+![v1.3.0: the ring, drawn from the renderer's own maths](images/ring-preview.png)
 
 The ring is split into four thin strips (top, bottom, left, right) and each strip
 is painted into its own premultiplied 32-bit ARGB bitmap with GDI+ and presented
@@ -237,7 +244,7 @@ window also covers the video monitors, which is why the strength is a slider
 
 ---
 
-## Level 3 — The duplicate window (used, v1.3.0)
+## Level 3 — The duplicate window (v1.3.0 — replaced by the mirror in §4)
 
 The skin the user actually sees since v1.3.0 is a *copy* of Premiere's window,
 drawn back skinned, in a window of Azy's own. It is the only technique in the
@@ -292,6 +299,58 @@ with every Windows 10 1809+ machine. If it is missing or the compile fails, the
 duplicate is not created and the static layers are used: the failure mode is a
 simpler skin, never a broken window.
 
+## Level 4 — The mirror (2.0.0, used)
+
+This is the only thing Azy draws now, and the three techniques below are one
+pipeline: Windows Graphics Capture produces a GPU texture of Premiere's window,
+D3D11 draws it through a shader, and DirectComposition presents the result in a
+click-through window that tracks Premiere's visible frame. The full description is
+[`AZY_MIRROR_ARCHITECTURE.md`](AZY_MIRROR_ARCHITECTURE.md); what belongs here is why
+each piece is safe.
+
+### 4.1 `Windows.Graphics.Capture` — one window, on the GPU
+
+| Test | Result |
+|---|---|
+| Supported | Windows 10 1809+ (the free-threaded frame pool needs 1809); documented WinRT API, no undocumented interfaces |
+| Stable | Every step returns an `HRESULT`; a refusal or a lost device is reported, backed off and retried a bounded number of times, and the mirror is simply not shown |
+| Reversible | The capture item is bound to one HWND; the session and the frame pool are closed when the window goes away or Azy stops, and the GPU device is released with them |
+| Premiere-compatible | Read-only capture: nothing is posted to Premiere, no input is routed to it, no frame is altered |
+| Input-safe | Capture is passive; cursor capture is explicitly switched off, so the pointer is drawn once by the compositor rather than twice |
+| Necessary | The brief asks for a *live* mirror; this is the only supported way to get the real window's pixels without screenshots, `BitBlt` or a disk round trip |
+
+Frames never leave the GPU: no staging copy, no readback, no PNG, nothing written to
+disk. The capture source is validated against the owning process id before the first
+frame and after every re-target, so a recycled window handle cannot make Azy mirror a
+different application — and Azy's own window is excluded, so the mirror can never
+capture itself (the recursion the brief calls out as critical).
+
+### 4.2 `D3D11` + `DirectComposition` — one surface, premultiplied
+
+The same composition technique as §3.2, with the same guarantees: a flip-model swap
+chain, premultiplied alpha, and a layered window carrying `WS_EX_LAYERED |
+WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW`, inserted directly above
+Premiere in the z-order and never as a topmost window. The window is bounded by
+Premiere's own visible frame, so it can never cover another application or the
+taskbar. A layered window composed behind an opaque, maximized window is
+indistinguishable from one that is not there, which is why the visibility check
+reads a few screen pixels on demand instead of trusting the API return values.
+
+### 4.3 The shader — one pass, no CPU work
+
+The material (surfaces, borders, the panel frames, the accent glow, content
+protection) is computed in a single pixel shader over the captured frame. The C++
+side uploads one constant buffer per presented frame and nothing else — no per-frame
+allocation, no CPU image processing, no readback — and the buffer's layout is
+asserted in both languages, because a silent disagreement there would show up only
+as a wrong-looking skin. `tools/check-mirror.py` compares the HLSL block, the C++
+struct and the `static_assert` member by member (and is itself mutation-tested).
+
+Pacing is event-driven: Windows produces a frame when the source produces one, and
+the presenter is a paced timer that is removed entirely while the mirror is hidden —
+which is the state Azy sits in whenever Premiere is minimized, hidden or (by
+setting) not the foreground window.
+
 ## Techniques considered and rejected
 
 | Technique | Why it is not used |
@@ -313,20 +372,23 @@ simpler skin, never a broken window.
 | **Electron / Chromium / QML / any UI framework** | 50–200 MB of RAM and a rendering process to draw one ring. Rejected in favour of ~550 KB of Win32 + one cached bitmap. |
 | **Installing a service or driver** | Not needed for a per-user visual utility; a service would raise the privilege surface, complicate uninstall and (if elevated) interfere with observing a normal user's processes. |
 
-## The fallback ladder (how Azy degrades)
+## The fallback ladder (2.0.0: there is nothing to fall back to, by design)
 
 ```
-duplicate window (3.1)  ── unavailable? ─► ring + sheet (Level 2), the round-1..7 skin
-DWM frame colours       ── rejected? ───► dark frame only (Level 1.1)
-dark frame              ── rejected? ───► DWM layout attributes only (rounded corners)
-any DWM attribute       ── rejected? ───► Azy's own surface only (Level 2.1)
-surface creation fails  ── recurring? ──► Safe Mode: dark frame only, surfaces disabled
-3 failures in 5 minutes ────────────────► Safe Mode, persisted across restarts
+capture unsupported / refused ──────────► no skin; state UNSUPPORTED (manual retry)
+capture fails 1-3 times      ──────────► no skin; CAPTURE_FAILED, 4 s backoff between attempts
+Premiere gone / handle stale ──────────► teardown, GPU released, WAITING_FOR_PREMIERE
+minimised / hidden / inactive ─────────► mirror hidden, timer removed, no capture work
 ```
 
-The top row is the important one: the duplicate window is the *first* thing Azy
-tries and the *first* thing it gives up, because the static layers below it are a
-complete skin on their own.
+The round-8 ladder degraded towards a simpler skin: the duplicate window fell back
+to the ring and the ring fell back to DWM attributes. 2.0.0 has nothing to degrade
+*to* — every one of the deleted layers was a static approximation, and showing a
+placeholder over Premiere is exactly what the brief forbids. So Azy draws the mirror
+or it draws nothing, and every failure is a named state in the settings window and
+the log rather than a fake working skin.
 
-At every step the visual result gets simpler, never more invasive. There is no
-path in the code that escalates to a riskier technique in response to failure.
+What does not change is the direction. At every step the behaviour gets *less*
+involved, never more invasive: there is no path in the code that escalates to a
+riskier technique in response to failure, and none that keeps retrying at full rate
+after a refusal.

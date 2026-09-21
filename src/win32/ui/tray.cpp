@@ -22,9 +22,9 @@ enum MenuId : unsigned short {
     kMenuFirst = 2000,
     kStatus = 2000,
     kToggleSkin = 2001,
-    kThemeGlass = 2011,
-    kThemeDark = 2012,
-    kThemeOriginal = 2013,
+    // The theme menu is generated from the theme engine (spec §27), so these ids are
+    // a base rather than one constant per theme.
+    kThemeBase = 2010,
     kSettings = 2020,
     kStartWithWindows = 2030,
     kSuspend = 2031,
@@ -151,13 +151,15 @@ void TrayIcon::show_menu(const POINT* anchor) {
     AppendMenuW(menu, MF_STRING, kToggleSkin, L"Skin &Enabled");
     CheckMenuItem(menu, kToggleSkin, MF_BYCOMMAND | (state_.skin_enabled ? MF_CHECKED : MF_UNCHECKED));
 
-    AppendMenuW(theme_menu, MF_STRING, kThemeGlass, L"Azy Dark Glass");
-    AppendMenuW(theme_menu, MF_STRING, kThemeDark, L"Azy Dark");
-    AppendMenuW(theme_menu, MF_STRING, kThemeOriginal, L"Original");
-    const unsigned short theme_id = state_.theme == ThemeId::AzyDark      ? kThemeDark
-                                    : state_.theme == ThemeId::Original   ? kThemeOriginal
-                                                                          : kThemeGlass;
-    CheckMenuRadioItem(theme_menu, kThemeGlass, kThemeOriginal, theme_id, MF_BYCOMMAND);
+    // One entry per theme the engine defines, in the engine's order: adding a theme
+    // is a table entry, not a change here (spec §27, §28).
+    for (int i = 0; i < azy::kThemeCount; ++i) {
+        AppendMenuW(theme_menu, MF_STRING, static_cast<UINT>(kThemeBase + i),
+                    to_wide(azy::theme_key_name(azy::theme_key_at(i))).c_str());
+    }
+    const int current = azy::theme_key_index(state_.theme);
+    CheckMenuRadioItem(theme_menu, static_cast<UINT>(kThemeBase), static_cast<UINT>(kThemeBase + azy::kThemeCount - 1),
+                       static_cast<UINT>(kThemeBase + current), MF_BYCOMMAND);
     AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(theme_menu), L"&Theme");
 
     AppendMenuW(menu, MF_STRING, kSettings, L"&Settings...");
@@ -209,15 +211,15 @@ void TrayIcon::handle_menu_command(UINT command) {
         case kToggleSkin:
             if (callbacks_.on_toggle_skin) callbacks_.on_toggle_skin(!state_.skin_enabled);
             return;
-        case kThemeGlass:
-            if (callbacks_.on_theme) callbacks_.on_theme(ThemeId::AzyDarkGlass);
-            return;
-        case kThemeDark:
-            if (callbacks_.on_theme) callbacks_.on_theme(ThemeId::AzyDark);
-            return;
-        case kThemeOriginal:
-            if (callbacks_.on_theme) callbacks_.on_theme(ThemeId::Original);
-            return;
+        default:
+            break;
+    }
+    if (command >= static_cast<UINT>(kThemeBase) &&
+        command < static_cast<UINT>(kThemeBase) + static_cast<UINT>(azy::kThemeCount)) {
+        if (callbacks_.on_theme) callbacks_.on_theme(azy::theme_key_at(static_cast<int>(command) - kThemeBase));
+        return;
+    }
+    switch (command) {
         case kSettings:
             if (callbacks_.on_settings) callbacks_.on_settings();
             return;

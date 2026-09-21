@@ -12,13 +12,12 @@
 #include <string>
 
 #include "azy/core/capture_math.hpp"
-#include "azy/core/compat.hpp"
-#include "azy/core/overlay_style.hpp"
+#include "azy/core/mirror_style.hpp"
+#include "azy/core/theme_tokens.hpp"
 #include "azy/core/failure_tracker.hpp"
 #include "azy/core/geometry.hpp"
 #include "azy/core/panel_map.hpp"
 #include "azy/core/product.hpp"
-#include "azy/core/ring_layout.hpp"
 #include "azy/core/settings.hpp"
 #include "azy/core/strings.hpp"
 #include "azy/core/theme.hpp"
@@ -191,216 +190,118 @@ void test_product() {
 }
 
 // ---------------------------------------------------------------------------
-HostCapabilities win11_host() {
-    HostCapabilities h;
-    h.windows_build = 22631;
-    h.dwm_composition = true;
-    h.dark_titlebar = true;
-    h.frame_colors = true;
-    h.rounded_corners = true;
-    h.system_backdrop = true;
-    return h;
-}
-
-HostCapabilities win10_1809_host() {
-    HostCapabilities h;
-    h.windows_build = 17763;
-    h.dwm_composition = true;
-    h.dark_titlebar = true;
-    h.frame_colors = false;
-    h.rounded_corners = false;
-    h.system_backdrop = false;
-    return h;
-}
-
-void test_compat() {
-    group("version-aware compatibility policy");
-
-    const ProductInfo p2025 = make_product_info("Adobe Premiere Pro.exe", "p.exe", true, Version{25, 6, 0, 58});
-    const ProductInfo p2024 = make_product_info("Adobe Premiere Pro.exe", "p.exe", true, Version{24, 6, 1, 2});
-    const ProductInfo p2026 = make_product_info("Adobe Premiere Pro.exe", "p.exe", true, Version{26, 0, 0, 91});
-    const ProductInfo future = make_product_info("Adobe Premiere Pro.exe", "p.exe", true, Version{27, 1, 0, 0});
-    const ProductInfo unknown = make_product_info("Adobe Premiere Pro.exe", "p.exe", false, Version{});
-    const ProductInfo legacy = make_product_info("Adobe Premiere Pro.exe", "p.exe", true, Version{20, 0, 0, 0});
-    const ProductInfo beta = make_product_info("Adobe Premiere Pro Beta.exe", "p.exe", true, Version{26, 0, 0, 5});
-
-    FeatureSet full = resolve_features(p2025, win11_host(), false, false, false);
-    CHECK(full.dark_frame);
-    CHECK(full.window_overlay);  // the whole-window overlay is on by default
-    CHECK(full.frame_colors);
-    CHECK(full.rounded_frame);
-    CHECK(full.edge_surface);
-    CHECK(full.edge_surface_rounded);
-    CHECK(!full.frame_backdrop);  // experimental: never on by default
-    CHECK_STR(feature_summary(full), "full");
-
-    // Without layered windows there is no overlay and no ring: both are Azy's own
-    // windows, and neither can be drawn without them.
-    HostCapabilities no_layered = win11_host();
-    no_layered.layered_windows = false;
-    const FeatureSet plain = resolve_features(p2025, no_layered, false, false, false);
-    CHECK(!plain.window_overlay);
-    CHECK(!plain.edge_surface);
-
-    FeatureSet v24 = resolve_features(p2024, win11_host(), false, false, false);
-    CHECK(v24.frame_colors);
-    CHECK(v24.edge_surface);
-
-    FeatureSet v26 = resolve_features(p2026, win11_host(), false, false, false);
-    CHECK(v26.frame_colors);
-    CHECK(v26.rounded_frame);
-
-    FeatureSet fut = resolve_features(future, win11_host(), false, false, false);
-    CHECK(fut.dark_frame);
-    CHECK(!fut.frame_colors);   // newer than known -> conservative
-    CHECK(!fut.rounded_frame);
-    CHECK(fut.edge_surface);    // still safe: our own hairline is inert
-
-    FeatureSet unk = resolve_features(unknown, win11_host(), false, false, false);
-    CHECK(!unk.frame_colors);
-    CHECK(!unk.rounded_frame);
-    CHECK(!unk.frame_backdrop);
-    CHECK(unk.edge_surface);
-    CHECK(!unk.reasons.empty());
-
-    FeatureSet old_os = resolve_features(p2025, win10_1809_host(), false, false, false);
-    CHECK(old_os.dark_frame);
-    CHECK(!old_os.frame_colors);
-    CHECK(!old_os.rounded_frame);
-
-    FeatureSet perf = resolve_features(p2025, win11_host(), false, /*performance_mode=*/true, false);
-    CHECK(!perf.frame_backdrop);
-    CHECK(!perf.edge_surface_rounded);
-
-    FeatureSet safe = resolve_features(p2025, win11_host(), /*explicit_safe_mode=*/true, false, false);
-    CHECK(safe.dark_frame);
-    CHECK(!safe.frame_colors);
-    CHECK(!safe.edge_surface);
-    CHECK(!safe.rounded_frame);
-    CHECK_STR(feature_summary(safe), "safe mode");
-
-    FeatureSet experimental = resolve_features(p2026, win11_host(), false, false, /*experimental_opt_in=*/true);
-    CHECK(experimental.frame_backdrop);
-
-    FeatureSet legacy_fs = resolve_features(legacy, win11_host(), false, false, false);
-    CHECK(!legacy_fs.frame_colors);
-    CHECK(!legacy_fs.rounded_frame);
-    CHECK(legacy_fs.edge_surface);
-
-    FeatureSet beta_fs = resolve_features(beta, win11_host(), false, false, false);
-    CHECK(beta_fs.frame_colors);
-    CHECK(!beta_fs.rounded_frame);
-
-    // Experimental opt-in must not resurrect features on an unknown build.
-    FeatureSet unknown_exp = resolve_features(unknown, win11_host(), false, false, true);
-    CHECK(!unknown_exp.frame_backdrop);
-    CHECK(!unknown_exp.frame_colors);
-}
-
-// ---------------------------------------------------------------------------
 void test_theme() {
-    group("theme palette");
+    group("theme engine");
 
-    Appearance appearance;  // defaults
+    // Every theme must be a complete, coherent token set: this is the promise that
+    // makes the renderer colour-free (spec §26, §27).
+    const Appearance defaults;
+    int distinct_accents = 0;
+    for (int i = 0; i < kThemeCount; ++i) {
+        const ThemeKey key = theme_key_at(i);
+        const ThemeTokens t = theme_tokens(key, defaults.custom_accent);
 
-    const ThemePalette glass = make_palette(ThemeId::AzyDarkGlass, appearance, true);
-    CHECK(glass.visible);
-    CHECK(glass.draw_surface);
-    CHECK(glass.apply_frame_colors);
-    CHECK(glass.surface_fill.a < 255);   // subtle translucency
-    CHECK(glass.surface_fill.a > 180);   // ...but panels stay readable
-    CHECK(glass.surface_border.a < 40);  // hairline, not an outline
-    CHECK(glass.surface_border.a > 0);
-    CHECK(glass.surface_shadow.a <= 90);
-    CHECK_INT(glass.corner_radius_dip, 8);
+        CHECK(t.visible == (key != ThemeKey::Original));
+        if (key == ThemeKey::Original) continue;
 
-    // The raised bezel is what makes the frame edge readable on a dark UI: it must
-    // be visible, but still an edge treatment rather than a border line, and
-    // lighter than the surface it sits on (a darker edge would vanish against
-    // Premiere's own near-black panels).
-    CHECK(glass.surface_bezel.a > glass.surface_border.a);
-    CHECK(glass.surface_bezel.a < 90);
-    CHECK(glass.surface_bezel.r > glass.surface_fill.r);
-    CHECK(glass.surface_bezel.r <= glass.surface_border.r);
+        // Dark base, with depth between the surfaces - never a flat black wall.
+        const float floor_luma = 0.2126f * t.background.r + 0.7152f * t.background.g + 0.0722f * t.background.b;
+        CHECK(floor_luma > 0.001f);   // not pure black
+        CHECK(floor_luma < 0.20f);    // and still dark
+        CHECK(t.surface.r >= t.background.r);
+        CHECK(t.surface.g >= t.background.g);
+        CHECK(t.surface.b >= t.background.b);
+        CHECK(t.surface_secondary.r + 1e-6f >= t.background.r);
 
-    // The whole-window overlay: its alpha is the strength, a zero alpha means
-    // "off", and it stays a tint rather than an opaque sheet even at 100%.
-    CHECK(glass.surface_veil.a > 0);
-    CHECK(glass.surface_veil.a < 200);
-    Appearance overlay_max = appearance;
-    overlay_max.overlay_intensity = 1.0;
-    const ThemePalette veil_max = make_palette(ThemeId::AzyDarkGlass, overlay_max, true);
-    CHECK(veil_max.surface_veil.a > glass.surface_veil.a);
-    CHECK(veil_max.surface_veil.a <= 200);
-    Appearance no_overlay = appearance;
-    no_overlay.overlay = false;
-    CHECK_INT(make_palette(ThemeId::AzyDarkGlass, no_overlay, true).surface_veil.a, 0);
-    Appearance zero_overlay = appearance;
-    zero_overlay.overlay_intensity = 0.0;
-    CHECK_INT(make_palette(ThemeId::AzyDarkGlass, zero_overlay, true).surface_veil.a, 0);
+        // Readability: primary text is brighter than secondary, which is brighter
+        // than disabled (spec §25).
+        const float primary = t.text_primary.g;
+        CHECK(t.text_primary.r > 0.6f && t.text_primary.g > 0.6f && t.text_primary.b > 0.6f);
+        CHECK(primary > t.text_secondary.g);
+        CHECK(t.text_secondary.g > t.text_disabled.g);
 
-    // More glass -> more transparency, monotonically.
-    Appearance more = appearance;
-    more.glass_intensity = 1.0;
-    const ThemePalette glass_more = make_palette(ThemeId::AzyDarkGlass, more, true);
-    CHECK(glass_more.surface_fill.a < glass.surface_fill.a);
+        // The accent is a light colour, and the secondary hue is a different one:
+        // that is what gives the lighting two sources instead of a flat tint.
+        const float accent_luma = 0.2126f * t.accent.r + 0.7152f * t.accent.g + 0.0722f * t.accent.b;
+        CHECK(accent_luma > 0.25f);
+        const float hue_distance = std::abs(t.accent.r - t.accent_secondary.r) + std::abs(t.accent.b - t.accent_secondary.b);
+        CHECK(hue_distance > 0.02f);
 
-    Appearance no_glass = appearance;
-    no_glass.glass_intensity = 0.0;
-    const ThemePalette glass_none = make_palette(ThemeId::AzyDarkGlass, no_glass, true);
-    CHECK(glass_none.surface_fill.a >= 235);   // "no glass" is still not fully opaque...
-    CHECK(glass_none.surface_fill.a <= 245);   // ...but close to it (subtle by design)
+        // Glow is localised by construction: it is a strength, never a full-screen
+        // bloom, so the number has a ceiling.
+        CHECK(t.glow_strength <= 0.6f);
+        CHECK(t.reflection_strength > 0.0f && t.reflection_strength <= 0.6f);
+        CHECK(t.base_darkening > 0.05f);
+        if (i > 0) {
+            const ThemeTokens previous = theme_tokens(theme_key_at(i - 1), defaults.custom_accent);
+            if (key != ThemeKey::Original && theme_key_at(i - 1) != ThemeKey::Original) {
+                const float delta = std::abs(t.accent.r - previous.accent.r) + std::abs(t.accent.g - previous.accent.g) +
+                                    std::abs(t.accent.b - previous.accent.b);
+                if (delta > 0.05f) ++distinct_accents;
+            }
+        }
+    }
+    CHECK(distinct_accents >= 7);  // the nine variants really are different colours
 
-    // Stronger borders raise alpha but stay subtle.
-    Appearance strong = appearance;
-    strong.border_intensity = 1.0;
-    const ThemePalette strong_border = make_palette(ThemeId::AzyDarkGlass, strong, true);
-    CHECK(strong_border.surface_border.a > glass.surface_border.a);
-    CHECK(strong_border.surface_border.a <= 40);
-    CHECK(strong_border.surface_bezel.a > glass.surface_bezel.a);
-    CHECK(strong_border.surface_bezel.a <= 45);  // 0.05 + 0.12 -> 17% white, never a bright outline
+    // Custom: the user's colour is the accent, and the rest is derived from it, so a
+    // custom colour produces a coherent theme rather than a pasted-on hue (spec §27).
+    const Rgba custom{255, 120, 40, 255};
+    const ThemeTokens custom_tokens = theme_tokens(ThemeKey::Custom, custom);
+    CHECK_NEAR(custom_tokens.accent.r, 1.0f, 1e-6);
+    CHECK(custom_tokens.accent.r > custom_tokens.accent.b);   // the orange the user typed
+    // ...and the second hue is a different colour, derived from it rather than a
+    // second palette entry: a warm accent gets a warm neighbour.
+    const float hue_delta = std::abs(custom_tokens.accent_secondary.r - custom_tokens.accent.r) +
+                            std::abs(custom_tokens.accent_secondary.g - custom_tokens.accent.g) +
+                            std::abs(custom_tokens.accent_secondary.b - custom_tokens.accent.b);
+    CHECK(hue_delta > 0.05f);
+    CHECK(custom_tokens.accent_secondary.r > custom_tokens.accent_secondary.b);
 
-    // Opaque theme: no translucency at all.
-    const ThemePalette dark = make_palette(ThemeId::AzyDark, appearance, true);
-    CHECK_INT(dark.surface_fill.a, 255);
-    CHECK(dark.surface_bezel.a > 0);  // the bezel is the visual anchor, in both themes
-
-    // Original: Azy does nothing.
-    const ThemePalette original = make_palette(ThemeId::Original, appearance, true);
+    // Original is Azy doing nothing: no tokens, and the renderer is told so.
+    const ThemeTokens original = theme_tokens(ThemeKey::Original, custom);
     CHECK(!original.visible);
-    CHECK(!original.draw_surface);
-    CHECK(!original.apply_frame_colors);
-    CHECK_INT(original.surface_fill.a, 0);
-    CHECK_INT(original.surface_veil.a, 0);  // "Original" leaves the window alone too
-    CHECK_INT(original.surface_bezel.a, 0);
-    CHECK_INT(original.surface_border.a, 0);
-    CHECK_INT(original.corner_radius_dip, 0);
 
-    // Frame colours are only requested when the host supports them.
-    const ThemePalette no_support = make_palette(ThemeId::AzyDarkGlass, appearance, false);
-    CHECK(!no_support.apply_frame_colors);
-    CHECK(no_support.draw_surface);
+    // Ids round-trip, are stable, and the legacy names still load (an existing
+    // settings.ini must keep working).
+    for (int i = 0; i < kThemeCount; ++i) {
+        const ThemeKey key = theme_key_at(i);
+        CHECK_INT(theme_key_index(key), i);
+        CHECK(theme_key_name(key) != nullptr);
+        ThemeKey parsed = ThemeKey::Original;
+        CHECK(theme_key_from_id(theme_key_id(key), parsed));
+        CHECK(parsed == key);
+    }
+    ThemeKey legacy = ThemeKey::Original;
+    CHECK(theme_key_from_id("azydarkglass", legacy));
+    CHECK(legacy == ThemeKey::BluePurple);
+    CHECK(theme_key_from_id("azy_dark", legacy));
+    CHECK(legacy == ThemeKey::Cyan);
+    CHECK(!theme_key_from_id("neon", legacy));
 
-    // Darkness must stay in a comfortable range, never pure black.
-    Appearance darkest = appearance;
-    darkest.darkness = 1.0;
-    const ThemePalette darkest_palette = make_palette(ThemeId::AzyDarkGlass, darkest, true);
-    const Rgba fill = darkest_palette.surface_fill;
-    CHECK(fill.r > 8);
-    CHECK(fill.g > 8);
-    CHECK(fill.b > 8);
+    // Colour parsing: the three spellings the settings file may contain.
+    Rgba colour{};
+    CHECK(parse_hex_color("#7C8CFF", colour));
+    CHECK_INT(colour.r, 0x7C);
+    CHECK_INT(colour.b, 0xFF);
+    CHECK(parse_hex_color("7c8cff", colour));
+    CHECK_INT(colour.g, 0x8C);
+    CHECK(parse_hex_color("255, 120, 40", colour));
+    CHECK_INT(colour.r, 255);
+    CHECK_INT(colour.g, 120);
+    CHECK_INT(colour.b, 40);
+    CHECK(!parse_hex_color("not-a-colour", colour));
+    CHECK(!parse_hex_color("#12345", colour));
+    CHECK_STR(format_hex_color(Rgba{124, 140, 255, 255}), "#7C8CFF");
 
-    // Radius clamping is enforced by the palette too.
-    Appearance silly = appearance;
-    silly.corner_radius_dip = 400;
-    CHECK_INT(make_palette(ThemeId::AzyDarkGlass, silly, true).corner_radius_dip, 16);
-
-    CHECK_STR(theme_name(ThemeId::AzyDarkGlass), "Azy Dark Glass");
-    ThemeId parsed = ThemeId::Original;
-    CHECK(theme_from_key("azy_dark", parsed));
-    CHECK(parsed == ThemeId::AzyDark);
-    CHECK(!theme_from_key("neon", parsed));
+    // Hue rotation is what derives a custom theme's second hue; the value scale is
+    // applied at the same time.
+    const Rgb rotated = rotate_hue(Rgb{1.0f, 0.2f, 0.1f}, 120.0f, 1.0f);
+    CHECK(rotated.g > rotated.r);
+    const Rgb dimmed = rotate_hue(Rgb{1.0f, 0.2f, 0.1f}, 0.0f, 0.5f);
+    CHECK(dimmed.r < 1.0f);
 }
+
+
 
 // ---------------------------------------------------------------------------
 void test_dpi_geometry() {
@@ -440,116 +341,33 @@ void test_dpi_geometry() {
 void test_design_tokens() {
     group("design tokens");
 
-    // Accent keys round-trip and are tolerant of the spellings a hand-edited file
-    // might contain.
-    AccentId accent = AccentId::Neutral;
-    CHECK(accent_from_key("blue_violet", accent));
-    CHECK(accent == AccentId::BlueViolet);
-    CHECK(accent_from_key(" Violet ", accent));
-    CHECK(accent == AccentId::Violet);
-    CHECK(accent_from_key("PURPLE", accent));
-    CHECK(accent == AccentId::Violet);
-    CHECK(accent_from_key("", accent));
-    CHECK(accent == AccentId::Neutral);   // an empty value means "no hue"
-    CHECK(!accent_from_key("neon-green", accent));
-    CHECK_STR(accent_key(AccentId::Neutral), "neutral");
+    // The 8-bit helpers other portable code shares.
+    CHECK_INT(mix_color(Rgba{0, 0, 0, 255}, Rgba{255, 255, 255, 255}, 0.5).r, 128);
+    CHECK_INT(with_alpha(Rgba{10, 20, 30, 255}, 0.5).a, 128);
+    CHECK_INT(with_alpha(Rgba{10, 20, 30, 255}, 2.0).a, 255);   // clamped
+    CHECK_INT(with_alpha(Rgba{10, 20, 30, 255}, -1.0).a, 0);
 
-    // Every accent is distinguishable, and the neutral one is white.
-    const Rgba blue = accent_color(AccentId::Blue);
-    const Rgba violet = accent_color(AccentId::Violet);
-    const Rgba blue_violet = accent_color(AccentId::BlueViolet);
-    CHECK(blue.r != violet.r);
-    CHECK(blue_violet.b > blue_violet.r);          // a cool hue, as the reference's lighting is
-    const Rgba neutral = accent_color(AccentId::Neutral);
-    CHECK_INT(neutral.r, 255);
-    CHECK_INT(neutral.b, 255);
-
-    Appearance appearance;  // defaults: blue-violet at 35%
-    const ThemePalette lit = make_palette(ThemeId::AzyDarkGlass, appearance, true);
-    CHECK_NEAR(lit.accent_strength, 0.35, 1e-9);
-    CHECK(lit.accent.b > lit.accent.r);            // blue-violet, not warm
-    CHECK(lit.surface_bezel.b > lit.surface_bezel.r);  // ...and it reaches the hairline
-
-    // Neutral reproduces the pre-accent hairline exactly: same weights, white hue.
-    Appearance plain = appearance;
-    plain.accent = AccentId::Neutral;
-    const ThemePalette neutral_palette = make_palette(ThemeId::AzyDarkGlass, plain, true);
-    CHECK_NEAR(neutral_palette.accent_strength, 0.0, 1e-9);
-    Appearance legacy = appearance;
-    legacy.accent = AccentId::Neutral;
-    legacy.accent_intensity = 0.0;
-    const ThemePalette legacy_palette = make_palette(ThemeId::AzyDarkGlass, legacy, true);
-    CHECK_INT(neutral_palette.surface_bezel.r, legacy_palette.surface_bezel.r);
-    CHECK_INT(neutral_palette.surface_border.a, legacy_palette.surface_border.a);
-    CHECK_INT(neutral_palette.surface_veil.b, legacy_palette.surface_veil.b);
-
-    // The overlay carries a hint of the accent, never enough to look like a filter:
-    // a few points more blue than the charcoal's own deliberate blue tint, and far
-    // below anything that would read as "a blue window".
-    const int lit_tint = lit.surface_veil.b - lit.surface_veil.r;
-    const int neutral_tint = neutral_palette.surface_veil.b - neutral_palette.surface_veil.r;
-    CHECK(neutral_tint > 0);       // the base charcoal is blue-tinted by design
-    CHECK(neutral_tint <= 4);
-    CHECK(lit_tint >= neutral_tint);
-    CHECK(lit_tint <= 12);
-
-    // Glow raises the edge alpha only when it is asked for; zero by default.
-    CHECK_NEAR(lit.glow, 0.0, 1e-9);
-    Appearance glowing = appearance;
-    glowing.glow_intensity = 1.0;
-    const ThemePalette glow = make_palette(ThemeId::AzyDarkGlass, glowing, true);
-    CHECK(glow.surface_bezel.a > lit.surface_bezel.a);
-    CHECK(glow.surface_border.a > lit.surface_border.a);
-
-    // Presets: the four are distinct, Balanced is the default look, and the two
-    // cheap ones switch Performance mode on.
-    const PresetValues ultra = preset_values(PresetId::Ultra);
-    const PresetValues balanced = preset_values(PresetId::Balanced);
-    const PresetValues perf = preset_values(PresetId::Performance);
-    const PresetValues low = preset_values(PresetId::LowPower);
-    CHECK(ultra.glass_intensity > balanced.glass_intensity);
-    CHECK(ultra.overlay_intensity > balanced.overlay_intensity);
-    CHECK(ultra.glow_intensity > 0.0);            // Ultra is the only preset with glow
-    CHECK(balanced.glow_intensity == 0.0);
-    CHECK(balanced.animations == false);          // static by default, always
-    CHECK(!balanced.performance_mode);
-    CHECK(perf.performance_mode);
-    CHECK(low.performance_mode);
-    CHECK(perf.corner_radius_dip == 0);           // no rounding when it is about cost
-    CHECK(low.overlay_intensity < balanced.overlay_intensity);
-    Appearance defaults;                          // the shipped defaults ARE Balanced
-    CHECK_NEAR(balanced.glass_intensity, defaults.glass_intensity, 1e-9);
-    CHECK_NEAR(balanced.border_intensity, defaults.border_intensity, 1e-9);
-    CHECK_NEAR(balanced.darkness, defaults.darkness, 1e-9);
-    CHECK(balanced.corner_radius_dip == defaults.corner_radius_dip);
-    CHECK_NEAR(balanced.overlay_intensity, defaults.overlay_intensity, 1e-9);
-    CHECK(balanced.overlay == defaults.overlay);
-
-    // Applying a preset lands exactly on that preset, and moving one slider after
-    // that reports Custom instead of claiming the preset is still in effect.
-    Settings settings;
-    CHECK(settings.current_preset() == PresetId::Balanced);  // defaults are Balanced
-    settings.apply_preset(PresetId::Ultra);
-    CHECK(settings.current_preset() == PresetId::Ultra);
-    CHECK(settings.appearance.animations);
-    CHECK(settings.appearance.theme == ThemeId::AzyDarkGlass);  // a preset is not a theme
-    settings.apply_preset(PresetId::LowPower);
-    CHECK(settings.current_preset() == PresetId::LowPower);
-    CHECK(settings.performance_mode);
-    settings.appearance.border_intensity = 0.99;
-    CHECK(settings.current_preset() == PresetId::Custom);
-    // ...and Custom applied by hand means "go back to the baseline".
-    settings.apply_preset(PresetId::Custom);
-    CHECK(settings.current_preset() == PresetId::Balanced);
-
-    // Preset keys round-trip through the INI.
-    PresetId preset = PresetId::Custom;
-    CHECK(preset_from_key("low_power", preset));
-    CHECK(preset == PresetId::LowPower);
-    CHECK(preset_from_key("default", preset));
-    CHECK(preset == PresetId::Balanced);
-    CHECK(!preset_from_key("ultra-max", preset));
+    // The tokens the mirror consumes must keep their meaning across themes: a dark
+    // background, surfaces above it, a border above the surface (a 1px edge has to
+    // be brighter than what it surrounds on a dark UI), and an accent-lit border for
+    // the live surface.
+    const Appearance defaults;
+    for (int i = 0; i < kThemeCount - 1; ++i) {
+        const ThemeTokens t = theme_tokens(theme_key_at(i), defaults.custom_accent);
+        const float surface_luma = t.surface.g;
+        CHECK(t.border.g > surface_luma);
+        CHECK(t.border_active.g >= t.border.g);
+        CHECK(t.hover.g >= t.surface.g);
+        // A selected item reads as a lit, accent-led fill: brighter than the surface
+        // under it, and never the same colour twice.
+        CHECK(t.selection.r + t.selection.g + t.selection.b > t.surface.r + t.surface.g + t.surface.b);
+        CHECK(t.surface_opacity < 1.0f);   // glass, never an opaque wall
+        CHECK(t.surface_opacity > 0.15f);  // and never so thin the panels vanish
+        CHECK(t.contrast_lift > 0.0f);     // readability recovery is always on
+    }
 }
+
+
 
 // The panel map is the whole basis of the region work, so its two promises are
 // tested directly: the panels cover the client area without overlapping, and they
@@ -685,15 +503,13 @@ void test_settings() {
     s.enabled = false;
     s.start_with_windows = true;
     s.apply_automatically = false;
-    s.appearance.theme = ThemeId::AzyDark;
+    s.appearance.theme = ThemeKey::Green;
     s.appearance.glass_intensity = 0.2;
     s.appearance.border_intensity = 0.75;
     s.appearance.corner_radius_dip = 10;
     s.appearance.shadow_intensity = 0.1;
     s.appearance.darkness = 0.8;
-    s.appearance.overlay = false;
-    s.appearance.overlay_intensity = 0.15;
-    s.appearance.accent = AccentId::Violet;
+    s.appearance.custom_accent = Rgba{255, 120, 40, 255};
     s.appearance.accent_intensity = 0.6;
     s.appearance.glow_intensity = 0.25;
     s.appearance.animations = true;
@@ -705,7 +521,7 @@ void test_settings() {
     s.safe_mode_reason = "repeated failures with 26.0.0.91";
     s.failure_count = 2;
     s.last_premiere_version = "26.0.0.91";
-    s.set_feature_disabled(feature_key::kFrameBackdrop, true);
+    s.set_feature_disabled(feature_key::kGlass, true);
 
     const std::string ini = s.to_ini();
     std::vector<std::string> warnings;
@@ -721,9 +537,9 @@ void test_settings() {
     CHECK_INT(loaded.appearance.corner_radius_dip, 10);
     CHECK_NEAR(loaded.appearance.shadow_intensity, 0.1, 1e-6);
     CHECK_NEAR(loaded.appearance.darkness, 0.8, 1e-6);
-    CHECK(!loaded.appearance.overlay);
-    CHECK_NEAR(loaded.appearance.overlay_intensity, 0.15, 1e-6);
-    CHECK(loaded.appearance.accent == AccentId::Violet);
+    CHECK_INT(loaded.appearance.custom_accent.r, 255);
+    CHECK_INT(loaded.appearance.custom_accent.g, 120);
+    CHECK_INT(loaded.appearance.custom_accent.b, 40);
     CHECK_NEAR(loaded.appearance.accent_intensity, 0.6, 1e-6);
     CHECK_NEAR(loaded.appearance.glow_intensity, 0.25, 1e-6);
     CHECK(loaded.appearance.animations);
@@ -735,8 +551,8 @@ void test_settings() {
     CHECK_STR(loaded.safe_mode_reason, s.safe_mode_reason);
     CHECK_INT(loaded.failure_count, 2);
     CHECK_STR(loaded.last_premiere_version, "26.0.0.91");
-    CHECK(loaded.feature_disabled(feature_key::kFrameBackdrop));
-    CHECK(!loaded.feature_disabled(feature_key::kEdgeSurface));
+    CHECK(loaded.feature_disabled(feature_key::kGlass));
+    CHECK(!loaded.feature_disabled(feature_key::kGlow));
 
     // Second round trip is stable (no drift).
     CHECK_STR(loaded.to_ini(), ini);
@@ -745,7 +561,7 @@ void test_settings() {
     const Settings defaults = Settings::from_ini("");
     CHECK(defaults.enabled);
     CHECK(defaults.start_with_windows == false);
-    CHECK(defaults.appearance.theme == ThemeId::AzyDarkGlass);
+    CHECK(defaults.appearance.theme == ThemeKey::BluePurple);
     CHECK_NEAR(defaults.appearance.corner_radius_dip, 8.0, 1e-9);
 
     const Settings junk = Settings::from_ini(
@@ -761,17 +577,18 @@ void test_settings() {
         "future_key=kept\n",
         &warnings);
     CHECK_NEAR(junk.appearance.glass_intensity, 1.0, 1e-6);   // clamped
-    CHECK_NEAR(junk.appearance.overlay_intensity, 1.0, 1e-6); // clamped
-    CHECK(junk.appearance.overlay);                          // default kept (on)
     CHECK_INT(junk.appearance.corner_radius_dip, 0);          // clamped
     CHECK_NEAR(junk.appearance.darkness, 0.5, 1e-6);          // default kept
-    CHECK(junk.appearance.theme == ThemeId::AzyDarkGlass);    // warning + default
+    CHECK(junk.appearance.theme == ThemeKey::BluePurple);     // warning + default
+    // The pre-rebuild overlay keys are no longer settings; they are preserved
+    // verbatim like any other unknown key, so nothing is lost from an old file.
+    CHECK(junk.extra.count("overlay_intensity") == 1);
     CHECK(!warnings.empty());
     CHECK(junk.enabled);                                     // "maybe" ignored
     CHECK(junk.extra.count("future_key") == 1);
     CHECK_STR(junk.extra.count("future_key") ? junk.extra.at("future_key") : std::string(), "kept");             // unknown keys survive
     CHECK(junk.to_ini().find("future_key=kept") != std::string::npos);
-    CHECK(junk.to_ini().find("theme=azy_dark_glass") != std::string::npos);
+    CHECK(junk.to_ini().find("theme=blue_purple") != std::string::npos);
 
     // Feature list editing.
     Settings f;
@@ -894,128 +711,6 @@ void test_layout_safety() {
 }
 
 
-// --- the four-strip ring -------------------------------------------------- //
-void test_ring_layout() {
-    std::printf("[ring layout]\n");
-
-    // A window far larger than the treated band: the strips must tile the border
-    // exactly, with no overlap (a doubled corner) and no gap (a visible notch).
-    const Rect frame = Rect::from_size(1000, 700, 1920, 1080);  // 1000 wide? no: size form
-    const Rect window = Rect::from_size(100, 200, 1200, 800);
-    (void)frame;
-
-    const int thickness = ring_strip_thickness(10, 8);  // band + 2 strokes, radius fits inside
-    CHECK_INT(thickness, 12);
-
-    const RingStrips strips = ring_strip_rects(window, thickness);
-    CHECK(strips.valid);
-    CHECK_INT(strips.top.left, window.left);
-    CHECK_INT(strips.top.right, window.right);
-    CHECK_INT(strips.top.top, window.top);
-    CHECK_INT(strips.top.height(), thickness);
-    CHECK_INT(strips.bottom.bottom, window.bottom);
-    CHECK_INT(strips.bottom.top, window.bottom - thickness);
-    CHECK_INT(strips.bottom.left, window.left);
-    CHECK_INT(strips.bottom.right, window.right);
-
-    // The vertical strips sit strictly between the horizontal ones - that is what
-    // keeps the corner arcs owned by exactly one strip.
-    CHECK_INT(strips.left.top, window.top + thickness);
-    CHECK_INT(strips.left.bottom, window.bottom - thickness);
-    CHECK_INT(strips.left.left, window.left);
-    CHECK_INT(strips.left.width(), thickness);
-    CHECK_INT(strips.right.right, window.right);
-    CHECK_INT(strips.right.left, window.right - thickness);
-    CHECK_INT(strips.right.top, strips.left.top);
-    CHECK_INT(strips.right.bottom, strips.left.bottom);
-
-    // No strip may overlap another.
-    const Rect all[4] = {strips.top, strips.bottom, strips.left, strips.right};
-    for (int i = 0; i < 4; ++i) {
-        for (int j = i + 1; j < 4; ++j) {
-            const bool disjoint = all[i].right <= all[j].left || all[j].right <= all[i].left ||
-                                  all[i].bottom <= all[j].top || all[j].bottom <= all[i].top;
-            CHECK(disjoint);
-        }
-    }
-
-    // A large corner radius needs a thicker strip, otherwise the arc is clipped.
-    CHECK_INT(ring_strip_thickness(10, 16), 17);
-    CHECK_INT(ring_strip_thickness(3, 0), 5);
-
-    // A big window keeps the requested band: this is the normal case, and the ring
-    // must never grow just because the window did.
-    const RingGeometry big = ring_geometry(Rect::from_size(0, 0, 3840, 2160), 20, 16);
-    CHECK(big.valid);
-    CHECK_INT(big.thickness_px, 22);  // band + the two 1px strokes
-    CHECK_INT(big.radius_px, 16);
-
-    // A small window gets a proportionally small ring instead of four strips that
-    // meet in the middle (a twelfth of the shorter side, at least 3px).
-    const RingGeometry small = ring_geometry(Rect::from_size(0, 0, 40, 30), 100, 0);
-    CHECK(small.valid);
-    CHECK_INT(small.thickness_px, 3);  // 30 / 12 -> below the 3px floor
-    // The proportional cap only ever *reduces* the thickness: a 300px floating
-    // panel keeps the requested band (13 + 2), which is well under 300 / 12.
-    const RingGeometry floater = ring_geometry(Rect::from_size(0, 0, 300, 300), 13, 8);
-    CHECK_INT(floater.thickness_px, 15);
-
-    // The radius is capped so the arc always fits in the strip painting it.
-    const RingGeometry clipped = ring_geometry(Rect::from_size(0, 0, 120, 120), 10, 16);
-    CHECK(clipped.valid);
-    CHECK_INT(clipped.thickness_px, 10);   // 120 / 12
-    CHECK_INT(clipped.radius_px, 9);       // thickness - 1
-
-    // Too small for a ring at all: the window would have no content left.
-    CHECK(!ring_geometry(Rect::from_size(0, 0, 10, 10), 40, 0).valid);
-    CHECK(!ring_geometry(Rect::from_size(0, 0, 0, 0), 10, 0).valid);
-
-    // --- which rectangle the ring is drawn on -----------------------------
-    // A maximized window reports bounds that hang over the monitor edges (the
-    // invisible resize border). Drawing there would put the whole ring off
-    // screen, so a maximized window is drawn on the work area instead.
-    const Rect monitor = Rect::from_size(0, 0, 1920, 1080);
-    const Rect work_area = Rect::from_size(0, 0, 1920, 1040);
-    const Rect overhanging = Rect::from_size(-8, -8, 1936, 1048);
-    CHECK(ring_frame(overhanging, monitor, work_area, true, false) == work_area);
-
-    // A windowed Premiere inside the display keeps exactly the bounds Windows
-    // reports for it.
-    const Rect floating = Rect::from_size(300, 200, 900, 600);
-    CHECK(ring_frame(floating, monitor, work_area, false, false) == floating);
-
-    // A window whose frame reaches past the display - a WINDOWED window dragged
-    // half off the edge, or a borderless "fullscreen" window Windows does not
-    // report as maximized - is drawn on the part that is on screen.
-    const Rect half_off = Rect::from_size(-400, 100, 900, 600);
-    CHECK(ring_frame(half_off, monitor, work_area, false, false) == Rect::from_size(0, 100, 500, 600));
-    const Rect borderless = Rect::from_size(-8, -8, 1936, 1096);  // == screen + borders, not IsZoomed
-    CHECK(ring_frame(borderless, monitor, work_area, false, false) == monitor);
-
-    // A fullscreen window covers the whole monitor, taskbar included.
-    CHECK(ring_frame(monitor, monitor, work_area, false, true) == monitor);
-
-    // Degenerate monitor data must never move the ring on its own.
-    CHECK(ring_frame(floating, monitor, Rect{}, true, false) == floating);
-    CHECK(ring_frame(floating, Rect{}, work_area, false, true) == floating);
-
-    // ... and the geometry computed for a real maximized 1080p window is usable:
-    // the band still fits, and the ring covers the visible edge.
-    const Rect maximized_frame = ring_frame(overhanging, monitor, work_area, true, false);
-    const RingGeometry maximized_ring = ring_geometry(maximized_frame, 10, 0);
-    CHECK(maximized_ring.valid);
-    CHECK_INT(maximized_ring.thickness_px, 12);
-    const RingStrips maximized_strips = ring_strip_rects(maximized_frame, maximized_ring.thickness_px);
-    CHECK(maximized_strips.valid);
-    CHECK_INT(maximized_strips.top.top, 0);
-    CHECK_INT(maximized_strips.top.height(), 12);
-    CHECK_INT(maximized_strips.bottom.bottom, 1040);
-}
-
-
-// ---------------------------------------------------------------------------
-// The duplicate window: the arithmetic that decides what part of the capture is
-// shown where, and the style the shader is given.
 // ---------------------------------------------------------------------------
 void test_capture_math() {
     group("overlay capture math");
@@ -1093,14 +788,22 @@ void test_capture_math() {
     panels.push_back(sliver);
 
     const std::vector<LocalRect> pass =
-        monitor_pass_through(panels, overlay, Rect::from_size(0, 32, 1920, 1040));
+        monitor_pass_through(panels, overlay, Rect::from_size(0, 32, 1920, 1040), 96);
     CHECK_INT(static_cast<long long>(pass.size()), 2);
-    // Screen y is the client origin plus the panel's own offset: the model is
-    // built for a client area that starts at (0,0).
-    CHECK_NEAR(pass[0].left, 700.0, 0.001);   // Program Monitor, always first
-    CHECK_NEAR(pass[0].top, 232.0, 0.001);
-    CHECK_NEAR(pass[1].left, 100.0, 0.001);   // Source Monitor
-    CHECK_NEAR(pass[1].top, 232.0, 0.001);
+    // Screen y is the client origin plus the panel's own offset: the model is built
+    // for a client area that starts at (0,0). What is passed through is the *picture*
+    // area: the monitor's own toolbar strip above it stays skinned, so the region is
+    // inset by the toolbar height and a small frame.
+    const int toolbar = dip_to_px(kMonitorToolbarDip, 96);
+    const int padding = dip_to_px(kMonitorPaddingDip, 96);
+    CHECK_NEAR(pass[0].left, 700.0 + padding, 0.001);   // Program Monitor, always first
+    CHECK_NEAR(pass[0].top, 232.0 + toolbar, 0.001);
+    CHECK_NEAR(pass[1].left, 100.0 + padding, 0.001);   // Source Monitor
+    CHECK_NEAR(pass[1].top, 232.0 + toolbar, 0.001);
+    // The picture area stays inside its panel, so a panel frame can be drawn around
+    // it without touching the video.
+    CHECK(pass[0].right < 700.0f + 500.0f);
+    CHECK(pass[0].right > 700.0f);
     // The timeline is not a picture region and an unusable panel is ignored.
     for (const LocalRect& r : pass) CHECK(r.top < 600.0f);
 
@@ -1146,75 +849,122 @@ void test_capture_math() {
     CHECK(overlay_rect(Rect{}, monitor, work, true, false).empty());
 }
 
-void test_overlay_style() {
-    group("duplicate window style");
+void test_mirror_style() {
+    group("mirror style");
 
     const Appearance defaults;
-    const ThemePalette glass = make_palette(ThemeId::AzyDarkGlass, defaults, true);
-    const OverlayStyle style = make_overlay_style(glass, defaults, false, true);
+    const ThemeTokens tokens = theme_tokens(ThemeKey::BluePurple, defaults.custom_accent);
+    const MirrorStyle style = make_mirror_style(tokens, defaults, false);
 
     CHECK(style.visible);
-    CHECK(!overlay_style_is_passthrough(style));
-    // The default look has to be *visible*: this is the whole point of the
-    // duplicate window (the complaint that started this round was a skin nobody
-    // could see). Darkness and veil both have to be meaningful at the defaults.
-    CHECK(style.darkening > 0.30f);
-    CHECK(style.veil > 0.10f);
-    CHECK(style.gloss > 0.0f);
-    CHECK(style.grain > 0.0f);
-    CHECK(style.bezel > 0.4f);
-    CHECK(style.radius_dip >= 6.0f && style.radius_dip <= 16.0f);
-    CHECK(style.accent_strength > 0.0f);
-    // The charcoal is the theme's, not a second colour invented here.
-    CHECK_NEAR(style.charcoal[0], static_cast<float>(glass.surface_veil.r) / 255.0f, 0.001);
+    CHECK(!mirror_style_is_passthrough(style));
+    // The defaults have to be *visible*: a skin nobody can see is the complaint this
+    // rebuild exists to answer. Dark, with every part of the material present.
+    CHECK(style.base_dark > 0.30f);
+    CHECK(style.base_dark < 0.90f);
+    CHECK(style.surface > 0.10f);
+    CHECK(style.highlight > 0.10f);
+    CHECK(style.clarity > 0.0f);        // readability is not optional
+    CHECK(style.glass > 0.0f);          // the glass diffusion
+    CHECK(style.glow > 0.0f);           // localised light, not a screen-wide bloom
+    CHECK(style.glow <= 0.80f);
+    CHECK_NEAR(style.radius, 8.0f, 1e-6);   // the default corner, at 100% DPI
 
-    // Sliders move it: darkness is the same slider the rest of the skin uses.
+    // The theme's colours are the shader's colours, unchanged: no second palette is
+    // invented between the theme engine and the GPU (spec §26).
+    CHECK_NEAR(style.background[0], tokens.background.r, 0.001);
+    CHECK_NEAR(style.surface_colour[2], tokens.surface.b, 0.001);
+    CHECK_NEAR(style.accent[1], tokens.accent.g, 0.001);
+    CHECK_NEAR(style.glow_colour[2], tokens.glow.b, 0.001);
+
+    // Sliders move it, monotonically and in the right direction.
     Appearance dark = defaults;
     dark.darkness = 1.0;
-    const OverlayStyle darker = make_overlay_style(make_palette(ThemeId::AzyDarkGlass, dark, true), dark, false, true);
-    CHECK(darker.darkening > style.darkening);
+    CHECK(make_mirror_style(tokens, dark, false).base_dark > style.base_dark);
     Appearance light = defaults;
     light.darkness = 0.0;
-    const OverlayStyle lighter = make_overlay_style(make_palette(ThemeId::AzyDarkGlass, light, true), light, false, true);
-    CHECK(lighter.darkening < style.darkening);
+    CHECK(make_mirror_style(tokens, light, false).base_dark < style.base_dark);
 
-    // Performance mode keeps the structure (bezel, hairlines) and drops the GPU
-    // extras, which is what "static colours only" means here.
-    const OverlayStyle perf = make_overlay_style(glass, defaults, true, true);
+    Appearance more_glass = defaults;
+    more_glass.glass_intensity = 1.0;
+    CHECK(make_mirror_style(tokens, more_glass, false).glass > style.glass);
+
+    Appearance strong_border = defaults;
+    strong_border.border_intensity = 1.0;
+    const MirrorStyle lit = make_mirror_style(tokens, strong_border, false);
+    CHECK(lit.highlight > style.highlight);
+    CHECK(lit.highlight <= 0.95f);   // still a hairline, never an outline
+
+    Appearance deep_shadow = defaults;
+    deep_shadow.shadow_intensity = 1.0;
+    CHECK(make_mirror_style(tokens, deep_shadow, false).shadow >= style.shadow);
+
+    Appearance glowing = defaults;
+    glowing.glow_intensity = 1.0;
+    CHECK(make_mirror_style(tokens, glowing, false).glow > style.glow);
+
+    // Every optional strength at zero: the dark base and the clarity recovery stay
+    // (the brief asks for readability), the extras really do disappear.
+    Appearance bare;
+    bare.glass_intensity = 0.0;
+    bare.glow_intensity = 0.0;
+    bare.shadow_intensity = 0.0;
+    bare.border_intensity = 0.0;
+    bare.accent_intensity = 0.0;
+    const MirrorStyle minimal = make_mirror_style(tokens, bare, false);
+    CHECK(!mirror_style_is_passthrough(minimal));
+    CHECK(minimal.glass < style.glass);
+    CHECK_NEAR(minimal.shadow, 0.06, 0.0001);
+    CHECK_NEAR(minimal.glow, 0.0, 0.0001);
+    CHECK_NEAR(minimal.accent_mix, 0.0, 0.0001);
+    CHECK(minimal.base_dark > 0.30f);   // the dark base is the skin, not a slider
+
+    // An accent strength of zero is "no hue at all": the borders go neutral rather
+    // than leaving a grey tint behind.
+    CHECK_NEAR(minimal.accent[0], tokens.border.r, 0.001);
+    CHECK_NEAR(minimal.glow_colour[2], tokens.border.b, 0.001);
+
+    // Performance mode keeps the material and drops the per-pixel extras.
+    const MirrorStyle perf = make_mirror_style(tokens, defaults, true);
     CHECK_NEAR(perf.gloss, 0.0, 0.0001);
     CHECK_NEAR(perf.grain, 0.0, 0.0001);
-    CHECK_NEAR(perf.depth, 0.0, 0.0001);
-    CHECK(perf.border >= 0.25f);
-    CHECK(perf.bezel > 0.4f);
-    CHECK(perf.darkening > 0.0f);
+    CHECK_NEAR(perf.glass, 0.0, 0.0001);
+    CHECK(perf.clarity > 0.0f);      // readability survives performance mode
+    CHECK(perf.highlight > 0.0f);
+    CHECK(perf.base_dark > 0.30f);
 
-    // Rounded corners off means square corners, not a smaller radius.
-    const OverlayStyle square = make_overlay_style(glass, defaults, false, false);
-    CHECK_NEAR(square.radius_dip, 0.0, 0.0001);
+    // Corner radius: 0 means square and is honoured; anything else is clamped into
+    // range and converted to physical pixels for the current DPI.
+    Appearance square = defaults;
+    square.corner_radius_dip = 0;
+    CHECK_NEAR(make_mirror_style(tokens, square, false).radius, 0.0f, 1e-6);
+    Appearance huge = defaults;
+    huge.corner_radius_dip = 400;
+    CHECK_NEAR(make_mirror_style(tokens, huge, false).radius, 16.0f, 1e-6);
 
-    // The Original theme is "Azy does nothing": the duplicate must not be drawn at
-    // all, and the caller is told so in one call.
-    const ThemePalette original = make_palette(ThemeId::Original, defaults, true);
-    const OverlayStyle off = make_overlay_style(original, defaults, false, true);
+    // 100 / 150 / 200% DPI: the radius follows the monitor, the look does not change.
+    const MirrorStyle at_150 = make_mirror_style(tokens, defaults, false, 1.5f);
+    CHECK_NEAR(at_150.radius, 12.0f, 1e-6);
+    CHECK_NEAR(at_150.dpi, 1.5f, 1e-6);
+    const MirrorStyle at_200 = make_mirror_style(tokens, defaults, false, 2.0f);
+    CHECK_NEAR(at_200.radius, 16.0f, 1e-6);
+    CHECK_NEAR(at_200.base_dark, style.base_dark, 1e-6);
+
+    // A nonsense DPI is clamped rather than trusted.
+    CHECK_NEAR(make_mirror_style(tokens, defaults, false, 0.0f).dpi, 1.0f, 1e-6);
+
+    // Animations are a switch, not a clock: the style says whether a transition is
+    // allowed, and nothing else.
+    Appearance still = defaults;
+    still.animations = false;
+    CHECK(!make_mirror_style(tokens, still, false).animations);
+    CHECK(!make_mirror_style(tokens, defaults, false).animations);   // no animation by default
+
+    // Original: Azy shows nothing at all, and the caller is told in one call.
+    const ThemeTokens original = theme_tokens(ThemeKey::Original, defaults.custom_accent);
+    const MirrorStyle off = make_mirror_style(original, defaults, false);
     CHECK(!off.visible);
-    CHECK(overlay_style_is_passthrough(off));
-
-    // A neutral accent carries no hue and no strength.
-    Appearance neutral = defaults;
-    neutral.accent = AccentId::Neutral;
-    neutral.accent_intensity = 0.0;
-    const OverlayStyle muted =
-        make_overlay_style(make_palette(ThemeId::AzyDarkGlass, neutral, true), neutral, false, true);
-    CHECK_NEAR(muted.accent_strength, 0.0, 0.0001);
-
-    // A user who pushes the overlay slider to zero loses the veil but keeps the
-    // rest of the treatment: the sliders are independent.
-    Appearance no_veil = defaults;
-    no_veil.overlay = false;
-    const OverlayStyle plain =
-        make_overlay_style(make_palette(ThemeId::AzyDarkGlass, no_veil, true), no_veil, false, true);
-    CHECK_NEAR(plain.veil, 0.0, 0.0001);
-    CHECK(plain.darkening > 0.30f);
+    CHECK(mirror_style_is_passthrough(off));
 }
 
 }  // namespace
@@ -1224,7 +974,6 @@ int main() {
     test_version();
     test_build_key();
     test_product();
-    test_compat();
     test_theme();
     test_dpi_geometry();
     test_settings();
@@ -1233,9 +982,8 @@ int main() {
     test_failure_tracker();
     test_strings();
     test_layout_safety();
-    test_ring_layout();
     test_capture_math();
-    test_overlay_style();
+    test_mirror_style();
 
     std::printf("\n===================\n%d checks, %d failure(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

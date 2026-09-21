@@ -1,5 +1,28 @@
 # Verification status
 
+## Round 9 (2.0.0) verification status
+
+The rebuild replaces the skin: what was verified for v1.3.0 about the ring, the
+sheet and the DWM frame treatment no longer describes this code. The current state:
+
+* **Statically verified** — `scripts/verify.sh` (7/7): include hygiene, version
+  strings, the shader↔`MirrorParams` contract check (including a mutation test of
+  the structural checks), 747 native assertions, the Windows cross-compile, and PE
+  resource inspection.
+* **Verified by construction, not by running** — the media pass-through delta
+  0.0000 and the appearance numbers quoted in
+  [`AZY_MIRROR_ARCHITECTURE.md`](AZY_MIRROR_ARCHITECTURE.md) §11 come from
+  `tools/preview_render.py`, which is a CPU re-implementation of the shader, not a
+  screenshot.
+* **Unverified — RUNTIME UNVERIFIED** — everything that needs a real Premiere Pro on
+  Windows: capture start and frame delivery, latency and smoothness, click-through,
+  focus, move/resize/minimise/fullscreen sync, multi-monitor and DPI behaviour, idle
+  CPU and memory, and whether the panel model matches a real workspace.
+* **HIGH RISK until then** — the HLSL has never been compiled anywhere in this
+  environment (no shader compiler is obtainable here). A shader error would show up
+  as "nothing on screen" with a logged reason, never as a broken Premiere, but it
+  would still be a dead end until the first Windows run.
+
 Per-feature evidence for **v1.3.0** (the duplicate window overlay; the static path is
 unchanged from v1.2.3). This file answers one question only: *what has actually been
 proven, and how?*
