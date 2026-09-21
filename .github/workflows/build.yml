@@ -6,6 +6,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# The "attach the installer to the branch" step below pushes a commit; the rest of
+# the pipeline only reads. Release-style write access is required just for that.
+permissions:
+  contents: write
+
 jobs:
   # Fast gate: the portable core (version/compat/settings/theme logic) is unit
   # tested on Linux in a few seconds.
@@ -137,3 +142,21 @@ jobs:
         with:
           name: AzySkin-installer
           path: dist/*.exe
+
+      # The artifact store above is not reachable from every network. When the
+      # triggering commit message asks for it ([deliver]), the compiled installer
+      # is attached to the branch instead - git transport is the one channel that
+      # works everywhere. The attached commit says [skip ci], so this cannot loop.
+      - name: Attach the installer to the branch
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[deliver]')
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist -Filter 'AzySkin-*-setup.exe' | Select-Object -First 1
+          if (-not $setup) { throw "dist/AzySkin-*-setup.exe was not produced" }
+          Write-Host "Attaching $($setup.Name) ($([math]::Round($setup.Length / 1MB, 2)) MB) to ${{ github.ref_name }}"
+          Get-FileHash $setup.FullName -Algorithm SHA256 | Format-List
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f -- $setup.FullName
+          git commit -m "ci: attach $($setup.Name) [skip ci]"
+          git push origin "HEAD:${{ github.ref_name }}"
